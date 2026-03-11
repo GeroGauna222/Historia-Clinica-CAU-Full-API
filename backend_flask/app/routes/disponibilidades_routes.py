@@ -11,8 +11,8 @@ bp_disponibilidades = Blueprint("disponibilidades", __name__)
 # ==========================================================
 
 DIAS_ORDENADOS = [
-    "Lunes", "Martes", "Miércoles",
-    "Jueves", "Viernes", "Sábado", "Domingo"
+    "Lunes", "Martes", "Miercoles",
+    "Jueves", "Viernes", "Sabado", "Domingo"
 ]
 orden_sql = ",".join([f"'{d}'" for d in DIAS_ORDENADOS])
 
@@ -21,14 +21,16 @@ def normalizar_dia(dia):
     mapa = {
         "lunes": "Lunes",
         "martes": "Martes",
-        "miercoles": "Miércoles",
-        "miércoles": "Miércoles",
+        "miercoles": "Miercoles",
+        "miércoles": "Miercoles",
         "jueves": "Jueves",
         "viernes": "Viernes",
-        "sabado": "Sábado",
-        "sábado": "Sábado",
+        "sabado": "Sabado",
+        "sábado": "Sabado",
         "domingo": "Domingo"
     }
+    if not dia:
+        return None
     return mapa.get(dia.lower().strip())
 
 
@@ -81,9 +83,8 @@ def listar_disponibilidades():
 
     # 🟢 Normalizar resultados
     for d in disponibilidades:
-        # Esto asegura que si en la DB quedó alguno viejo sin tilde, se muestre bien
-        if d["dia_semana"] in ["Miercoles", "Sabado"]:
-             d["dia_semana"] = normalizar_dia(d["dia_semana"])
+        # Canonicalizar para mantener siempre el mismo formato
+        d["dia_semana"] = normalizar_dia(d["dia_semana"]) or d["dia_semana"]
 
         # convertir TIME → string
         if isinstance(d.get("hora_inicio"), timedelta):
@@ -103,7 +104,7 @@ def listar_disponibilidades():
 @requiere_rol('director', 'profesional', 'area')
 def crear_disponibilidad():
 
-    data = request.get_json()
+    data = request.get_json(silent=True) or {}
     if not data:
         return jsonify({"error": "Faltan datos"}), 400
 
@@ -154,7 +155,7 @@ def crear_disponibilidad():
 @requiere_rol('director', 'profesional', 'area')
 def editar_disponibilidad(id):
 
-    data = request.get_json()
+    data = request.get_json(silent=True) or {}
     if not data:
         return jsonify({"error": "Faltan datos"}), 400
 

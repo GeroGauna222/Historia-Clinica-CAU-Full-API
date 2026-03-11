@@ -17,7 +17,10 @@ class Usuario(UserMixin):
     def obtener_por_username(username):
         conn = get_connection()
         cursor = conn.cursor(dictionary=True)
-        cursor.execute("SELECT * FROM usuarios WHERE username = %s", (username,))
+        cursor.execute(
+            "SELECT * FROM usuarios WHERE username = %s AND activo = 1",
+            (username,)
+        )
         data = cursor.fetchone()
         conn.close()
 

@@ -1,9 +1,10 @@
 # app/routes/blockchain_routes.py
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, current_app
 from flask_login import login_required, current_user
 from app.utils.hashing import generar_hash
 from app.utils.bfa_client import registrar_hash_en_bfa
 from app.database import get_connection
+from app.utils.permisos import requiere_rol
 from web3 import Web3
 import hashlib
 import json
@@ -211,7 +212,12 @@ def _registrar_auditoria(historia_id, hash_local, hash_bfa, valido, usuario):
 # 4️⃣ TEST: PUBLICAR HASH DE PRUEBA EN LA BLOCKCHAIN
 # =============================================================
 @bp_blockchain.route("/api/blockchain/test_tx", methods=["GET"])
+@login_required
+@requiere_rol("director")
 def test_tx():
+    if not current_app.config.get("ENABLE_BLOCKCHAIN_TEST_ENDPOINTS", False):
+        return jsonify({"error": "Endpoint deshabilitado"}), 404
+
     from app.utils.bfa_client import registrar_hash_en_bfa
     from app.utils.hashing import generar_hash
 

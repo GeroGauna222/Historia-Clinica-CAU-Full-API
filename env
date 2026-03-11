@@ -1,0 +1,61 @@
+# ==============================
+#  FLASK CONFIG
+# ==============================
+FLASK_ENV=production
+FLASK_DEBUG=False
+#para desarrollo usar:
+#FLASK_ENV=development
+#FLASK_DEBUG=True
+SECRET_KEY=19b17a308c8899527353d254d08af7ca8c4a0fcd4a1005dea5a5dd85e00f7feb
+
+# ==============================
+#  DATABASE CONFIG
+# ==============================
+DB_HOST=db
+DB_USER=hc_app
+DB_PASSWORD=HC_App_2025!
+DB_NAME=hc_bfa
+
+# ==============================
+#  MAIL CONFIG
+# ==============================
+MAIL_SERVER=smtp.gmail.com
+MAIL_PORT=587
+MAIL_USE_TLS=True
+MAIL_USERNAME=cau@unsam.edu.ar
+#MAIL_PASSWORD=esvdonaqyntxtuqi
+MAIL_PASSWORD=tlmukvohiazuaihe
+MAIL_DEFAULT_SENDER=cau@unsam.edu.ar
+
+# ==============================
+#  BLOCKCHAIN (BFA CONFIG)
+# ==============================
+PRIVATE_KEY_BFA=03ca4edb5fb0dff310f92f8421cfbb1f3b5b2bb54ac9b9e3314b133fb7daae2b
+ADDRESS_BFA=0x71562b71999873DB5b286dF957af199Ec94617F7
+
+# ==============================
+# FRONTEND  
+# ==============================
+API_URL=http://localhost/api
+#VITE_API_URL=http://localhost:5000
+#VITE_API_URL=http://web:5000/api
+VITE_API_URL=/api
+
+#\VITE_API_URL=http://localhost/api
+
+# Para producción:
+# API_URL=https://api.midominio.com
+
+FRONTEND_URL=http://localhost
+# Para producción:
+# FRONTEND_URL=https://midominio.com
+
+
+#Variables para el Backup automático remoto (opcional)
+REMOTE_BACKUP_USER=
+REMOTE_BACKUP_HOST=
+#DRIVE_FOLDER_ID=xxxx
+#GDRIVE_SERVICE_ACCOUNT_JSON=/ruta/credenciales.json
+#GDRIVE_ENABLED=true
+
+

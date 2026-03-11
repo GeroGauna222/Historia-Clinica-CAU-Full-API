@@ -1,12 +1,12 @@
 <script setup>
 import { ref } from 'vue';
 
-const menu = ref(null)
+const menu = ref(null);
 
 const items = ref([
     { label: 'Marcar todas como leídas', icon: 'pi pi-fw pi-check' },
     { label: 'Eliminar notificaciones', icon: 'pi pi-fw pi-trash' }
-])
+]);
 </script>
 
 <template>

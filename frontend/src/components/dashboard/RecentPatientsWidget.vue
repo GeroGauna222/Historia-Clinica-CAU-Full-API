@@ -6,7 +6,7 @@ const pacientes = ref([
     { nombre: 'María Gómez', edad: 32, fecha: '02/07/2025' },
     { nombre: 'Luis Fernández', edad: 56, fecha: '01/07/2025' },
     { nombre: 'Ana López', edad: 28, fecha: '01/07/2025' }
-])
+]);
 </script>
 
 <template>

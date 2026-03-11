@@ -1,10 +1,10 @@
 <script setup>
-import { ref } from 'vue'
+import { ref } from 'vue';
 
-const totalPacientes = ref(230)
-const totalHistorias = ref(185)
-const totalTurnos = ref(67)
-const totalUsuarios = ref(12)
+const totalPacientes = ref(230);
+const totalHistorias = ref(185);
+const totalTurnos = ref(67);
+const totalUsuarios = ref(12);
 </script>
 
 <template>

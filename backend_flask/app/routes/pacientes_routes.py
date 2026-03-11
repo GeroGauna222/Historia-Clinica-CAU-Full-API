@@ -31,7 +31,7 @@ def api_crear_paciente():
     """Crea un nuevo paciente."""
         # 🧩 Soporta tanto JSON como form-data
     if request.is_json:
-        data = request.get_json()
+        data = request.get_json(silent=True) or {}
     else:
         data = request.form.to_dict()
 
@@ -100,7 +100,7 @@ def api_crear_paciente():
 @login_required
 def api_modificar_paciente(id):
     """Modifica los datos de un paciente existente."""
-    data = request.get_json() if request.is_json else request.form.to_dict()
+    data = (request.get_json(silent=True) or {}) if request.is_json else request.form.to_dict()
     conn = get_connection()
     cursor = conn.cursor()
 
@@ -143,6 +143,11 @@ def api_modificar_paciente(id):
 
     # Solo actualizar campos enviados
     campos_no_vacios = {k: v for k, v in campos_validos.items() if v is not None}
+    if not campos_no_vacios:
+        cursor.close()
+        conn.close()
+        return jsonify({'error': 'Sin cambios para actualizar'}), 400
+
     set_clause = ", ".join([f"{campo}=%s" for campo in campos_no_vacios.keys()])
     values = list(campos_no_vacios.values()) + [usuario_id, id]
 

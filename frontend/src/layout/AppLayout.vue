@@ -54,7 +54,7 @@ function isOutsideClicked(event) {
     if (!sidebarEl || !topbarEl) {
         return false;
     }
-    
+
     return !(sidebarEl.isSameNode(event.target) || sidebarEl.contains(event.target) || topbarEl.isSameNode(event.target) || topbarEl.contains(event.target));
 }
 </script>

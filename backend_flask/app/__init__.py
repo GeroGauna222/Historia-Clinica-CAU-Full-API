@@ -6,6 +6,7 @@ from flask_mail import Mail
 from flask_cors import CORS
 from itsdangerous import URLSafeTimedSerializer
 from flask_talisman import Talisman
+from werkzeug.middleware.proxy_fix import ProxyFix
 from app.config import Config
 from app.auth import Usuario
 from app.database import get_connection
@@ -18,6 +19,7 @@ from flask import send_from_directory
 app = Flask(__name__)
 app.config.from_object(Config)
 app.config['FRONTEND_URL'] = os.getenv("FRONTEND_URL", "http://localhost")
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
 # Seguridad HTTP (headers CSP, HTTPS, etc.)
 csp = {
@@ -56,7 +58,7 @@ login_manager.login_view = None
 def load_user(user_id):
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT * FROM usuarios WHERE id = %s", (user_id,))
+    cursor.execute("SELECT * FROM usuarios WHERE id = %s AND activo = 1", (user_id,))
     data = cursor.fetchone()
     conn.close()
 

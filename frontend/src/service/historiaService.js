@@ -1,5 +1,5 @@
 // src/service/historiaService.js
-import api from "@/api/axios";
+import api from '@/api/axios';
 
 export default {
     buscarPacientes(query) {
@@ -14,7 +14,7 @@ export default {
     descargarPDF(pacienteId) {
         return api.get(`/pacientes/${pacienteId}/historias/pdf`, {
             responseType: 'blob',
-            withCredentials: true,
+            withCredentials: true
         });
     }
 };

@@ -1,6 +1,6 @@
 // src/utils/eventBus.js
 
-const listeners = {}
+const listeners = {};
 
 /**
  * Suscribirse a un evento
@@ -9,14 +9,14 @@ const listeners = {}
  * @returns {() => void} función para desuscribirse
  */
 export function on(event, callback) {
-  if (!listeners[event]) {
-    listeners[event] = new Set()
-  }
-  listeners[event].add(callback)
+    if (!listeners[event]) {
+        listeners[event] = new Set();
+    }
+    listeners[event].add(callback);
 
-  return () => {
-    listeners[event].delete(callback)
-  }
+    return () => {
+        listeners[event].delete(callback);
+    };
 }
 
 /**
@@ -25,12 +25,12 @@ export function on(event, callback) {
  * @param {any} payload
  */
 export function emit(event, payload) {
-  if (!listeners[event]) return
-  for (const cb of listeners[event]) {
-    try {
-      cb(payload)
-    } catch (err) {
-      console.error(`Error en listener de "${event}":`, err)
+    if (!listeners[event]) return;
+    for (const cb of listeners[event]) {
+        try {
+            cb(payload);
+        } catch (err) {
+            console.error(`Error en listener de "${event}":`, err);
+        }
     }
-  }
 }

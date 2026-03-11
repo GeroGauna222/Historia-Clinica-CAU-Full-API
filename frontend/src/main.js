@@ -1,55 +1,55 @@
-import { createApp } from 'vue'
-import App from './App.vue'
-import router from './router'
-import { createPinia } from 'pinia'
-import Aura from '@primeuix/themes/aura'
-import PrimeVue from 'primevue/config'
-import ConfirmationService from 'primevue/confirmationservice'
-import ToastService from 'primevue/toastservice'
-import es from '@/locales/es.json'
+import { createApp } from 'vue';
+import App from './App.vue';
+import router from './router';
+import { createPinia } from 'pinia';
+import Aura from '@primeuix/themes/aura';
+import PrimeVue from 'primevue/config';
+import ConfirmationService from 'primevue/confirmationservice';
+import ToastService from 'primevue/toastservice';
+import es from '@/locales/es.json';
 
 // Componentes globales
-import Button from 'primevue/button'
-import Dialog from 'primevue/dialog'
+import Button from 'primevue/button';
+import Dialog from 'primevue/dialog';
 
 // Estilos
-import 'primeicons/primeicons.css'
-import '@/assets/styles.scss'
-import '@/assets/theme-dark.css'
+import 'primeicons/primeicons.css';
+import '@/assets/styles.scss';
+import '@/assets/theme-dark.css';
 
 // 🧩 Importar el store del usuario
-import { useUserStore } from '@/stores/user'
+import { useUserStore } from '@/stores/user';
 
 async function bootstrap() {
-  const app = createApp(App)
-  const pinia = createPinia()
+    const app = createApp(App);
+    const pinia = createPinia();
 
-  app.use(pinia)
-  app.use(router)
-  app.use(PrimeVue, {
-    locale: es,
-    theme: {
-      preset: Aura,
-      options: { darkModeSelector: '.app-dark' }
+    app.use(pinia);
+    app.use(router);
+    app.use(PrimeVue, {
+        locale: es,
+        theme: {
+            preset: Aura,
+            options: { darkModeSelector: '.app-dark' }
+        }
+    });
+    app.use(ToastService);
+    app.use(ConfirmationService);
+
+    app.component('Dialog', Dialog);
+    app.component('Button', Button);
+
+    // 🧠 Obtener los datos del usuario antes de montar la app
+    const userStore = useUserStore();
+    try {
+        await userStore.fetchUser();
+        console.log('✅ Usuario cargado:', userStore.nombre, '| Rol:', userStore.rol);
+    } catch (err) {
+        console.warn('⚠️ No se pudo cargar el usuario al iniciar:', err);
     }
-  })
-  app.use(ToastService)
-  app.use(ConfirmationService)
 
-  app.component('Dialog', Dialog)
-  app.component('Button', Button)
-
-  // 🧠 Obtener los datos del usuario antes de montar la app
-  const userStore = useUserStore()
-  try {
-    await userStore.fetchUser()
-    console.log('✅ Usuario cargado:', userStore.nombre, '| Rol:', userStore.rol)
-  } catch (err) {
-    console.warn('⚠️ No se pudo cargar el usuario al iniciar:', err)
-  }
-
-  // 🔥 Ahora que el store tiene el rol, montamos la app
-  app.mount('#app')
+    // 🔥 Ahora que el store tiene el rol, montamos la app
+    app.mount('#app');
 }
 
-bootstrap()
+bootstrap();

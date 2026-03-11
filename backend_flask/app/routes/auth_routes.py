@@ -19,7 +19,7 @@ def get_serializer():
 # =====================================================
 @bp_auth.route('/api/login', methods=['POST'])
 def api_login():
-    data = request.json or {}
+    data = request.get_json(silent=True) or {}
     username = data.get('username', '').strip()
     password = data.get('password', '').strip()
 
@@ -78,8 +78,9 @@ def api_user():
 @bp_auth.route('/api/recover', methods=['POST'])
 def api_recover():
     s = get_serializer()
-    data = request.json
+    data = request.get_json(silent=True) or {}
     email = data.get('email', '').strip().lower()
+    generic_msg = 'Si el correo existe, se envio un enlace para restablecer la contrasena.'
 
     if not validar_email(email):
         return jsonify({'error': 'Email inválido'}), 400
@@ -88,24 +89,22 @@ def api_recover():
     cursor = conn.cursor(dictionary=True)
     cursor.execute("SELECT * FROM usuarios WHERE email = %s", (email,))
     usuario = cursor.fetchone()
+    cursor.close()
     conn.close()
 
-    if not usuario:
-        return jsonify({'error': 'No se encontró un usuario con ese email'}), 404
+    if usuario:
+        token = s.dumps(email, salt='reset-password')
+        reset_url = f"{current_app.config['FRONTEND_URL']}/reset/{token}"
+        msg = Message("Recuperación de contraseña - Historia Clínica CAU", recipients=[email])
+        msg.body = (
+            f"Hola {usuario['nombre']},\n\n"
+            f"Para restablecer tu contraseña ingresá al siguiente enlace:\n\n"
+            f"{reset_url}\n\n"
+            f"Este enlace expira en 1 hora."
+        )
+        mail.send(msg)
 
-    token = s.dumps(email, salt='reset-password')
-
-    reset_url = f"{current_app.config['FRONTEND_URL']}/reset/{token}"
-    msg = Message("Recuperación de contraseña - Historia Clínica CAU", recipients=[email])
-    msg.body = (
-        f"Hola {usuario['nombre']},\n\n"
-        f"Para restablecer tu contraseña ingresá al siguiente enlace:\n\n"
-        f"{reset_url}\n\n"
-        f"Este enlace expira en 1 hora."
-    )
-    mail.send(msg)
-
-    return jsonify({'message': 'Correo enviado para restablecer contraseña ✅'}), 200
+    return jsonify({'message': generic_msg}), 200
 
 
 # =====================================================
@@ -122,7 +121,7 @@ def api_reset_password(token):
     except BadSignature:
         return jsonify({'error': 'Token inválido'}), 400
 
-    data = request.json or {}
+    data = request.get_json(silent=True) or {}
     new_password = data.get('new_password')
     confirm_password = data.get('confirm_password')
 

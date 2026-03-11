@@ -19,7 +19,7 @@ services:
       bfa-node:
         condition: service_started
     env_file:
-      - .env
+      - ${APP_ENV_FILE:-.env}
     environment:
       - FLASK_ENV=${FLASK_ENV}
       - FLASK_DEBUG=${FLASK_DEBUG}
@@ -37,8 +37,10 @@ services:
     container_name: historia_db
     restart: always
     environment:
-      MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: hc_bfa
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME}
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
       TZ: America/Argentina/Buenos_Aires
     command: --default-time-zone='America/Argentina/Buenos_Aires'
     volumes:
@@ -47,7 +49,7 @@ services:
     networks:
       - historia_net
     healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h localhost -proot || exit 1"]
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -p$$MYSQL_ROOT_PASSWORD || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -70,8 +72,9 @@ services:
       --rpc.allow-unprotected-txs
       --verbosity 3
     ports:
-      - "8545:8545"   # RPC Interno (usado por backend)
-      - "30303:30303" # P2P (BFA Discovery)
+      # 8545 (RPC) no se expone publicamente; el backend accede por red interna Docker.
+      - "30303:30303/tcp" # P2P (BFA Discovery) - TCP
+      - "30303:30303/udp" # P2P (BFA Discovery) - UDP
     volumes:
       - ./bfa-node/nucleo:/nucleo
       - bfa_data:/nucleo/test2network/geth
@@ -89,8 +92,6 @@ services:
         VITE_API_URL: ${VITE_API_URL} 
     container_name: historia_frontend
     restart: always
-    env_file:
-      - .env
     networks:
       - historia_net
 

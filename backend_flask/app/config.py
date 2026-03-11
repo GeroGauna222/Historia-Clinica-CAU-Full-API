@@ -6,10 +6,15 @@ class Config:
     # 🔒 Seguridad general
     SECRET_KEY = os.getenv("SECRET_KEY", "CambiaEstoPorUnValorSeguro")
     DEBUG = os.getenv("FLASK_DEBUG", "False").lower() == "true"
+    ENV = os.getenv("FLASK_ENV", "development").lower()
     PERMANENT_SESSION_LIFETIME = timedelta(hours=1)
-    SESSION_COOKIE_SECURE = True
+    _secure_default = ENV == "production"
+    SESSION_COOKIE_SECURE = os.getenv("SESSION_COOKIE_SECURE", str(_secure_default)).lower() == "true"
+    SESSION_COOKIE_SAMESITE = os.getenv("SESSION_COOKIE_SAMESITE", "Lax")
     SESSION_COOKIE_HTTPONLY = True
-    REMEMBER_COOKIE_SECURE = True
+    REMEMBER_COOKIE_SECURE = SESSION_COOKIE_SECURE
+    _test_endpoints_default = ENV != "production"
+    ENABLE_BLOCKCHAIN_TEST_ENDPOINTS = os.getenv("ENABLE_BLOCKCHAIN_TEST_ENDPOINTS", str(_test_endpoints_default)).lower() == "true"
 
     # 📧 Configuración de correo (ahora desde entorno)
     MAIL_SERVER = os.getenv("MAIL_SERVER", "smtp.gmail.com")

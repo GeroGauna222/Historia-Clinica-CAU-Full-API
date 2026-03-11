@@ -21,7 +21,7 @@ ROLES_VALIDOS = {"director", "profesional", "administrativo", "area"}
 @login_required
 @requiere_rol('director')
 def api_crear_usuario():
-    data = request.json
+    data = request.get_json(silent=True) or {}
     nombre = data.get('nombre')
     username = data.get('username')
     email = data.get('email')
@@ -282,7 +282,7 @@ def api_listar_profesionales():
 @bp_usuarios.route("/api/usuarios/<int:usuario_id>/duracion", methods=["PATCH"])
 @login_required
 def actualizar_duracion_turno(usuario_id):
-    data = request.get_json()
+    data = request.get_json(silent=True) or {}
     nueva_duracion = data.get("duracion_turno")
     if not nueva_duracion: return jsonify({"error": "Duración no especificada"}), 400
     try:
@@ -383,7 +383,7 @@ def actualizar_perfil():
 @bp_usuarios.route('/api/usuario/cambiar-password', methods=['POST'])
 @login_required
 def cambiar_password():
-    data = request.json
+    data = request.get_json(silent=True) or {}
     actual = data.get("actual")
     nueva = data.get("nueva")
     confirmar = data.get("confirmar")

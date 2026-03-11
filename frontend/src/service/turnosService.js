@@ -1,5 +1,5 @@
 // src/service/turnosService.js
-import api from "@/api/axios";
+import api from '@/api/axios';
 
 export default {
     listar() {

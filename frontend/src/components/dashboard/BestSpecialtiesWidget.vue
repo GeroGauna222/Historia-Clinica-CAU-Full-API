@@ -7,7 +7,7 @@ const especialidades = ref([
     { nombre: 'Pediatría', porcentaje: 20 },
     { nombre: 'Ginecología', porcentaje: 10 },
     { nombre: 'Dermatología', porcentaje: 10 }
-])
+]);
 </script>
 
 <template>

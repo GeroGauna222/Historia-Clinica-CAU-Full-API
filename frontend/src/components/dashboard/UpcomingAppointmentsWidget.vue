@@ -6,7 +6,7 @@ const turnos = ref([
     { paciente: 'Ana López', fecha: '04/07/2025', hora: '10:30' },
     { paciente: 'Luis Fernández', fecha: '05/07/2025', hora: '08:00' },
     { paciente: 'María Gómez', fecha: '05/07/2025', hora: '11:00' }
-])
+]);
 </script>
 
 <template>

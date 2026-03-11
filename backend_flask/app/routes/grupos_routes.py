@@ -80,7 +80,7 @@ def obtener_grupo(grupo_id):
 @login_required
 @requiere_rol("director")
 def crear_grupo():
-    data = request.get_json()
+    data = request.get_json(silent=True) or {}
     if not data: return jsonify({"error": "JSON inválido"}), 400
 
     nombre = data.get("nombre")
@@ -124,7 +124,7 @@ def crear_grupo():
 @login_required
 @requiere_rol("director")
 def editar_grupo(grupo_id):
-    data = request.get_json()
+    data = request.get_json(silent=True) or {}
     if not data: return jsonify({"error": "JSON inválido"}), 400
 
     nombre = data.get("nombre")
@@ -190,7 +190,7 @@ def eliminar_grupo(grupo_id):
 @login_required
 @requiere_rol("director")
 def agregar_miembro(grupo_id):
-    data = request.get_json()
+    data = request.get_json(silent=True) or {}
     usuario_id = data.get("usuario_id")
     if not usuario_id: return jsonify({"error": "Falta usuario_id"}), 400
 

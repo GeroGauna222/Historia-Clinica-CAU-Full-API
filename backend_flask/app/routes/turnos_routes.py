@@ -10,11 +10,12 @@ bp_turnos = Blueprint("turnos", __name__)
 
 # Timezone Argentina FIX
 TZ_ARG = timezone(timedelta(hours=-3))
+ROLES_TURNOS = ('director', 'profesional', 'administrativo', 'area')
 
 # ==========================================================
 #  Función auxiliar: Verificar disponibilidad del médico
 # ==========================================================
-def medico_disponible(usuario_id, fecha_inicio, fecha_fin):
+def medico_disponible(usuario_id, fecha_inicio, fecha_fin, turno_excluir_id=None, permitir_solape=False):
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
 
@@ -31,7 +32,15 @@ def medico_disponible(usuario_id, fecha_inicio, fecha_fin):
 
     # ... (lógica de dias de semana igual que antes) ...
     dia_semana = inicio.strftime("%A")
-    dias = { "Monday": "Lunes", "Tuesday": "Martes", "Wednesday": "Miércoles", "Thursday": "Jueves", "Friday": "Viernes", "Saturday": "Sábado", "Sunday": "Domingo" }
+    dias = {
+        "Monday": "Lunes",
+        "Tuesday": "Martes",
+        "Wednesday": "Miercoles",
+        "Thursday": "Jueves",
+        "Friday": "Viernes",
+        "Saturday": "Sabado",
+        "Sunday": "Domingo"
+    }
     dia_es = dias.get(dia_semana, "Lunes")
 
     # 2. Chequeamos si TRABAJA ese día (Disponibilidad) - ESTO SIEMPRE SE CHEQUEA
@@ -57,8 +66,9 @@ def medico_disponible(usuario_id, fecha_inicio, fecha_fin):
     # 4. Chequeamos SOLAPAMIENTO (Ocupado)
     # SI ES AREA -> NO CHEQUEAMOS ESTO (puede tener infinitos turnos)
     ocupado = None
-    if not es_area:
-        cursor.execute("""
+    if not es_area and not permitir_solape:
+        params = [usuario_id, fecha_fin, fecha_inicio, fecha_inicio, fecha_fin]
+        query = """
            SELECT 1 FROM turnos
             WHERE usuario_id = %s
             AND (
@@ -66,7 +76,11 @@ def medico_disponible(usuario_id, fecha_inicio, fecha_fin):
                 OR
                 (fecha_inicio < %s AND fecha_fin > %s)
             )
-        """, (usuario_id, fecha_fin, fecha_inicio, fecha_inicio, fecha_fin))
+        """
+        if turno_excluir_id is not None:
+            query += " AND id <> %s"
+            params.append(turno_excluir_id)
+        cursor.execute(query, tuple(params))
         ocupado = cursor.fetchone()
     
     cursor.close()
@@ -80,7 +94,7 @@ def medico_disponible(usuario_id, fecha_inicio, fecha_fin):
 # ==========================================================
 @bp_turnos.route('/api/turnos', methods=['GET', 'POST'])
 @login_required
-@requiere_rol('director', 'profesional', 'administrativo', 'area') 
+@requiere_rol(*ROLES_TURNOS)
 def api_turnos():
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
@@ -125,7 +139,7 @@ def api_turnos():
 
 
     elif request.method == 'POST':
-        data = request.get_json()
+        data = request.get_json(silent=True) or {}
         if not data:
             return jsonify({"error": "Faltan datos"}), 400
 
@@ -142,7 +156,12 @@ def api_turnos():
             return jsonify({"error": "No puede asignar turnos a otros profesionales"}), 403
         
         try:
-            if not medico_disponible(usuario_id, fecha_inicio, fecha_fin):
+            if not medico_disponible(
+                usuario_id,
+                fecha_inicio,
+                fecha_fin,
+                permitir_solape=current_user.rol in ['administrativo', 'area']
+            ):
                 return jsonify({"error": "El profesional no está disponible en esa fecha u horario"}), 400
 
             cursor.execute("""
@@ -207,7 +226,7 @@ Equipo CAU UNSAM
 # ==========================================================
 @bp_turnos.route('/api/turnos/<int:id>', methods=['DELETE'])
 @login_required
-@requiere_rol('director', 'profesional', 'administrativo')
+@requiere_rol(*ROLES_TURNOS)
 def eliminar_turno(id):
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
@@ -283,9 +302,9 @@ Equipo CAU UNSAM
 # ==========================================================
 @bp_turnos.route('/api/turnos/<int:id>', methods=['PUT'])
 @login_required
-@requiere_rol('director', 'profesional', 'administrativo')
+@requiere_rol(*ROLES_TURNOS)
 def editar_turno(id):
-    data = request.get_json()
+    data = request.get_json(silent=True) or {}
     if not data:
         return jsonify({"error": "Faltan datos"}), 400
 
@@ -328,6 +347,17 @@ def editar_turno(id):
         fecha_inicio = inicio_dt.isoformat()
         fecha_fin = fin_dt.isoformat()
 
+    if not medico_disponible(
+        turno['usuario_id'],
+        fecha_inicio,
+        fecha_fin,
+        turno_excluir_id=id,
+        permitir_solape=current_user.rol in ['administrativo', 'area']
+    ):
+        cursor.close()
+        conn.close()
+        return jsonify({"error": "El profesional no está disponible en esa fecha u horario"}), 400
+
     cursor.execute("""
         UPDATE turnos
         SET fecha_inicio=%s, fecha_fin=%s, motivo=%s
@@ -346,10 +376,10 @@ def editar_turno(id):
 # ==========================================================
 @bp_turnos.route('/api/turnos/tanda', methods=['POST'])
 @login_required
-@requiere_rol('director', 'profesional', 'administrativo')
+@requiere_rol(*ROLES_TURNOS)
 def crear_turnos_tanda():
     try:
-        data = request.get_json()
+        data = request.get_json(silent=True) or {}
         paciente_id = data.get("paciente_id")
         usuario_id = data.get("usuario_id")
         motivo = data.get("motivo", "")
@@ -376,13 +406,18 @@ def crear_turnos_tanda():
         dias_map = {
             "Lunes": 0,
             "Martes": 1,
+            "Miercoles": 2,
             "Miércoles": 2,
             "Jueves": 3,
             "Viernes": 4,
+            "Sabado": 5,
             "Sábado": 5,
             "Domingo": 6
         }
         dias_indices = [dias_map[d] for d in dias_semana if d in dias_map]
+
+        if not dias_indices:
+            return jsonify({"error": "dias_semana invalido o vacio"}), 400
 
         turnos_creados = 0
         fecha_actual = fecha_inicial
@@ -392,7 +427,12 @@ def crear_turnos_tanda():
 
                 fecha_fin = fecha_actual + timedelta(minutes=dur)
 
-                if not medico_disponible(usuario_id, fecha_actual.isoformat(), fecha_fin.isoformat()):
+                if not medico_disponible(
+                    usuario_id,
+                    fecha_actual.isoformat(),
+                    fecha_fin.isoformat(),
+                    permitir_solape=current_user.rol in ['administrativo', 'area']
+                ):
                     fecha_actual += timedelta(days=1)
                     continue
 

@@ -1,9 +1,9 @@
 <script setup>
-import Chart from 'primevue/chart'
-import { onMounted, ref } from 'vue'
+import Chart from 'primevue/chart';
+import { onMounted, ref } from 'vue';
 
-const chartData = ref()
-const chartOptions = ref()
+const chartData = ref();
+const chartOptions = ref();
 
 onMounted(() => {
     chartData.value = {
@@ -15,7 +15,7 @@ onMounted(() => {
                 data: [5, 7, 4, 6, 3]
             }
         ]
-    }
+    };
 
     chartOptions.value = {
         responsive: true,
@@ -37,8 +37,8 @@ onMounted(() => {
                 grid: { color: '#ebedef' }
             }
         }
-    }
-})
+    };
+});
 </script>
 
 <template>

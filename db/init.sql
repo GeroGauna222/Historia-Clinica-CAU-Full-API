@@ -167,7 +167,7 @@ CREATE TABLE ausencias (
 CREATE TABLE disponibilidades (
     id INT AUTO_INCREMENT PRIMARY KEY,
     usuario_id INT NOT NULL,
-    dia_semana ENUM('Lunes','Martes','Miercoles','Jueves','Viernes','Sabado') NOT NULL,
+    dia_semana ENUM('Lunes','Martes','Miercoles','Jueves','Viernes','Sabado','Domingo') NOT NULL,
     hora_inicio TIME NOT NULL,
     hora_fin TIME NOT NULL,
     activo BOOLEAN DEFAULT TRUE,
@@ -235,16 +235,8 @@ WHERE NOT EXISTS (
 );
 
 -- ==============================================
--- USUARIO DE APLICACIÓN (no root)
+-- USUARIOS DB
 -- ==============================================
-DROP USER IF EXISTS 'hc_app'@'%';
-CREATE USER IF NOT EXISTS 'hc_app'@'%' IDENTIFIED BY 'HC_App_2025!';
-GRANT SELECT, INSERT, UPDATE, DELETE ON hc_bfa.* TO 'hc_app'@'%';
-
--- Crear usuario para backups
-DROP USER IF EXISTS 'backup_user'@'%';
-CREATE USER IF NOT EXISTS 'backup_user'@'%' IDENTIFIED BY 'Backup_2025!';
-
--- Permisos necesarios para mysqldump seguro
-GRANT SELECT, LOCK TABLES ON hc_bfa.* TO 'backup_user'@'%';
-FLUSH PRIVILEGES;
+-- En Docker Compose se crean con variables:
+-- MYSQL_USER / MYSQL_PASSWORD / MYSQL_DATABASE.
+-- No dejar credenciales hardcodeadas en SQL.
