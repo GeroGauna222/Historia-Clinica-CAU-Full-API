@@ -3,8 +3,10 @@ from flask_login import login_required, current_user
 from app.database import get_connection
 from app.utils.permisos import requiere_rol
 import traceback
+from datetime import datetime, timedelta, timezone
 
 bp_grupos = Blueprint("grupos", __name__)
+TZ_ARG = timezone(timedelta(hours=-3))
 
 # 🛠️ Función auxiliar vital para evitar el Error 500
 def extraer_ids_limpios(lista_miembros):
@@ -18,6 +20,16 @@ def extraer_ids_limpios(lista_miembros):
         except (ValueError, TypeError):
             continue
     return ids_limpios
+
+
+def _to_iso_arg(dt):
+    if isinstance(dt, datetime):
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=TZ_ARG)
+        else:
+            dt = dt.astimezone(TZ_ARG)
+        return dt.isoformat()
+    return dt
 
 # =====================================================
 # 📋 Obtener todos los grupos
@@ -250,3 +262,39 @@ def obtener_miembros(grupo_id):
     miembros = cursor.fetchall()
     cursor.close(); conn.close()
     return jsonify(miembros)
+
+
+@bp_grupos.route("/api/grupos/<int:grupo_id>/ausencias", methods=["GET"])
+@login_required
+def obtener_ausencias_grupo(grupo_id):
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    try:
+        cursor.execute(
+            """
+            SELECT
+                a.id,
+                a.usuario_id,
+                u.nombre AS nombre_usuario,
+                a.fecha_inicio,
+                a.fecha_fin,
+                a.motivo
+            FROM grupo_miembros gm
+            JOIN ausencias a ON a.usuario_id = gm.usuario_id
+            JOIN usuarios u ON u.id = a.usuario_id
+            WHERE gm.grupo_id = %s
+            ORDER BY a.fecha_inicio ASC
+            """,
+            (grupo_id,),
+        )
+        ausencias = cursor.fetchall()
+    finally:
+        cursor.close()
+        conn.close()
+
+    for a in ausencias:
+        a["fecha_inicio"] = _to_iso_arg(a.get("fecha_inicio"))
+        a["fecha_fin"] = _to_iso_arg(a.get("fecha_fin"))
+
+    return jsonify(ausencias)

@@ -17,27 +17,21 @@ Historia Clínica CAU is a web system for managing unified clinical records and 
 
 ### Full stack (Docker)
 ```bash
-# Start all services
-docker compose --env-file .env up -d --build
-
-# Stop
-docker compose down
-
-# View logs
-docker compose logs -f web      # Flask backend
-docker compose logs -f frontend
-docker compose logs -f db
+docker compose --env-file .env up -d --build   # Start all services
+docker compose down                              # Stop
+docker compose logs -f web                       # Flask backend logs
+docker compose logs -f frontend                  # Frontend logs
+docker compose logs -f db                        # MySQL logs
 ```
 
 ### Frontend only (outside Docker)
 ```bash
 cd frontend
 npm install
-npm run dev        # Vite dev server on :5173
+npm run dev        # Vite dev server on :5173 (proxies /api to localhost:5000)
 npm run build
 npm run lint       # ESLint + auto-fix
 ```
-The Vite dev proxy forwards `/api` to `http://localhost:5000`.
 
 ### Backend only (outside Docker)
 ```bash
@@ -45,7 +39,18 @@ cd backend_flask/app
 pip install -r requirements.txt
 FLASK_APP=main.py flask run   # dev mode, port 5000
 ```
-Set `FLASK_ENV=production` to use Gunicorn (3 workers on :5000) instead.
+
+### Tests
+```bash
+# Backend unit tests (no DB required — uses mocked connections)
+cd backend_flask && python -m pytest tests/ -q
+
+# Frontend smoke test (requires running API + jq)
+cd frontend/tests && bash test_usuarios.sh
+
+# API health check
+curl -I http://localhost/api/health/public
+```
 
 ### Access
 - **App**: `http://localhost` (via Nginx)
@@ -57,7 +62,7 @@ Set `FLASK_ENV=production` to use Gunicorn (3 workers on :5000) instead.
 Client (Vue 3)
     ↓ HTTP
 Nginx (:80)
-  ├── /uploads/ → served directly from shared Docker volume
+  ├── /uploads/ → served directly from shared Docker volume (20MB max, 30-day cache)
   ├── /api/ → Flask (:5000)
   │     └── MySQL (:3306) + BFA/Geth (:8545, optional)
   └── / → Vue frontend (:80 container)
@@ -68,32 +73,41 @@ Nginx (:80)
 | Path | Purpose |
 |------|---------|
 | `__init__.py` | App factory: Flask, CORS, LoginManager, Mail, Talisman, blueprint registration |
-| `auth.py` | `Usuario` model (Flask-Login `UserMixin`) |
+| `auth.py` | `Usuario` model (Flask-Login `UserMixin`), filters `activo=1` |
 | `database.py` | `get_connection()` — mysql-connector with retry logic |
 | `config.py` | `Config` class — all settings via env vars |
-| `routes/` | One Blueprint per domain: `auth_routes`, `usuarios_routes`, `pacientes_routes`, `historias_routes`, `turnos_routes`, `grupos_routes`, `disponibilidades_routes`, `ausencias_routes`, `dashboard_routes`, `blockchain_routes`, `health_routes` |
+| `main.py` | Entry point (imports `app` from `__init__`; Gunicorn targets this in production) |
+| `routes/` | One Blueprint per domain (11 total): `auth`, `usuarios`, `pacientes`, `historias`, `turnos`, `grupos`, `disponibilidades`, `ausencias`, `dashboard`, `blockchain`, `health` |
 | `utils/permisos.py` | `@requiere_rol('director', ...)` decorator |
 | `utils/hashing.py` | SHA-256 helpers for clinical record integrity |
 | `utils/validacion.py` | `password_valida()`, `validar_email()` |
 | `utils/bfa_client.py` | Web3 client for BFA interaction |
 
-All API routes are prefixed `/api/...` (enforced at Flask blueprint level, not via `url_prefix`).
+All API routes are prefixed `/api/...` internally in each blueprint — no `url_prefix` is set at registration.
 
 ### Frontend structure (`frontend/src/`)
 
 | Path | Purpose |
 |------|---------|
-| `api/axios.js` | Axios instance with `withCredentials: true`, `baseURL` from `VITE_API_URL` or `window.location.origin + /api` |
-| `stores/user.js` | Pinia store — user state + `rol` persisted to `localStorage` for router guards |
-| `router/index.js` | Vue Router with `meta.roles` guards; reads `localStorage.getItem('user')` for role checks |
+| `api/axios.js` | Axios instance: `withCredentials: true`, `baseURL` from `VITE_API_URL` or `/api` (relative) |
+| `stores/user.js` | Pinia store — user state, `fetchUser()` validates session against backend |
+| `router/index.js` | Vue Router with `meta.roles` guards; `beforeEach` calls `fetchUser()` for auth check |
 | `service/` | One service file per domain (e.g. `turnosService.js`, `historiaService.js`) |
 | `views/pages/` | Feature views organized by domain (`auth/`, `historias/`, `turnos/`, `usuarios/`, `grupos/`, `disponibilidades/`, `evolucion/`) |
-| `utils/eventBus.js` | Simple event bus used for `user:updated` / `user:loggedOut` events |
+| `utils/eventBus.js` | Event bus for `user:updated` / `user:loggedOut` events |
+
+### Database (`db/init.sql`)
+
+10 tables: `usuarios`, `pacientes`, `historias` (1-per-patient), `evoluciones`, `evolucion_archivos`, `turnos`, `ausencias`, `disponibilidades`, `grupos_profesionales`, `grupo_miembros`, `auditorias_blockchain`. Schema changes must update `init.sql` and all affected backend/frontend callers in the same change.
+
+### Test infrastructure (`backend_flask/tests/`)
+
+Tests use `monkeypatch` to swap `get_connection` with `FakeConnection`/`FakeCursor` from `conftest.py` — no real database needed. Test files cover auth, RBAC, turnos, and disponibilidades.
 
 ## RBAC Roles
 
-Roles are stored in `usuarios.rol` (DB) and enforced in two places:
-- **Backend**: `@requiere_rol('director', 'profesional', ...)` decorator in route files
+Roles are stored in `usuarios.rol` (DB enum) and enforced in two places:
+- **Backend**: `@requiere_rol('director', 'profesional', ...)` decorator
 - **Frontend**: `meta: { roles: [...] }` on routes + `router.beforeEach` guard
 
 | Role | Access |
@@ -105,12 +119,21 @@ Roles are stored in `usuarios.rol` (DB) and enforced in two places:
 
 ## Key Patterns
 
-- **Session-based auth**: Flask-Login sessions with `SESSION_COOKIE_SECURE=True`. The frontend uses `withCredentials: true` on all Axios requests.
-- **No JWT**: Auth state is server-side sessions. The frontend stores `loggedIn` and `user` keys in `localStorage` only for router guards — not for authentication itself.
-- **Database access**: All routes call `get_connection()` directly (no ORM). Always close connections: `conn.close()`.
-- **File uploads**: Files go to `/app/uploads` (Flask) shared via Docker volume `uploads_data` with Nginx, which serves `/uploads/` directly without hitting Flask.
+- **Session-based auth (no JWT)**: Flask-Login sessions. Frontend uses `withCredentials: true`. The Pinia `userStore.fetchUser()` validates session against the backend; `localStorage` is no longer used for auth/role checks.
+- **Database access**: All routes call `get_connection()` directly (no ORM). Always close cursor and connection (prefer `try/finally`). Use parameterized SQL (`%s` placeholders).
+- **File uploads**: Files go to `/app/uploads/evoluciones/<evolucion_id>/...` (Flask) shared via Docker volume `uploads_data` with Nginx, which serves `/uploads/` directly. 20MB max.
 - **Blockchain integrity**: `utils/hashing.py` generates SHA-256 hashes stored in DB; `blockchain_routes.py` / `bfa_client.py` optionally publish hashes to BFA. The BFA node runs in `--dev` mode by default.
 - **Password hashing**: `werkzeug.security.generate_password_hash` with `method="scrypt"`.
+- **Cookie security**: `SESSION_COOKIE_SECURE` and `REMEMBER_COOKIE_SECURE` are configurable per environment (HTTP dev / HTTPS prod).
+- **Frontend services pattern**: Backend calls must go through `src/service/*` modules; components consume services/stores, not axios directly.
+
+## Universal Rules
+
+- Keep API contracts under `/api/*` backward-compatible unless migration is explicit.
+- Keep RBAC role keys exact: `director`, `profesional`, `administrativo`, `area`.
+- Any DB schema change must update both `db/init.sql` and all affected backend/frontend callers in the same change.
+- If login/logout flow changes, update all three places together: `views/pages/auth/*`, `stores/user.js`, and router guards.
+- Keep payload field names aligned between backend responses and frontend consumers.
 
 ## Environment Variables (`.env`)
 

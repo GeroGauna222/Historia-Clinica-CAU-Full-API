@@ -1,17 +1,24 @@
+# HTTPS example config.
+# Use this file once certs exist at:
+# /etc/letsencrypt/live/cau-hc.com.ar/fullchain.pem
+# /etc/letsencrypt/live/cau-hc.com.ar/privkey.pem
+
 server {
     listen 80;
     listen [::]:80;
     server_name cau-hc.com.ar www.cau-hc.com.ar;
 
     location / {
-        return 301 https://cau-hc.com.ar$request_uri;
+        return 301 https://$host$request_uri;
     }
 }
 
 server {
-    listen 443 ssl http2;
-    listen [::]:443 ssl http2;
-    server_name www.cau-hc.com.ar;
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
+
+    server_name cau-hc.com.ar www.cau-hc.com.ar;
 
     ssl_certificate /etc/letsencrypt/live/cau-hc.com.ar/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/cau-hc.com.ar/privkey.pem;
@@ -19,26 +26,8 @@ server {
     ssl_ciphers HIGH:!aNULL:!MD5;
     server_tokens off;
 
-    location / {
-        return 301 https://cau-hc.com.ar$request_uri;
-    }
-}
-
-server {
-    listen 443 ssl http2;
-    listen [::]:443 ssl http2;
-    server_name cau-hc.com.ar;
-
-    ssl_certificate /etc/letsencrypt/live/cau-hc.com.ar/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/cau-hc.com.ar/privkey.pem;
-    ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_ciphers HIGH:!aNULL:!MD5;
-    server_tokens off;
-
-    # Upload/PDF size limit.
     client_max_body_size 20M;
 
-    # Uploaded files served by Nginx.
     location /uploads/ {
         alias /var/www/uploads/;
         autoindex off;
@@ -46,7 +35,6 @@ server {
         add_header Cache-Control "public, no-transform";
     }
 
-    # Flask backend.
     location /api/ {
         proxy_pass http://web:5000/api/;
         proxy_set_header Host $host;
@@ -55,7 +43,6 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 
-    # Frontend.
     location / {
         proxy_pass http://frontend:80;
         proxy_set_header Host $host;

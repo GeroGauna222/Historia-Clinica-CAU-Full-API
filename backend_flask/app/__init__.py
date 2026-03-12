@@ -34,8 +34,11 @@ force_https = False #(env == "production")
 
 Talisman(
     app,
-    content_security_policy=None, 
-    force_https=force_https
+    content_security_policy=None,
+    force_https=force_https,
+    session_cookie_secure=app.config.get("SESSION_COOKIE_SECURE", False),
+    session_cookie_http_only=app.config.get("SESSION_COOKIE_HTTPONLY", True),
+    session_cookie_samesite=app.config.get("SESSION_COOKIE_SAMESITE", "Lax")
 )
 
 

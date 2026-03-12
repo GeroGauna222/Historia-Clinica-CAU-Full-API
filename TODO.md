@@ -160,6 +160,38 @@ Estado: Pendiente de correccion
   - Criterio de cierre: lint limpio sin introducir cambios funcionales inesperados.
   - Estado: implementado. Limpieza de imports/variables sin uso y `npm run lint` OK.
 
+## P4 - Produccion (dominio, HTTPS, seguridad)
+
+- [ ] **P4-01 - Comprar dominio y configurar DNS**
+  - Impacto: sin dominio no hay HTTPS ni marca profesional.
+  - Referencia: `SECURE-DOMAIN.md`.
+  - Criterio de cierre: dominio activo, DNS apuntando a VPS, `nslookup` OK.
+  - Estado: pendiente.
+
+- [ ] **P4-02 - Configurar Nginx con HTTPS y certificados Lets Encrypt**
+  - Impacto: sin HTTPS el proyecto no es apto para produccion.
+  - Referencia: `SECURE-DOMAIN.md`.
+  - Criterio de cierre: Nginx sirve HTTPS, redireccion HTTP->HTTPS, certificados validos.
+  - Estado: pendiente.
+
+- [ ] **P4-03 - Endurecer cookies y sesiones**
+  - Impacto: seguridad de sesiones en entorno publico.
+  - Referencia: `SECURE-DOMAIN.md`.
+  - Criterio de cierre: `SESSION_COOKIE_SECURE=True`, `SAMESITE=Lax`.
+  - Estado: pendiente.
+
+- [ ] **P4-04 - Firewall minimo en VPS**
+  - Impacto: exposicion innecesaria de puertos.
+  - Referencia: `SECURE-DOMAIN.md`.
+  - Criterio de cierre: solo 22, 80, 443 expuestos publicamente.
+  - Estado: pendiente.
+
+- [ ] **P4-05 - Rotar secretos y asegurar `production.env`**
+  - Impacto: fuga de credenciales en entorno real.
+  - Referencia: `SECURE-DOMAIN.md`.
+  - Criterio de cierre: `production.env` fuera de Git, permisos `600`, secretos fuertes.
+  - Estado: pendiente.
+
 ## Checklist de validacion final
 
 - [ ] Login/logout y persistencia de sesion funcionando en entorno actual.

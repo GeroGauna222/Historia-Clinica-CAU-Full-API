@@ -2,15 +2,18 @@
 import authService from '@/service/authService';
 import { onMounted } from 'vue';
 import { useRouter } from 'vue-router';
+import { useUserStore } from '@/stores/user';
 
 const router = useRouter();
+const userStore = useUserStore();
 
 onMounted(async () => {
     try {
         await authService.logout();
-        router.push('/auth/login');
     } catch (error) {
         console.error(error);
+    } finally {
+        userStore.logout();
         router.push('/auth/login');
     }
 });

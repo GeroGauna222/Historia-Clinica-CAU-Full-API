@@ -3,6 +3,7 @@ import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import { useRouter } from 'vue-router';
 import { useUserStore } from '@/stores/user';
 import { buildFotoURL } from '@/utils/fotoUrl.js';
+import authService from '@/service/authService';
 
 const router = useRouter();
 const userStore = useUserStore();
@@ -68,8 +69,15 @@ const irPassword = () => {
 };
 
 const logout = async () => {
-    await userStore.logout();
-    router.push('/auth/login');
+    try {
+        await authService.logout();
+    } catch (e) {
+        console.error('Error cerrando sesión en backend:', e);
+    } finally {
+        userStore.logout();
+        closeMenu();
+        router.push('/auth/login');
+    }
 };
 </script>
 

@@ -58,9 +58,9 @@ def medico_disponible(usuario_id, fecha_inicio, fecha_fin, turno_excluir_id=None
     cursor.execute("""
         SELECT 1 FROM ausencias
         WHERE usuario_id = %s
-        AND (%s BETWEEN fecha_inicio AND fecha_fin
-        OR  %s BETWEEN fecha_inicio AND fecha_fin)
-    """, (usuario_id, fecha_inicio, fecha_fin))
+        AND fecha_inicio < %s
+        AND fecha_fin > %s
+    """, (usuario_id, fecha_fin, fecha_inicio))
     ausente = cursor.fetchone()
 
     # 4. Chequeamos SOLAPAMIENTO (Ocupado)

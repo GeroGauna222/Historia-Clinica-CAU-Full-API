@@ -107,9 +107,11 @@ services:
       - frontend
     ports:
       - "80:80"
+      - "443:443"
     volumes:
       - ./nginx/default.conf:/etc/nginx/conf.d/default.conf
       - uploads_data:/var/www/uploads # <--- El mismo volumen que usa Flask
+      - /etc/letsencrypt:/etc/letsencrypt:ro
     networks:
       - historia_net
 

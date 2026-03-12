@@ -5,6 +5,9 @@ export default {
     listar() {
         return api.get('/ausencias', { withCredentials: true });
     },
+    listarPorGrupo(grupoId) {
+        return api.get(`/grupos/${grupoId}/ausencias`, { withCredentials: true });
+    },
     crear(data) {
         return api.post('/ausencias', data, { withCredentials: true });
     },
