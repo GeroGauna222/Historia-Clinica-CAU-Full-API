@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, time
 import math
 
 from flask import Blueprint, jsonify, request
@@ -15,6 +15,29 @@ TZ_ARG = timezone(timedelta(hours=-3))
 ROLES_TURNOS = ("director", "profesional", "administrativo", "area")
 ROLES_TURNOS_GRUPALES = ("director", "administrativo", "area")
 GROUP_SLOT_MINUTES = 20
+WEEKDAY_NAME_TO_INDEX = {
+    "lunes": 0,
+    "lun": 0,
+    "monday": 0,
+    "martes": 1,
+    "mar": 1,
+    "tuesday": 1,
+    "miercoles": 2,
+    "mie": 2,
+    "wednesday": 2,
+    "jueves": 3,
+    "jue": 3,
+    "thursday": 3,
+    "viernes": 4,
+    "vie": 4,
+    "friday": 4,
+    "sabado": 5,
+    "sab": 5,
+    "saturday": 5,
+    "domingo": 6,
+    "dom": 6,
+    "sunday": 6,
+}
 
 
 def _parse_iso_datetime(value):
@@ -129,6 +152,107 @@ def _alinear_turno_grupal(fecha_inicio_raw, fecha_fin_raw=None, slot_minutes=GRO
     fin_ajustado = inicio_ajustado + duracion
     ajuste = _build_ajuste_payload(inicio_ajustado != inicio_original, inicio_original, inicio_ajustado, fin_ajustado)
     return inicio_ajustado, fin_ajustado, ajuste, None
+
+
+def _parse_weekdays(raw_days):
+    if not isinstance(raw_days, list) or not raw_days:
+        return None, "dias_semana debe ser una lista no vacia"
+
+    days = set()
+    for value in raw_days:
+        idx = None
+        if isinstance(value, int):
+            idx = value
+        elif isinstance(value, str):
+            clean = value.strip().lower()
+            if not clean:
+                continue
+            if clean in WEEKDAY_NAME_TO_INDEX:
+                idx = WEEKDAY_NAME_TO_INDEX[clean]
+            else:
+                try:
+                    parsed = int(clean)
+                    if 1 <= parsed <= 7:
+                        idx = 6 if parsed == 7 else parsed - 1
+                    else:
+                        idx = parsed
+                except ValueError:
+                    return None, f"Dia invalido en dias_semana: {value}"
+        else:
+            return None, f"Dia invalido en dias_semana: {value}"
+
+        if idx is None or idx < 0 or idx > 6:
+            return None, f"Dia invalido en dias_semana: {value}"
+        days.add(idx)
+
+    if not days:
+        return None, "dias_semana debe tener al menos un dia valido"
+    return sorted(days), None
+
+
+def _parse_batch_time(raw_hora, fallback_dt):
+    if raw_hora is None or str(raw_hora).strip() == "":
+        return fallback_dt.hour, fallback_dt.minute, None
+
+    if not isinstance(raw_hora, str):
+        return None, None, "hora invalida"
+
+    hora_txt = raw_hora.strip()
+    for fmt in ("%H:%M", "%H:%M:%S"):
+        try:
+            parsed = datetime.strptime(hora_txt, fmt)
+            return parsed.hour, parsed.minute, None
+        except ValueError:
+            continue
+    return None, None, "hora invalida, use formato HH:MM"
+
+
+def _resolver_duracion_grupal(fecha_inicio_raw, fecha_fin_raw=None, slot_minutes=GROUP_SLOT_MINUTES):
+    inicio_dt = _normalize_datetime(_parse_iso_datetime(fecha_inicio_raw))
+    if not inicio_dt:
+        return None, "Formato de fecha invalido"
+
+    fin_dt = _normalize_datetime(_parse_iso_datetime(fecha_fin_raw)) if fecha_fin_raw else None
+    if not fin_dt or fin_dt <= inicio_dt:
+        return timedelta(minutes=slot_minutes), None
+    return fin_dt - inicio_dt, None
+
+
+def _generar_fechas_tanda(fecha_inicio_raw, raw_weekdays, cantidad_raw, raw_hora):
+    fecha_base = _normalize_datetime(_parse_iso_datetime(fecha_inicio_raw))
+    if not fecha_base:
+        return None, None, "Formato de fecha invalido"
+
+    try:
+        cantidad = int(cantidad_raw)
+    except (TypeError, ValueError):
+        return None, None, "cantidad invalida"
+    if cantidad <= 0 or cantidad > 500:
+        return None, None, "cantidad debe estar entre 1 y 500"
+
+    weekdays, err = _parse_weekdays(raw_weekdays)
+    if err:
+        return None, None, err
+
+    hora, minuto, err = _parse_batch_time(raw_hora, fecha_base)
+    if err:
+        return None, None, err
+
+    fechas = []
+    cursor_day = fecha_base.date()
+    max_iter = max(366, cantidad * 30)
+    loops = 0
+    while len(fechas) < cantidad and loops < max_iter:
+        candidate = datetime.combine(cursor_day, time(hour=hora, minute=minuto))
+        if candidate.weekday() in weekdays and candidate >= fecha_base:
+            fechas.append(candidate)
+        cursor_day += timedelta(days=1)
+        loops += 1
+
+    if len(fechas) < cantidad:
+        return None, None, "No se pudieron generar fechas para la tanda con los parametros indicados"
+
+    return fecha_base, fechas, None
 
 
 def medico_disponible(usuario_id, fecha_inicio, fecha_fin, turno_excluir_id=None, permitir_solape=False):
@@ -884,13 +1008,40 @@ def crear_turno_grupal():
     fecha_inicio = data.get("fecha_inicio")
     fecha_fin = data.get("fecha_fin")
     motivo = data.get("motivo", "")
+    modo = str(data.get("modo", "simple")).strip().lower()
+    en_tanda_flag = str(data.get("en_tanda", "0")).strip().lower() in {"1", "true", "yes", "on"}
+    es_tanda = modo == "tanda" or en_tanda_flag
 
     if not (grupo_id and paciente_id and fecha_inicio):
         return jsonify({"error": "grupo_id, paciente_id y fecha_inicio son obligatorios"}), 400
 
-    inicio_dt, fin_dt, ajuste, err = _alinear_turno_grupal(fecha_inicio, fecha_fin)
-    if err:
-        return jsonify({"error": err}), 400
+    try:
+        grupo_id = int(grupo_id)
+        paciente_id = int(paciente_id)
+    except (TypeError, ValueError):
+        return jsonify({"error": "grupo_id y paciente_id deben ser enteros"}), 400
+
+    inicio_dt = None
+    fin_dt = None
+    ajuste = None
+    fechas_tanda = []
+    duracion_tanda = None
+    if es_tanda:
+        _, fechas_tanda, err = _generar_fechas_tanda(
+            fecha_inicio,
+            data.get("dias_semana"),
+            data.get("cantidad"),
+            data.get("hora"),
+        )
+        if err:
+            return jsonify({"error": err}), 400
+        duracion_tanda, err = _resolver_duracion_grupal(fecha_inicio, fecha_fin)
+        if err:
+            return jsonify({"error": err}), 400
+    else:
+        inicio_dt, fin_dt, ajuste, err = _alinear_turno_grupal(fecha_inicio, fecha_fin)
+        if err:
+            return jsonify({"error": err}), 400
 
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
@@ -898,6 +1049,41 @@ def crear_turno_grupal():
         cursor.execute("SELECT id FROM grupos_profesionales WHERE id = %s", (grupo_id,))
         if not cursor.fetchone():
             return jsonify({"error": "Grupo no encontrado"}), 404
+
+        cursor.execute("SELECT id FROM pacientes WHERE id = %s", (paciente_id,))
+        if not cursor.fetchone():
+            return jsonify({"error": "Paciente no encontrado"}), 404
+
+        if es_tanda:
+            created_ids = []
+            ajustes = []
+            for inicio_base in fechas_tanda:
+                fin_base = inicio_base + duracion_tanda
+                inicio_item, fin_item, ajuste_item, err = _alinear_turno_grupal(inicio_base, fin_base)
+                if err:
+                    raise ValueError(err)
+                cursor.execute(
+                    """
+                    INSERT INTO turnos_grupales (grupo_id, paciente_id, fecha_inicio, fecha_fin, motivo, creado_por)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                """,
+                    (grupo_id, paciente_id, _to_db_iso(inicio_item), _to_db_iso(fin_item), motivo, current_user.id),
+                )
+                created_ids.append(cursor.lastrowid)
+                if ajuste_item:
+                    ajustes.append(ajuste_item)
+
+            conn.commit()
+            payload = {
+                "message": "Tanda de turnos grupales creada correctamente",
+                "modo": "tanda",
+                "cantidad_solicitada": len(fechas_tanda),
+                "cantidad_creada": len(created_ids),
+                "ids": created_ids,
+            }
+            if ajustes:
+                payload["ajustes_horario"] = ajustes
+            return jsonify(payload), 201
 
         cursor.execute(
             """
@@ -911,6 +1097,9 @@ def crear_turno_grupal():
         if ajuste:
             payload["ajuste_horario"] = ajuste
         return jsonify(payload), 201
+    except ValueError as e:
+        conn.rollback()
+        return jsonify({"error": str(e)}), 400
     except Exception as e:
         conn.rollback()
         return jsonify({"error": str(e)}), 500

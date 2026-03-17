@@ -23,9 +23,23 @@ const detalleVisible = ref(false);
 
 const modalNuevoVisible = ref(false);
 const DURACION_GRUPAL_DEFAULT = 20;
+const DIAS_TANDA = [
+    { value: 0, label: 'Lun' },
+    { value: 1, label: 'Mar' },
+    { value: 2, label: 'Mie' },
+    { value: 3, label: 'Jue' },
+    { value: 4, label: 'Vie' },
+    { value: 5, label: 'Sab' },
+    { value: 6, label: 'Dom' }
+];
 const nuevo = reactive({
+    modo_creacion: 'simple',
     grupo_id: '',
     fecha_inicio: '',
+    fecha_base: '',
+    hora_tanda: '',
+    dias_tanda: [],
+    cantidad_tanda: 4,
     motivo: '',
     pacienteBusqueda: '',
     paciente: null,
@@ -58,6 +72,15 @@ function pad(n) {
 }
 function toLocalDateTimeString(date) {
     return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+}
+function toLocalDateString(date) {
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+function toLocalTimeString(date) {
+    return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+function jsDayToMondayIndex(jsDay) {
+    return jsDay === 0 ? 6 : jsDay - 1;
 }
 function toPositiveMinutes(value, fallback = DURACION_GRUPAL_DEFAULT) {
     const parsed = Number(value);
@@ -93,7 +116,12 @@ const calendarOptions = reactive({
     events: eventos,
     dateClick(info) {
         if (!canEdit()) return;
+        nuevo.modo_creacion = 'simple';
         nuevo.fecha_inicio = toLocalDateTimeString(info.date);
+        nuevo.fecha_base = toLocalDateString(info.date);
+        nuevo.hora_tanda = toLocalTimeString(info.date);
+        nuevo.dias_tanda = [jsDayToMondayIndex(info.date.getDay())];
+        nuevo.cantidad_tanda = 4;
         nuevo.paciente = null;
         nuevo.pacienteBusqueda = '';
         nuevo.motivo = '';
@@ -168,11 +196,32 @@ function seleccionarPaciente(p) {
     pacientes.value = [];
 }
 
+function toggleDiaTanda(day) {
+    const pos = nuevo.dias_tanda.indexOf(day);
+    if (pos >= 0) {
+        nuevo.dias_tanda.splice(pos, 1);
+    } else {
+        nuevo.dias_tanda.push(day);
+        nuevo.dias_tanda.sort((a, b) => a - b);
+    }
+}
+
 async function crearTurno() {
-    if (!nuevo.grupo_id || !nuevo.fecha_inicio || !nuevo.paciente) return;
-    const fechaFin = sumarMinutosISO(nuevo.fecha_inicio, nuevo.duracion_minutos);
-    if (!fechaFin) {
+    const esTanda = nuevo.modo_creacion === 'tanda';
+    const fechaInicioRef = esTanda ? `${nuevo.fecha_base}T${nuevo.hora_tanda}:00` : nuevo.fecha_inicio;
+    if (!nuevo.grupo_id || !fechaInicioRef || !nuevo.paciente) return;
+    const fechaFin = sumarMinutosISO(fechaInicioRef, nuevo.duracion_minutos);
+    if (!fechaFin || !fechaInicioRef) {
         toast.add({ severity: 'error', summary: 'Fecha invalida', detail: 'No se pudo calcular la fecha de fin del turno.', life: 4500 });
+        return;
+    }
+    if (esTanda && (!nuevo.fecha_base || !nuevo.hora_tanda || !nuevo.dias_tanda.length || Number(nuevo.cantidad_tanda) <= 0)) {
+        toast.add({
+            severity: 'warn',
+            summary: 'Datos incompletos',
+            detail: 'Para la tanda debe indicar fecha base, hora, dias y cantidad.',
+            life: 4500
+        });
         return;
     }
     guardandoNuevo.value = true;
@@ -182,14 +231,25 @@ async function crearTurno() {
             {
                 grupo_id: Number(nuevo.grupo_id),
                 paciente_id: nuevo.paciente.id,
-                fecha_inicio: nuevo.fecha_inicio,
+                fecha_inicio: fechaInicioRef,
                 fecha_fin: fechaFin,
-                motivo: nuevo.motivo
+                motivo: nuevo.motivo,
+                modo: esTanda ? 'tanda' : 'simple',
+                dias_semana: esTanda ? nuevo.dias_tanda : undefined,
+                cantidad: esTanda ? Number(nuevo.cantidad_tanda) : undefined,
+                hora: esTanda ? nuevo.hora_tanda : undefined
             },
             { withCredentials: true }
         );
         if (resp.data?.ajuste_horario?.aplicado) {
             toast.add({ severity: 'info', summary: 'Horario ajustado', detail: `Inicio ajustado a ${resp.data.ajuste_horario.inicio_ajustado}`, life: 4500 });
+        } else if (esTanda && Number(resp.data?.cantidad_creada || 0) > 0) {
+            toast.add({
+                severity: 'success',
+                summary: 'Tanda creada',
+                detail: `Se crearon ${resp.data.cantidad_creada} turnos grupales.`,
+                life: 4200
+            });
         }
         modalNuevoVisible.value = false;
         await cargarTurnos();
@@ -269,15 +329,51 @@ onMounted(async () => {
         <Dialog v-model:visible="modalNuevoVisible" modal header="Nuevo turno grupal rehab" :style="{ width: '520px' }">
             <div class="space-y-3">
                 <div>
+                    <label class="font-semibold block mb-1">Modo de carga</label>
+                    <select v-model="nuevo.modo_creacion" class="w-full p-2 border border-gray-300 rounded">
+                        <option value="simple">Simple (1 turno)</option>
+                        <option value="tanda">Tanda (dias + hora + cantidad)</option>
+                    </select>
+                </div>
+                <div>
                     <label class="font-semibold block mb-1">Grupo</label>
                     <select v-model="nuevo.grupo_id" class="w-full p-2 border border-gray-300 rounded">
                         <option value="" disabled>Seleccionar grupo</option>
                         <option v-for="g in gruposRehab" :key="g.id" :value="g.id">{{ g.nombre }}</option>
                     </select>
                 </div>
-                <div>
+                <div v-if="nuevo.modo_creacion === 'simple'">
                     <label class="font-semibold block mb-1">Fecha/hora</label>
                     <InputText type="datetime-local" v-model="nuevo.fecha_inicio" class="w-full" />
+                </div>
+                <div v-else class="space-y-2">
+                    <div>
+                        <label class="font-semibold block mb-1">Fecha base</label>
+                        <InputText type="date" v-model="nuevo.fecha_base" class="w-full" />
+                    </div>
+                    <div>
+                        <label class="font-semibold block mb-1">Hora</label>
+                        <InputText type="time" v-model="nuevo.hora_tanda" class="w-full" />
+                    </div>
+                    <div>
+                        <label class="font-semibold block mb-1">Dias</label>
+                        <div class="flex flex-wrap gap-2">
+                            <button
+                                v-for="d in DIAS_TANDA"
+                                :key="d.value"
+                                type="button"
+                                class="px-2 py-1 border rounded text-sm"
+                                :class="nuevo.dias_tanda.includes(d.value) ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300'"
+                                @click="toggleDiaTanda(d.value)"
+                            >
+                                {{ d.label }}
+                            </button>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="font-semibold block mb-1">Cantidad</label>
+                        <InputText type="number" min="1" step="1" v-model.number="nuevo.cantidad_tanda" class="w-full" />
+                    </div>
                 </div>
                 <div>
                     <label class="font-semibold block mb-1">Paciente</label>

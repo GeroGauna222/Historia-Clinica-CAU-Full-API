@@ -103,3 +103,78 @@ def test_medico_disponible_considera_solape_general_con_ausencias(monkeypatch):
     assert "fecha_inicio < %s" in query_ausencias
     assert "fecha_fin > %s" in query_ausencias
     assert params_ausencias == (7, "2026-03-26T10:30:00", "2026-03-26T10:00:00")
+
+
+def test_crear_turno_grupal_tanda_crea_multiples_turnos(client, monkeypatch):
+    login_as(client, MockUser(user_id=2, rol="administrativo"))
+
+    class InsertAwareCursor(FakeCursor):
+        def __init__(self, fetchone_results=None, fetchall_results=None):
+            super().__init__(fetchone_results=fetchone_results, fetchall_results=fetchall_results, lastrowid=0)
+            self._insert_counter = 0
+
+        def execute(self, query, params=None):
+            super().execute(query, params)
+            if "INSERT INTO turnos_grupales" in query:
+                self._insert_counter += 1
+                self.lastrowid = self._insert_counter
+
+    fake_cursor = InsertAwareCursor(
+        fetchone_results=[
+            {"id": 4},  # grupo existe
+            {"id": 9},  # paciente existe
+        ]
+    )
+    fake_connection = FakeConnection(fake_cursor)
+    monkeypatch.setattr(turnos_routes, "get_connection", lambda: fake_connection)
+
+    response = client.post(
+        "/api/turnos/grupales",
+        json={
+            "modo": "tanda",
+            "grupo_id": 4,
+            "paciente_id": 9,
+            "fecha_inicio": "2026-03-20T10:00:00",
+            "fecha_fin": "2026-03-20T10:20:00",
+            "hora": "10:00",
+            "dias_semana": [0, 2, 4],
+            "cantidad": 3,
+            "motivo": "Rehab",
+        },
+    )
+
+    assert response.status_code == 201
+    payload = response.get_json()
+    assert payload["modo"] == "tanda"
+    assert payload["cantidad_creada"] == 3
+    assert len(payload["ids"]) == 3
+    assert fake_connection.committed is True
+
+    insert_queries = [q for q, _ in fake_cursor.executed if "INSERT INTO turnos_grupales" in q]
+    assert len(insert_queries) == 3
+
+
+def test_crear_turno_grupal_tanda_rechaza_cantidad_invalida(client, monkeypatch):
+    login_as(client, MockUser(user_id=2, rol="administrativo"))
+
+    def _no_db():
+        raise AssertionError("No deberia abrir conexion para validaciones de tanda invalidas")
+
+    monkeypatch.setattr(turnos_routes, "get_connection", _no_db)
+
+    response = client.post(
+        "/api/turnos/grupales",
+        json={
+            "modo": "tanda",
+            "grupo_id": 4,
+            "paciente_id": 9,
+            "fecha_inicio": "2026-03-20T10:00:00",
+            "hora": "10:00",
+            "dias_semana": [0, 2],
+            "cantidad": 0,
+            "motivo": "Rehab",
+        },
+    )
+
+    assert response.status_code == 400
+    assert "cantidad" in response.get_json()["error"].lower()
