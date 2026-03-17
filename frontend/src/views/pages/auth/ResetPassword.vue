@@ -1,5 +1,6 @@
 <script setup>
 import logoUnsam from '@/assets/logo_unsam_sin_letras.png';
+import api from '@/api/axios';
 import { ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { validarPasswordFuerte } from '@/utils/validators';
@@ -43,24 +44,15 @@ async function resetear() {
 
     loading.value = true;
     try {
-        const res = await fetch(`/api/reset/${route.params.token}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                new_password: password.value,
-                confirm_password: confirmPassword.value
-            })
+        const res = await api.post(`/reset/${route.params.token}`, {
+            new_password: password.value,
+            confirm_password: confirmPassword.value
         });
-        const data = await res.json();
 
-        if (res.ok) {
-            mensaje.value = data.message || 'Contraseña actualizada correctamente ✅';
-            setTimeout(() => router.push('/auth/login'), 2500);
-        } else {
-            error.value = data.error || 'No se pudo restablecer la contraseña';
-        }
+        mensaje.value = res.data.message || 'Contraseña actualizada correctamente';
+        setTimeout(() => router.push('/auth/login'), 2500);
     } catch (err) {
-        error.value = 'Error de conexión con el servidor';
+        error.value = err.response?.data?.error || 'Error de conexión con el servidor';
     } finally {
         loading.value = false;
     }
@@ -81,48 +73,30 @@ async function resetear() {
                     <form @submit.prevent="resetear" class="space-y-6 w-full md:w-[28rem]">
                         <div>
                             <label for="password" class="block text-surface-900 dark:text-surface-0 text-xl font-medium mb-2"> Nueva contraseña </label>
-                            <input
-                                id="password"
-                                v-model="password"
-                                type="password"
-                                placeholder="********"
-                                class="w-full border border-gray-300 rounded-lg p-3 text-base focus:outline-none focus:ring-2 focus:ring-primary transition"
-                                :class="{ 'border-red-500': passwordError }"
-                                @input="validarEnVivo"
-                            />
+                            <Password id="password" v-model="password" :toggleMask="true" :feedback="false" fluid placeholder="********" :invalid="!!passwordError" @input="validarEnVivo" />
                             <p v-if="passwordError" class="text-red-500 text-xs mt-1">
                                 {{ passwordError }}
                             </p>
-                            <p v-else class="text-gray-400 text-xs mt-1">Mínimo 8 caracteres, una mayúscula, una minúscula, un número y un símbolo.</p>
+                            <p v-else class="text-muted-color text-xs mt-1">Mínimo 8 caracteres, una mayúscula, una minúscula, un número y un símbolo.</p>
                         </div>
 
                         <div>
                             <label for="confirmPassword" class="block text-surface-900 dark:text-surface-0 text-xl font-medium mb-2"> Confirmar contraseña </label>
-                            <input
-                                id="confirmPassword"
-                                v-model="confirmPassword"
-                                type="password"
-                                placeholder="********"
-                                class="w-full border border-gray-300 rounded-lg p-3 text-base focus:outline-none focus:ring-2 focus:ring-primary transition"
-                                :class="{ 'border-red-500': confirmError }"
-                            />
+                            <Password id="confirmPassword" v-model="confirmPassword" :toggleMask="true" :feedback="false" fluid placeholder="********" :invalid="!!confirmError" />
                             <p v-if="confirmError" class="text-red-500 text-xs mt-1">Las contraseñas no coinciden.</p>
                         </div>
 
-                        <button type="submit" class="w-full bg-primary text-white py-3 rounded-lg text-lg font-medium hover:opacity-90 transition" :disabled="loading || !!passwordError || !!confirmError || !password">
-                            <span v-if="!loading">Guardar nueva contraseña</span>
-                            <span v-else>Cargando...</span>
-                        </button>
+                        <Button type="submit" label="Guardar nueva contraseña" class="w-full" :loading="loading" :disabled="!!passwordError || !!confirmError || !password" />
 
-                        <p v-if="mensaje" class="text-green-600 text-center mt-4 text-sm font-medium bg-green-50 p-2 rounded border border-green-200">
+                        <p v-if="mensaje" class="text-green-600 text-center mt-4 text-sm font-medium bg-green-50 dark:bg-green-950 p-2 rounded border border-green-200 dark:border-green-800">
                             {{ mensaje }}
                         </p>
-                        <p v-if="error" class="text-red-600 text-center mt-4 text-sm font-medium bg-red-50 p-2 rounded border border-red-200">
+                        <p v-if="error" class="text-red-600 text-center mt-4 text-sm font-medium bg-red-50 dark:bg-red-950 p-2 rounded border border-red-200 dark:border-red-800">
                             {{ error }}
                         </p>
 
                         <div class="text-center mt-6">
-                            <router-link to="/auth/login" class="text-sm text-primary hover:underline"> ← Volver al inicio de sesión </router-link>
+                            <router-link to="/auth/login" class="text-sm text-primary hover:underline"> &larr; Volver al inicio de sesión </router-link>
                         </div>
                     </form>
                 </div>

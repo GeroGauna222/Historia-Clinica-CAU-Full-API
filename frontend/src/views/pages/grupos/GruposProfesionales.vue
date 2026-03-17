@@ -159,7 +159,10 @@ function verCalendario(grupo) {
             <Card v-for="grupo in grupos" :key="grupo.id" class="shadow-md hover:shadow-lg transition-shadow border-l-4 overflow-hidden" :style="{ borderLeftColor: grupo.color }">
                 <template #title>
                     <div class="flex justify-between items-start">
-                        <span class="text-xl font-bold truncate" :title="grupo.nombre">{{ grupo.nombre }}</span>
+                        <div class="flex items-center gap-2 min-w-0">
+                            <span class="text-xl font-bold truncate" :title="grupo.nombre">{{ grupo.nombre }}</span>
+                            <span v-if="grupo.es_rehabilitacion" class="text-[10px] uppercase tracking-wide px-2 py-1 rounded bg-green-100 text-green-700 border border-green-300">Rehab</span>
+                        </div>
                         <div class="flex gap-1">
                             <Button icon="pi pi-pencil" text rounded size="small" @click="editarGrupo(grupo)" v-tooltip.top="'Editar'" />
                             <Button icon="pi pi-trash" text rounded severity="danger" size="small" @click="eliminar(grupo)" v-tooltip.top="'Eliminar'" />

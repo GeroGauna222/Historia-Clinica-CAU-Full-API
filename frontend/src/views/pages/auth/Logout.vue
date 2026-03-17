@@ -8,13 +8,14 @@ const router = useRouter();
 const userStore = useUserStore();
 
 onMounted(async () => {
+    userStore.startLogout();
     try {
         await authService.logout();
     } catch (error) {
         console.error(error);
     } finally {
         userStore.logout();
-        router.push('/auth/login');
+        router.replace('/auth/login?logged_out=1');
     }
 });
 </script>

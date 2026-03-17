@@ -152,9 +152,16 @@ def crear_ausencia():
 def listar_ausencias():
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
+    filtro_usuario = request.args.get("usuario_id")
 
     # profesional/area solo ven lo propio
     if current_user.rol in ["profesional", "area"]:
+        if filtro_usuario and str(filtro_usuario) != str(current_user.id):
+            cursor.close()
+            conn.close()
+            return jsonify({"error": "No autorizado"}), 403
+
+        usuario_id = current_user.id
         cursor.execute(
             """
             SELECT a.*, u.nombre AS nombre_usuario
@@ -163,18 +170,30 @@ def listar_ausencias():
             WHERE a.usuario_id = %s
             ORDER BY fecha_inicio
             """,
-            (current_user.id,),
+            (usuario_id,),
         )
     else:
         # director/admin ven todo
-        cursor.execute(
-            """
-            SELECT a.*, u.nombre AS nombre_usuario
-            FROM ausencias a
-            JOIN usuarios u ON a.usuario_id = u.id
-            ORDER BY fecha_inicio
-            """
-        )
+        if filtro_usuario:
+            cursor.execute(
+                """
+                SELECT a.*, u.nombre AS nombre_usuario
+                FROM ausencias a
+                JOIN usuarios u ON a.usuario_id = u.id
+                WHERE a.usuario_id = %s
+                ORDER BY fecha_inicio
+                """,
+                (filtro_usuario,),
+            )
+        else:
+            cursor.execute(
+                """
+                SELECT a.*, u.nombre AS nombre_usuario
+                FROM ausencias a
+                JOIN usuarios u ON a.usuario_id = u.id
+                ORDER BY fecha_inicio
+                """
+            )
 
     ausencias = cursor.fetchall()
     cursor.close()

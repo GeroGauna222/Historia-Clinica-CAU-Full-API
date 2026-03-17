@@ -6,7 +6,7 @@
     <footer class="app-footer">
         <div class="footer-content">
             © 2025
-            <span class="brand">Historia Clínica CAU</span> — Desarrollado por <span class="author">Héctor Venero</span> | Universidad Nacional de San Martín (UNSAM)
+            <span class="brand">Historia Clínica CAU</span> — Desarrollado por <span class="author">Héctor Venero</span> con aporte de <span class="author">Gerónimo Gauna</span> | Universidad Nacional de San Martín (UNSAM)
         </div>
     </footer>
 </template>

@@ -1,6 +1,7 @@
 <script setup>
 import logoUnsam from '@/assets/logo_unsam_sin_letras.png';
 import FloatingConfigurator from '@/components/FloatingConfigurator.vue';
+import api from '@/api/axios';
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { validarEmail } from '@/utils/validators';
@@ -23,19 +24,10 @@ const recuperar = async () => {
             loading.value = false;
             return;
         }
-        const res = await fetch('/api/recover', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email: email.value })
-        });
-        const data = await res.json();
-        if (res.ok) {
-            mensaje.value = data.message;
-        } else {
-            error.value = data.error || 'No se pudo enviar el correo';
-        }
+        const res = await api.post('/recover', { email: email.value });
+        mensaje.value = res.data.message;
     } catch (err) {
-        error.value = 'Error de conexión con el servidor';
+        error.value = err.response?.data?.error || 'Error de conexión con el servidor';
     } finally {
         loading.value = false;
     }

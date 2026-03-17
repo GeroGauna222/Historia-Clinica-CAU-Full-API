@@ -3,21 +3,22 @@ import { ref, computed, onMounted } from 'vue';
 import api from '@/api/axios';
 import { useUserStore } from '@/stores/user';
 import { buildFotoURL } from '@/utils/fotoUrl.js';
+import { useToast } from 'primevue/usetoast';
+
+import InputText from 'primevue/inputtext';
+import Button from 'primevue/button';
+import Dialog from 'primevue/dialog';
 
 const userStore = useUserStore();
+const toast = useToast();
 
-// Campos del formulario
 const nombre = ref('');
 const email = ref('');
 const archivoFoto = ref(null);
 const previewFoto = ref(null);
-const mensaje = ref('');
-const error = ref('');
-
-// Variable reactiva para forzar la recarga de la imagen
 const imgVersion = ref(Date.now());
+const confirmarEliminarFoto = ref(false);
 
-// Cargar datos iniciales
 onMounted(async () => {
     if (!userStore.id) {
         await userStore.fetchUser();
@@ -26,19 +27,12 @@ onMounted(async () => {
     email.value = userStore.email || '';
 });
 
-/**
- * PROPIEDAD COMPUTADA INTELIGENTE:
- * 1. Si hay preview (usuario subió archivo pero no guardó), muestra eso.
- * 2. Si hay foto en BD, construye la URL con un timestamp (imgVersion) para evitar caché.
- * 3. Si no hay nada, devuelve null (para activar el v-else del avatar con letra).
- */
 const imagenA_Mostrar = computed(() => {
     if (previewFoto.value) return previewFoto.value;
     if (userStore.foto) return buildFotoURL(userStore.foto, imgVersion.value);
     return null;
 });
 
-/* Selección de archivo */
 const onFileChange = (e) => {
     const file = e.target.files[0];
     if (!file) {
@@ -50,11 +44,7 @@ const onFileChange = (e) => {
     previewFoto.value = URL.createObjectURL(file);
 };
 
-/* Guardar perfil */
 const actualizarPerfil = async () => {
-    mensaje.value = '';
-    error.value = '';
-
     try {
         const form = new FormData();
         form.append('nombre', nombre.value);
@@ -65,112 +55,81 @@ const actualizarPerfil = async () => {
         }
 
         await api.post('/usuario/perfil', form, {
-            withCredentials: true,
             headers: { 'Content-Type': 'multipart/form-data' }
         });
 
-        mensaje.value = 'Perfil actualizado correctamente ✅';
+        toast.add({ severity: 'success', summary: 'Perfil actualizado', detail: 'Los cambios se guardaron correctamente', life: 3000 });
 
-        // 1. Recargar datos del usuario
         await userStore.fetchUser();
         userStore.recargarImagen();
-        // 2. Limpiar preview local
         previewFoto.value = null;
         archivoFoto.value = null;
-
-        // 3. ¡TRUCO! Actualizamos esta variable para que la URL cambie (ej: user_1.jpg?t=12345)
-        // Esto obliga al navegador a bajar la imagen nueva
         imgVersion.value = Date.now();
     } catch (err) {
-        console.error(err);
-        error.value = 'Error al actualizar el perfil.';
+        toast.add({ severity: 'error', summary: 'Error', detail: 'No se pudo actualizar el perfil', life: 5000 });
     }
 };
 
-/* ELIMINAR FOTO */
 const eliminarFoto = async () => {
-    if (!confirm('¿Estás seguro de eliminar tu foto?')) return;
-
     try {
-        await api.delete('/usuario/foto', { withCredentials: true });
+        await api.delete('/usuario/foto');
 
         await userStore.fetchUser();
         userStore.recargarImagen();
-        // Limpiar todo para que se muestre la letra inicial
         previewFoto.value = null;
         archivoFoto.value = null;
         imgVersion.value = Date.now();
+        confirmarEliminarFoto.value = false;
 
-        mensaje.value = 'Foto eliminada correctamente.';
+        toast.add({ severity: 'info', summary: 'Foto eliminada', detail: 'Tu foto de perfil fue removida', life: 3000 });
     } catch (err) {
-        console.error(err);
-        error.value = 'No se pudo eliminar la foto.';
+        toast.add({ severity: 'error', summary: 'Error', detail: 'No se pudo eliminar la foto', life: 5000 });
     }
 };
 </script>
 
 <template>
-    <div class="max-w-lg mx-auto bg-white p-8 rounded-2xl shadow-lg mt-6 border border-gray-100">
-        <h1 class="text-2xl font-bold mb-8 text-gray-800 text-center">Editar mi Perfil</h1>
+    <div class="max-w-lg mx-auto bg-surface-0 dark:bg-surface-900 p-8 rounded-2xl shadow-lg mt-6 border border-surface-200 dark:border-surface-700 transition-colors">
+        <h1 class="text-2xl font-bold mb-8 text-color text-center">Editar mi Perfil</h1>
 
         <div class="flex flex-col items-center mb-8">
-            <div v-if="imagenA_Mostrar" class="mb-4 relative group">
-                <img :src="imagenA_Mostrar" class="w-32 h-32 rounded-full object-cover border-4 border-blue-50 shadow-md" alt="Foto de perfil" />
+            <div v-if="imagenA_Mostrar" class="mb-4">
+                <img :src="imagenA_Mostrar" class="w-32 h-32 rounded-full object-cover border-4 border-primary/20 shadow-md" alt="Foto de perfil" />
             </div>
-
-            <div v-else class="mb-4 w-32 h-32 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 text-5xl font-bold border-4 border-white shadow-md select-none">
+            <div v-else class="mb-4 w-32 h-32 rounded-full bg-primary/10 flex items-center justify-center text-primary text-5xl font-bold shadow-md select-none">
                 {{ nombre ? nombre.charAt(0).toUpperCase() : 'U' }}
             </div>
 
-            <label class="cursor-pointer bg-gray-50 hover:bg-gray-100 text-gray-700 px-4 py-2 rounded-lg transition border border-gray-200 text-sm font-medium flex items-center gap-2">
-                <i class="pi pi-camera text-lg"></i>
-                <span>{{ userStore.foto || previewFoto ? 'Cambiar foto' : 'Subir foto' }}</span>
+            <label class="cursor-pointer">
+                <Button :label="userStore.foto || previewFoto ? 'Cambiar foto' : 'Subir foto'" icon="pi pi-camera" severity="secondary" outlined size="small" />
                 <input type="file" class="hidden" accept="image/*" @change="onFileChange" />
             </label>
         </div>
 
         <div class="space-y-5">
             <div>
-                <label class="block mb-2 font-semibold text-gray-700 text-sm">Nombre completo</label>
-                <input v-model="nombre" type="text" class="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-gray-50" />
+                <label class="block mb-2 font-semibold text-color text-sm">Nombre completo</label>
+                <InputText v-model="nombre" class="w-full" />
             </div>
 
             <div>
-                <label class="block mb-2 font-semibold text-gray-700 text-sm">Correo electrónico</label>
-                <input v-model="email" type="email" class="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-gray-50" />
+                <label class="block mb-2 font-semibold text-color text-sm">Correo electrónico</label>
+                <InputText v-model="email" type="email" class="w-full" />
             </div>
         </div>
 
-        <div class="flex justify-between items-center mt-8 pt-6 border-t border-gray-100">
-            <button v-if="userStore.foto" class="text-red-500 hover:text-red-700 text-sm font-semibold flex items-center gap-1 transition px-2 py-1 rounded hover:bg-red-50" @click="eliminarFoto"><i class="pi pi-trash"></i> Eliminar foto</button>
-
+        <div class="flex justify-between items-center mt-8 pt-6 border-t border-surface-200 dark:border-surface-700">
+            <Button v-if="userStore.foto" label="Eliminar foto" icon="pi pi-trash" text severity="danger" size="small" @click="confirmarEliminarFoto = true" />
             <div v-else></div>
-
-            <button class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl shadow-md transition font-semibold flex items-center gap-2" @click="actualizarPerfil"><i class="pi pi-check"></i> Guardar cambios</button>
+            <Button label="Guardar cambios" icon="pi pi-check" @click="actualizarPerfil" />
         </div>
 
-        <div v-if="mensaje" class="mt-4 p-3 bg-green-50 text-green-700 rounded-lg text-center text-sm font-medium border border-green-200 animate-fade-in">
-            {{ mensaje }}
-        </div>
-
-        <div v-if="error" class="mt-4 p-3 bg-red-50 text-red-700 rounded-lg text-center text-sm font-medium border border-red-200 animate-fade-in">
-            {{ error }}
-        </div>
+        <Dialog v-model:visible="confirmarEliminarFoto" modal header="Eliminar foto" :style="{ width: '350px' }">
+            <p class="text-color">¿Estás seguro de que querés eliminar tu foto de perfil?</p>
+            <template #footer>
+                <Button label="Cancelar" text severity="secondary" @click="confirmarEliminarFoto = false" />
+                <Button label="Eliminar" severity="danger" icon="pi pi-trash" @click="eliminarFoto" />
+            </template>
+        </Dialog>
     </div>
 </template>
-
-<style scoped>
-.animate-fade-in {
-    animation: fadeIn 0.3s ease-in-out;
-}
-@keyframes fadeIn {
-    from {
-        opacity: 0;
-        transform: translateY(-5px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-</style>

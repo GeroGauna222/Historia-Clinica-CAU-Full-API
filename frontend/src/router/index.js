@@ -162,6 +162,12 @@ const router = createRouter({
                     props: true,
                     meta: { roles: ['director'] }
                 },
+                {
+                    path: 'modulo-rehabilitacion',
+                    name: 'ModuloRehabilitacion',
+                    component: () => import('../views/pages/turnos/ModuloRehabilitacion.vue'),
+                    meta: { requiresAuth: true }
+                },
 
                 // 📌 Blockchain
                 {
@@ -204,7 +210,8 @@ router.beforeEach(async (to) => {
     }
 
     // Si está logueado y va a login, redirigimos al inicio.
-    if (to.path === '/auth/login' && userStore.id) {
+    const forcedLogout = String(to.query.logged_out || '') === '1' || userStore.loggingOut;
+    if (to.path === '/auth/login' && userStore.id && !forcedLogout) {
         return '/';
     }
 

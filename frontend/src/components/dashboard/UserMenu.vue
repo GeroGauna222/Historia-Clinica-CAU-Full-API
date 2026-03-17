@@ -69,24 +69,25 @@ const irPassword = () => {
 };
 
 const logout = async () => {
+    userStore.startLogout();
     try {
         await authService.logout();
     } catch (e) {
         console.error('Error cerrando sesión en backend:', e);
     } finally {
-        userStore.logout();
         closeMenu();
-        router.push('/auth/login');
+        userStore.logout();
+        router.replace('/auth/login?logged_out=1');
     }
 };
 </script>
 
 <template>
     <div class="relative" ref="menuRef">
-        <button @click="toggleMenu" class="flex items-center gap-3 p-1.5 rounded-lg hover:bg-gray-100 transition focus:outline-none focus:ring-2 focus:ring-blue-100 cursor-pointer border-none bg-transparent">
+        <button @click="toggleMenu" class="flex items-center gap-3 p-1.5 rounded-lg hover:bg-surface-100 dark:hover:bg-surface-800 transition focus:outline-none cursor-pointer border-none bg-transparent">
             <div class="hidden md:flex flex-col items-end leading-tight text-right mr-1">
-                <span class="font-bold text-sm text-gray-700">{{ userStore.nombre || 'Usuario' }}</span>
-                <span class="text-[10px] uppercase tracking-wide text-gray-500 font-semibold">{{ userStore.rol }}</span>
+                <span class="font-bold text-sm text-color">{{ userStore.loggingOut ? 'Cerrando sesion...' : userStore.nombre || userStore.username || '' }}</span>
+                <span class="text-[10px] uppercase tracking-wide text-muted-color font-semibold">{{ userStore.rol }}</span>
             </div>
 
             <div class="relative w-9 h-9">
@@ -108,26 +109,26 @@ const logout = async () => {
             leave-from-class="transform opacity-100 scale-100"
             leave-to-class="transform opacity-0 scale-95"
         >
-            <div v-if="menuActive" class="absolute right-0 mt-2 w-64 origin-top-right bg-white rounded-xl shadow-xl ring-1 ring-black ring-opacity-5 z-50 overflow-hidden">
-                <div class="px-4 py-3 border-b border-gray-100 md:hidden bg-gray-50">
-                    <p class="text-sm font-medium text-gray-900">{{ userStore.nombre }}</p>
-                    <p class="text-xs text-gray-500 truncate">{{ userStore.email }}</p>
+            <div v-if="menuActive" class="absolute right-0 mt-2 w-64 origin-top-right bg-surface-0 dark:bg-surface-800 rounded-xl shadow-xl ring-1 ring-surface-200 dark:ring-surface-700 z-50 overflow-hidden">
+                <div class="px-4 py-3 border-b border-surface-200 dark:border-surface-700 md:hidden bg-surface-50 dark:bg-surface-900">
+                    <p class="text-sm font-medium text-color">{{ userStore.nombre }}</p>
+                    <p class="text-xs text-muted-color truncate">{{ userStore.email }}</p>
                 </div>
 
                 <div class="py-1">
-                    <button @click="irPerfil" class="flex w-full items-center px-4 py-2.5 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 transition text-left">
-                        <i class="pi pi-user mr-3 text-blue-500"></i>
+                    <button @click="irPerfil" class="flex w-full items-center px-4 py-2.5 text-sm text-color hover:bg-primary/10 transition text-left">
+                        <i class="pi pi-user mr-3 text-primary"></i>
                         Mi Perfil
                     </button>
 
-                    <button @click="irPassword" class="flex w-full items-center px-4 py-2.5 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 transition text-left">
-                        <i class="pi pi-key mr-3 text-gray-400"></i>
+                    <button @click="irPassword" class="flex w-full items-center px-4 py-2.5 text-sm text-color hover:bg-primary/10 transition text-left">
+                        <i class="pi pi-key mr-3 text-muted-color"></i>
                         Cambiar contraseña
                     </button>
 
-                    <div class="border-t border-gray-100 my-1"></div>
+                    <div class="border-t border-surface-200 dark:border-surface-700 my-1"></div>
 
-                    <button @click="logout" class="flex w-full items-center px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 hover:text-red-700 transition text-left">
+                    <button @click="logout" class="flex w-full items-center px-4 py-2.5 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-950 transition text-left">
                         <i class="pi pi-sign-out mr-3"></i>
                         Cerrar Sesión
                     </button>

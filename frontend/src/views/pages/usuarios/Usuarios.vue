@@ -69,7 +69,7 @@ const eliminarUsuarioConfirmado = async () => {
 
 <template>
     <div class="p-6 md:p-8 w-full h-full">
-        <div class="bg-white dark:bg-[#1e1e1e] shadow-xl rounded-2xl p-6 transition-colors">
+        <div class="bg-surface-0 dark:bg-surface-900 shadow-xl rounded-2xl p-6 transition-colors">
             <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
                 <h1 class="text-3xl font-bold text-gray-800 dark:text-white">Usuarios Registrados</h1>
 

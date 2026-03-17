@@ -277,7 +277,7 @@ const registrar = async () => {
 
             <!--  <button type="submit" class="p-button p-component mt-6 bg-green-500 text-white">Registrar</button> -->
 
-            <Button type="submit" label="Registrar Paciente" class="mt-6 w-auto" />
+            <Button type="submit" :label="submitText" class="mt-6 w-auto" />
         </form>
 
         <!-- Mensaje -->

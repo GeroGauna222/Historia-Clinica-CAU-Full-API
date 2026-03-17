@@ -158,7 +158,7 @@ onMounted(fetchDashboard);
 
         <div v-else class="grid grid-cols-12 gap-6">
             <div class="col-span-12 sm:col-span-6 xl:col-span-3 transition-transform hover:-translate-y-1 duration-300" v-for="(value, key) in dashboard.estadisticas" :key="key">
-                <div class="bg-white dark:bg-[#1e1e1e] shadow-lg rounded-2xl p-5 h-full flex flex-col justify-between relative overflow-hidden group">
+                <div class="bg-surface-0 dark:bg-surface-900 shadow-lg rounded-2xl p-5 h-full flex flex-col justify-between relative overflow-hidden group">
                     <div class="absolute right-[-10px] top-[-10px] bg-blue-50 dark:bg-blue-900/10 w-24 h-24 rounded-full transition-transform group-hover:scale-110"></div>
 
                     <div class="relative z-10 flex justify-between items-start">
@@ -169,7 +169,7 @@ onMounted(fetchDashboard);
                             <div class="text-4xl font-bold text-gray-800 dark:text-white">{{ value }}</div>
                         </div>
 
-                        <div class="bg-white dark:bg-[#2a2a2a] p-2 rounded-xl shadow-sm">
+                        <div class="bg-surface-0 dark:bg-surface-800 p-2 rounded-xl shadow-sm">
                             <i class="pi pi-chart-bar text-blue-500 text-xl"></i>
                         </div>
                     </div>
@@ -177,7 +177,7 @@ onMounted(fetchDashboard);
             </div>
 
             <div class="col-span-12 lg:col-span-6">
-                <div class="bg-white dark:bg-[#1e1e1e] shadow-lg rounded-2xl p-6 h-full flex flex-col">
+                <div class="bg-surface-0 dark:bg-surface-900 shadow-lg rounded-2xl p-6 h-full flex flex-col">
                     <div class="flex items-center justify-between mb-4">
                         <h2 class="text-xl font-bold text-gray-800 dark:text-white flex items-center gap-2"><i class="pi pi-calendar text-blue-500"></i> Turnos de Hoy</h2>
                         <Tag :value="dashboard.turnos.length + ' pendientes'" severity="info" rounded></Tag>
@@ -222,11 +222,11 @@ onMounted(fetchDashboard);
             </div>
 
             <div class="col-span-12 lg:col-span-6">
-                <div class="bg-white dark:bg-[#1e1e1e] shadow-lg rounded-2xl p-6 h-full flex flex-col">
+                <div class="bg-surface-0 dark:bg-surface-900 shadow-lg rounded-2xl p-6 h-full flex flex-col">
                     <h2 class="text-xl font-bold text-gray-800 dark:text-white mb-4 flex items-center gap-2"><i class="pi pi-clock text-blue-500"></i> Próximo Turno</h2>
 
                     <div v-if="dashboard.proximo_turno" class="flex-1 flex flex-col justify-center">
-                        <div class="p-6 bg-gray-50 dark:bg-[#252525] rounded-2xl border border-gray-100 dark:border-gray-700">
+                        <div class="p-6 bg-surface-50 dark:bg-surface-800 rounded-2xl border border-surface-200 dark:border-surface-700">
                             <div class="flex items-start gap-4">
                                 <Avatar :label="dashboard.proximo_turno.paciente.charAt(0)" size="large" shape="circle" class="bg-blue-500 text-white" />
                                 <div>
@@ -257,7 +257,7 @@ onMounted(fetchDashboard);
             </div>
 
             <div class="col-span-12 lg:col-span-8">
-                <div class="bg-white dark:bg-[#1e1e1e] shadow-lg rounded-2xl p-6 h-full border-l-4 border-blue-500">
+                <div class="bg-surface-0 dark:bg-surface-900 shadow-lg rounded-2xl p-6 h-full border-l-4 border-blue-500">
                     <div class="flex justify-between items-center mb-4">
                         <h2 class="text-xl font-bold text-gray-800 dark:text-white">Estadística Semanal</h2>
                         <small class="text-gray-400">Últimos 7 días</small>
@@ -269,7 +269,7 @@ onMounted(fetchDashboard);
             </div>
 
             <div class="col-span-12 lg:col-span-4">
-                <div class="bg-white dark:bg-[#1e1e1e] shadow-lg rounded-2xl p-6 h-full flex flex-col max-h-[380px]">
+                <div class="bg-surface-0 dark:bg-surface-900 shadow-lg rounded-2xl p-6 h-full flex flex-col max-h-[380px]">
                     <h2 class="text-xl font-bold text-gray-800 dark:text-white mb-4 flex items-center gap-2"><i class="pi pi-briefcase text-blue-500"></i> Disponibilidad</h2>
 
                     <div class="overflow-y-auto pr-2 custom-scrollbar flex-1">
@@ -291,7 +291,7 @@ onMounted(fetchDashboard);
 
                         <template v-else>
                             <ul v-if="disponibilidades.length > 0" class="space-y-3">
-                                <li v-for="(d, i) in disponibilidades" :key="i" class="flex justify-between items-center p-3 bg-gray-50 dark:bg-[#2a2a2a] rounded-xl hover:bg-gray-100 dark:hover:bg-[#333] transition-colors">
+                                <li v-for="(d, i) in disponibilidades" :key="i" class="flex justify-between items-center p-3 bg-surface-50 dark:bg-surface-800 rounded-xl hover:bg-surface-100 dark:hover:bg-surface-700 transition-colors">
                                     <div class="flex items-center gap-3">
                                         <div class="w-2 h-2 rounded-full" :class="d.activo ? 'bg-green-500' : 'bg-red-500'"></div>
                                         <span class="font-medium text-gray-700 dark:text-gray-200">{{ d.dia_semana }}</span>

@@ -110,7 +110,7 @@ onMounted(cargarDisponibilidades);
     <div class="p-6 md:p-8 w-full max-w-5xl mx-auto">
         <Toast />
 
-        <div class="bg-white dark:bg-[#1e1e1e] shadow-xl rounded-2xl p-6 md:p-8 transition-colors border border-gray-100 dark:border-gray-800">
+        <div class="bg-surface-0 dark:bg-surface-900 shadow-xl rounded-2xl p-6 md:p-8 transition-colors border border-gray-100 dark:border-gray-800">
             <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
                 <div>
                     <h1 class="text-3xl font-bold text-gray-800 dark:text-white">Disponibilidad Horaria</h1>
@@ -133,7 +133,7 @@ onMounted(cargarDisponibilidades);
                 <div
                     v-for="dia in diasSemana"
                     :key="dia.nombre"
-                    class="group grid grid-cols-1 md:grid-cols-12 gap-4 items-center p-4 rounded-xl border border-gray-200 dark:border-gray-700 hover:border-primary-300 dark:hover:border-primary-700 hover:shadow-md transition-all bg-gray-50 dark:bg-[#252525]"
+                    class="group grid grid-cols-1 md:grid-cols-12 gap-4 items-center p-4 rounded-xl border border-gray-200 dark:border-gray-700 hover:border-primary-300 dark:hover:border-primary-700 hover:shadow-md transition-all bg-surface-50 dark:bg-surface-800"
                     :class="{ 'opacity-60 grayscale': !dia.activo }"
                 >
                     <div class="col-span-1 md:col-span-3 flex items-center gap-3">

@@ -2,8 +2,8 @@
 import pacienteService from '@/service/pacienteService';
 import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
+import { useToast } from 'primevue/usetoast';
 
-// Imports PrimeVue
 import DataTable from 'primevue/datatable';
 import Column from 'primevue/column';
 import Button from 'primevue/button';
@@ -12,6 +12,7 @@ import InputText from 'primevue/inputtext';
 import IconField from 'primevue/iconfield';
 import InputIcon from 'primevue/inputicon';
 
+const toast = useToast();
 const pacientes = ref([]);
 const busqueda = ref('');
 const router = useRouter();
@@ -61,7 +62,7 @@ const eliminarPacienteConfirmado = async () => {
         pacienteAEliminar.value = null;
     } catch (error) {
         console.error(error);
-        alert('❌ Error al eliminar paciente. Puede tener historias clínicas asociadas.');
+        toast.add({ severity: 'error', summary: 'Error', detail: 'No se pudo eliminar el paciente. Puede tener historias clínicas asociadas.', life: 5000 });
     }
 };
 
@@ -78,7 +79,7 @@ const formatFecha = (fecha) => {
 
 <template>
     <div class="p-6 md:p-8 w-full h-full">
-        <div class="bg-white dark:bg-[#1e1e1e] shadow-xl rounded-2xl p-6 transition-colors">
+        <div class="bg-surface-0 dark:bg-surface-900 shadow-xl rounded-2xl p-6 transition-colors">
             <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
                 <h1 class="text-3xl font-bold text-gray-800 dark:text-white">Listado de Pacientes</h1>
 

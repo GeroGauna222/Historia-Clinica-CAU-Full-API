@@ -116,7 +116,11 @@ BFA_RPC_URL=http://bfa-node:8545
 ### 3) Build + up
 
 ```bash
+# Desarrollo (HTTP, sin certificados TLS)
 docker compose --env-file .env up -d --build
+
+# Produccion (HTTPS con Let's Encrypt)
+docker compose --env-file production.env up -d --build
 ```
 
 ### 4) Acceso

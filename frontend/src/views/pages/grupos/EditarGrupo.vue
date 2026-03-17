@@ -3,7 +3,6 @@ import { ref, onMounted } from 'vue';
 import api from '@/api/axios';
 import { useRoute, useRouter } from 'vue-router';
 
-// Imports PrimeVue
 import InputText from 'primevue/inputtext';
 import Textarea from 'primevue/textarea';
 import Button from 'primevue/button';
@@ -13,10 +12,10 @@ const route = useRoute();
 const router = useRouter();
 const grupoId = route.params.id;
 
-const grupo = ref({ nombre: '', descripcion: '', color: '#00936B' });
+const grupo = ref({ nombre: '', descripcion: '', color: '#00936B', es_rehabilitacion: false });
 const usuariosDisponibles = ref([]);
-const miembrosOriginalesIds = ref([]); // Para saber qué cambió
-const miembrosSeleccionadosIds = ref([]); // Modelo del MultiSelect
+const miembrosOriginalesIds = ref([]);
+const miembrosSeleccionadosIds = ref([]);
 
 const cargando = ref(true);
 const guardando = ref(false);
@@ -25,20 +24,17 @@ const error = ref('');
 
 onMounted(async () => {
     try {
-        // 1. Cargar Usuarios
-        const resUsuarios = await api.get('/usuarios', { withCredentials: true });
+        const [resUsuarios, resGrupo, resMiembros] = await Promise.all([api.get('/usuarios', { withCredentials: true }), api.get(`/grupos/${grupoId}`, { withCredentials: true }), api.get(`/grupos/${grupoId}/miembros`, { withCredentials: true })]);
 
-        // 👇 CORRECCIÓN: Quitamos el filtro para mostrar TODOS los usuarios
         usuariosDisponibles.value = resUsuarios.data || [];
+        grupo.value = {
+            nombre: resGrupo.data?.nombre || '',
+            descripcion: resGrupo.data?.descripcion || '',
+            color: resGrupo.data?.color || '#00936B',
+            es_rehabilitacion: Boolean(resGrupo.data?.es_rehabilitacion)
+        };
 
-        // 2. Cargar Grupo
-        const resGrupo = await api.get(`/grupos/${grupoId}`, { withCredentials: true });
-        grupo.value = resGrupo.data;
-
-        // 3. Cargar Miembros actuales
-        const resMiembros = await api.get(`/grupos/${grupoId}/miembros`, { withCredentials: true });
-
-        const ids = resMiembros.data.map((m) => m.id);
+        const ids = (resMiembros.data || []).map((m) => m.id);
         miembrosSeleccionadosIds.value = [...ids];
         miembrosOriginalesIds.value = [...ids];
     } catch (err) {
@@ -55,36 +51,20 @@ async function guardarCambios() {
     guardando.value = true;
 
     try {
-        // 1. Actualizar datos básicos (nombre, color, etc.)
         await api.put(`/grupos/${grupoId}`, grupo.value, { withCredentials: true });
 
-        // 2. Sincronizar Miembros (Calculamos diferencias)
         const actuales = new Set(miembrosSeleccionadosIds.value);
         const originales = new Set(miembrosOriginalesIds.value);
-
-        // A) Nuevos a agregar: están en actuales pero no en originales
         const paraAgregar = [...actuales].filter((id) => !originales.has(id));
-
-        // B) Viejos a borrar: estaban en originales pero no en actuales
         const paraBorrar = [...originales].filter((id) => !actuales.has(id));
 
-        // Ejecutar peticiones
         const promesas = [];
-
-        for (const uid of paraAgregar) {
-            promesas.push(api.post(`/grupos/${grupoId}/miembros`, { usuario_id: uid }, { withCredentials: true }));
-        }
-
-        for (const uid of paraBorrar) {
-            promesas.push(api.delete(`/grupos/${grupoId}/miembros/${uid}`, { withCredentials: true }));
-        }
-
+        for (const uid of paraAgregar) promesas.push(api.post(`/grupos/${grupoId}/miembros`, { usuario_id: uid }, { withCredentials: true }));
+        for (const uid of paraBorrar) promesas.push(api.delete(`/grupos/${grupoId}/miembros/${uid}`, { withCredentials: true }));
         await Promise.all(promesas);
 
-        // Actualizar referencia original
         miembrosOriginalesIds.value = [...miembrosSeleccionadosIds.value];
-
-        mensaje.value = 'Cambios guardados correctamente ✔️';
+        mensaje.value = 'Cambios guardados correctamente';
     } catch (err) {
         console.error('Error guardando cambios:', err);
         error.value = err.response?.data?.error || 'Error al guardar cambios.';
@@ -96,13 +76,11 @@ async function guardarCambios() {
 
 <template>
     <div class="flex justify-center items-start p-6 md:p-8">
-        <div class="bg-white dark:bg-[#1e1e1e] shadow-xl rounded-2xl p-8 w-full max-w-3xl transition-colors">
+        <div class="bg-surface-0 dark:bg-surface-900 shadow-xl rounded-2xl p-8 w-full max-w-3xl transition-colors">
             <div class="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
                 <Button label="Volver" icon="pi pi-arrow-left" text severity="secondary" @click="router.push('/grupos')" />
-
                 <div class="text-center md:text-right">
-                    <h1 class="text-3xl font-bold text-primary mb-1 flex items-center gap-2 justify-center md:justify-end"><i class="pi pi-pencil text-2xl"></i> Editar Grupo</h1>
-                    <p class="text-gray-500 dark:text-gray-400 text-sm">Modifica los detalles y gestiona los miembros</p>
+                    <h1 class="text-3xl font-bold text-primary mb-1">Editar Grupo</h1>
                 </div>
             </div>
 
@@ -115,25 +93,26 @@ async function guardarCambios() {
                 <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
                     <div class="md:col-span-3 flex flex-col gap-2">
                         <label class="font-semibold text-gray-700 dark:text-gray-200">Nombre del grupo</label>
-                        <InputText v-model="grupo.nombre" placeholder="Ej: Rehabilitación..." class="w-full" required />
+                        <InputText v-model="grupo.nombre" class="w-full" required />
                     </div>
-
                     <div class="flex flex-col gap-2">
                         <label class="font-semibold text-gray-700 dark:text-gray-200">Color</label>
-                        <div class="flex items-center h-full">
-                            <input v-model="grupo.color" type="color" class="w-full h-[42px] p-1 bg-transparent border border-gray-300 dark:border-gray-600 rounded-lg cursor-pointer" />
-                        </div>
+                        <input v-model="grupo.color" type="color" class="w-full h-[42px] p-1 bg-transparent border border-gray-300 dark:border-gray-600 rounded-lg cursor-pointer" />
                     </div>
                 </div>
 
                 <div class="flex flex-col gap-2">
-                    <label class="font-semibold text-gray-700 dark:text-gray-200">Descripción</label>
-                    <Textarea v-model="grupo.descripcion" rows="3" placeholder="Describe el objetivo del grupo..." class="w-full" autoResize />
+                    <label class="font-semibold text-gray-700 dark:text-gray-200">Descripcion</label>
+                    <Textarea v-model="grupo.descripcion" rows="3" class="w-full" autoResize />
                 </div>
 
-                <div class="flex flex-col gap-2">
-                    <label class="font-semibold text-gray-700 dark:text-gray-200"> <i class="pi pi-users mr-1 text-primary"></i> Miembros del grupo </label>
+                <label class="flex items-center gap-2">
+                    <input v-model="grupo.es_rehabilitacion" type="checkbox" />
+                    <span class="font-semibold text-gray-700 dark:text-gray-200">Grupo de Rehabilitacion</span>
+                </label>
 
+                <div class="flex flex-col gap-2">
+                    <label class="font-semibold text-gray-700 dark:text-gray-200">Miembros del grupo</label>
                     <MultiSelect v-model="miembrosSeleccionadosIds" :options="usuariosDisponibles" optionLabel="nombre" optionValue="id" placeholder="Gestionar miembros..." display="chip" filter class="w-full" :maxSelectedLabels="10">
                         <template #option="slotProps">
                             <div class="flex flex-col">
@@ -142,8 +121,6 @@ async function guardarCambios() {
                             </div>
                         </template>
                     </MultiSelect>
-
-                    <small class="text-gray-500 dark:text-gray-400"> Agrega o quita usuarios seleccionándolos de la lista. </small>
                 </div>
 
                 <div class="flex justify-center pt-6 border-t border-gray-100 dark:border-gray-800">
@@ -151,8 +128,8 @@ async function guardarCambios() {
                 </div>
             </form>
 
-            <div v-if="mensaje" class="mt-6 p-3 rounded-lg bg-green-100 text-green-700 text-center font-medium border border-green-200"><i class="pi pi-check-circle mr-2"></i> {{ mensaje }}</div>
-            <div v-if="error" class="mt-6 p-3 rounded-lg bg-red-100 text-red-700 text-center font-medium border border-red-200"><i class="pi pi-exclamation-circle mr-2"></i> {{ error }}</div>
+            <div v-if="mensaje" class="mt-6 p-3 rounded-lg bg-green-100 text-green-700 text-center font-medium border border-green-200">{{ mensaje }}</div>
+            <div v-if="error" class="mt-6 p-3 rounded-lg bg-red-100 text-red-700 text-center font-medium border border-red-200">{{ error }}</div>
         </div>
     </div>
 </template>

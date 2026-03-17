@@ -31,6 +31,16 @@ def _to_iso_arg(dt):
         return dt.isoformat()
     return dt
 
+
+def _to_bool(value):
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "si", "sí", "yes", "on"}
+    return False
+
 # =====================================================
 # 📋 Obtener todos los grupos
 # =====================================================
@@ -40,7 +50,7 @@ def obtener_grupos():
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
     try:
-        cursor.execute("SELECT id, nombre, descripcion, color FROM grupos_profesionales ORDER BY nombre ASC")
+        cursor.execute("SELECT id, nombre, descripcion, color, es_rehabilitacion FROM grupos_profesionales ORDER BY nombre ASC")
         grupos = cursor.fetchall()
 
         for g in grupos:
@@ -67,7 +77,7 @@ def obtener_grupo(grupo_id):
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
     try:
-        cursor.execute("SELECT id, nombre, descripcion, color FROM grupos_profesionales WHERE id = %s", (grupo_id,))
+        cursor.execute("SELECT id, nombre, descripcion, color, es_rehabilitacion FROM grupos_profesionales WHERE id = %s", (grupo_id,))
         grupo = cursor.fetchone()
 
         if not grupo:
@@ -98,6 +108,7 @@ def crear_grupo():
     nombre = data.get("nombre")
     descripcion = data.get("descripcion", "")
     color = data.get("color", "#00936B")
+    es_rehabilitacion = _to_bool(data.get("es_rehabilitacion", False))
     miembros_raw = data.get("miembros", []) 
 
     if not nombre: return jsonify({"error": "Nombre obligatorio"}), 400
@@ -106,7 +117,10 @@ def crear_grupo():
     cursor = conn.cursor()
 
     try:
-        cursor.execute("INSERT INTO grupos_profesionales (nombre, descripcion, color) VALUES (%s, %s, %s)", (nombre, descripcion, color))
+        cursor.execute(
+            "INSERT INTO grupos_profesionales (nombre, descripcion, color, es_rehabilitacion) VALUES (%s, %s, %s, %s)",
+            (nombre, descripcion, color, es_rehabilitacion),
+        )
         grupo_id = cursor.lastrowid
 
         ids_limpios = extraer_ids_limpios(miembros_raw)
@@ -142,6 +156,7 @@ def editar_grupo(grupo_id):
     nombre = data.get("nombre")
     descripcion = data.get("descripcion")
     color = data.get("color")
+    es_rehabilitacion = data.get("es_rehabilitacion")
     miembros_raw = data.get("miembros") 
 
     conn = get_connection()
@@ -151,6 +166,11 @@ def editar_grupo(grupo_id):
         if nombre: cursor.execute("UPDATE grupos_profesionales SET nombre=%s WHERE id=%s", (nombre, grupo_id))
         if descripcion is not None: cursor.execute("UPDATE grupos_profesionales SET descripcion=%s WHERE id=%s", (descripcion, grupo_id))
         if color: cursor.execute("UPDATE grupos_profesionales SET color=%s WHERE id=%s", (color, grupo_id))
+        if es_rehabilitacion is not None:
+            cursor.execute(
+                "UPDATE grupos_profesionales SET es_rehabilitacion=%s WHERE id=%s",
+                (_to_bool(es_rehabilitacion), grupo_id),
+            )
 
         if miembros_raw is not None:
             cursor.execute("DELETE FROM grupo_miembros WHERE grupo_id=%s", (grupo_id,))

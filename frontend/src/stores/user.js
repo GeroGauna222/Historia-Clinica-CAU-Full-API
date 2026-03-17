@@ -12,7 +12,8 @@ export const useUserStore = defineStore('user', {
         email: '',
         duracion_turno: 20,
         foto: null,
-        fotoVersion: Date.now()
+        fotoVersion: Date.now(),
+        loggingOut: false
     }),
 
     actions: {
@@ -24,6 +25,7 @@ export const useUserStore = defineStore('user', {
             this.email = data.email ?? '';
             this.duracion_turno = data.duracion_turno ?? this.duracion_turno;
             this.foto = data.foto ?? null;
+            this.loggingOut = false;
 
             console.log('✅ Usuario cargado en store:', this.$state);
             emit('user:updated', { ...this.$state });
@@ -52,6 +54,10 @@ export const useUserStore = defineStore('user', {
                 console.error('❌ Error actualizando duración:', err);
                 throw err;
             }
+        },
+
+        startLogout() {
+            this.loggingOut = true;
         },
 
         logout() {

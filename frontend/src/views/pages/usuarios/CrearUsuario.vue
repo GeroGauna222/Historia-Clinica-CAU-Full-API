@@ -98,7 +98,7 @@ async function onSubmit() {
 
 <template>
     <div class="flex justify-center items-start p-6 md:p-8">
-        <div class="bg-white dark:bg-[#1e1e1e] shadow-xl rounded-2xl p-8 w-full max-w-2xl transition-colors">
+        <div class="bg-surface-0 dark:bg-surface-900 shadow-xl rounded-2xl p-8 w-full max-w-2xl transition-colors">
             <div class="text-center mb-8">
                 <h1 class="text-3xl font-bold text-gray-800 dark:text-white mb-2">Crear Usuario</h1>
                 <p class="text-gray-500 dark:text-gray-400">Registrar un nuevo miembro del personal</p>

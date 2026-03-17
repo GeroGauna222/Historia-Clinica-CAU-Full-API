@@ -4,37 +4,29 @@ import FloatingConfigurator from '@/components/FloatingConfigurator.vue';
 import api from '@/api/axios';
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
-// 👇 Importamos el store
 import { useUserStore } from '@/stores/user';
+import { useToast } from 'primevue/usetoast';
 
 const usuario = ref('');
 const password = ref('');
 const checked = ref(false);
 const router = useRouter();
-const userStore = useUserStore(); // Instanciamos el store
+const userStore = useUserStore();
+const toast = useToast();
 
 const login = async () => {
     try {
-        // 1. Autenticación básica (Cookie HttpOnly)
-        await api.post(
-            '/login',
-            {
-                username: usuario.value,
-                password: password.value
-            },
-            { withCredentials: true }
-        );
+        await api.post('/login', {
+            username: usuario.value,
+            password: password.value,
+            remember: checked.value
+        });
 
-        // 2. Obtenemos los datos del usuario desde backend y los guardamos en el store
         await userStore.fetchUser();
-
-        // 3. Redirigir
         router.push('/');
     } catch (error) {
-        console.error('Error al iniciar sesión:', error);
-        // Manejo de error más amigable si el backend devuelve mensaje
         const msg = error.response?.data?.error || 'Credenciales incorrectas o error de red';
-        alert(msg);
+        toast.add({ severity: 'error', summary: 'Error de inicio de sesión', detail: msg, life: 5000 });
     }
 };
 
@@ -44,6 +36,7 @@ const irARecuperar = () => {
 </script>
 
 <template>
+    <Toast />
     <FloatingConfigurator />
     <div class="bg-surface-50 dark:bg-surface-950 flex items-center justify-center min-h-screen min-w-[100vw] overflow-hidden">
         <div class="flex flex-col items-center justify-center">

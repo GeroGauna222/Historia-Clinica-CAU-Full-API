@@ -1,6 +1,7 @@
 <script setup>
 import { ref, onMounted, computed, watch } from 'vue';
 import { useUserStore } from '@/stores/user';
+import api from '@/api/axios';
 import DatePicker from 'primevue/datepicker';
 import Button from 'primevue/button';
 import ausenciasService from '@/service/ausenciasService';
@@ -26,9 +27,8 @@ const diasSeleccionados = ref([]);
 
 onMounted(async () => {
     try {
-        const resp = await fetch('/api/profesionales', { credentials: 'include' });
-        if (!resp.ok) throw new Error('Error al cargar profesionales');
-        profesionales.value = await resp.json();
+        const resp = await api.get('/profesionales');
+        profesionales.value = resp.data;
     } catch (e) {
         console.error('Error cargando profesionales', e);
         error.value = 'No se pudieron cargar los profesionales';
@@ -131,12 +131,8 @@ async function buscarPacientes() {
         return;
     }
     try {
-        const resp = await fetch(`/api/pacientes/buscar?q=${encodeURIComponent(searchPaciente.value)}`, {
-            credentials: 'include'
-        });
-        if (!resp.ok) throw new Error('Error de busqueda');
-        const data = await resp.json();
-        pacientes.value = data.pacientes || [];
+        const resp = await api.get('/pacientes/buscar', { params: { q: searchPaciente.value } });
+        pacientes.value = resp.data?.pacientes || [];
     } catch (e) {
         console.error('Error buscando pacientes', e);
     }
@@ -197,7 +193,7 @@ async function crearTurno() {
         return;
     }
 
-    const endpoint = esTanda.value ? '/api/turnos/tanda' : '/api/turnos';
+    const endpoint = esTanda.value ? '/turnos/tanda' : '/turnos';
     const duracion = userStore.duracion_turno || 30;
     const fechaInicioDate = new Date(fecha.value);
     const fechaFinDate = new Date(fechaInicioDate);
@@ -226,20 +222,8 @@ async function crearTurno() {
     }
 
     try {
-        const resp = await fetch(endpoint, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify(payload)
-        });
-
-        if (!resp.ok) {
-            const err = await resp.json().catch(() => ({}));
-            throw new Error(err.error || 'Error al crear turno');
-        }
-
-        const data = await resp.json();
-        mensaje.value = data.message || 'Turno creado correctamente';
+        const resp = await api.post(endpoint, payload);
+        mensaje.value = resp.data.message || 'Turno creado correctamente';
 
         pacienteId.value = '';
         usuarioId.value = '';
@@ -251,7 +235,7 @@ async function crearTurno() {
         diasSeleccionados.value = [];
         ausenciasProfesional.value = [];
     } catch (e) {
-        error.value = e.message;
+        error.value = e.response?.data?.error || e.message || 'Error al crear turno';
     }
 }
 </script>

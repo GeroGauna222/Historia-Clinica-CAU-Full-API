@@ -86,7 +86,7 @@ onMounted(() => {
     <div class="p-6 md:p-8 w-full h-full">
         <Toast />
 
-        <div class="bg-white dark:bg-[#1e1e1e] shadow-xl rounded-2xl p-6 transition-colors min-h-[500px]">
+        <div class="bg-surface-0 dark:bg-surface-900 shadow-xl rounded-2xl p-6 transition-colors min-h-[500px]">
             <div class="mb-6">
                 <h1 class="text-3xl font-bold text-gray-800 dark:text-white flex items-center gap-2"><i class="pi pi-calendar text-primary"></i> Agenda General</h1>
                 <p class="text-gray-500 dark:text-gray-400 text-sm mt-1">Visualizá los turnos programados y gestioná los días no laborables.</p>
@@ -124,7 +124,7 @@ onMounted(() => {
 
                 <TabPanel header="Bloqueos de Agenda">
                     <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 mt-4">
-                        <div class="lg:col-span-1 bg-gray-50 dark:bg-[#252525] p-6 rounded-xl border border-gray-100 dark:border-gray-700 h-fit">
+                        <div class="lg:col-span-1 bg-surface-50 dark:bg-surface-800 p-6 rounded-xl border border-surface-200 dark:border-surface-700 h-fit">
                             <h3 class="text-lg font-bold text-gray-800 dark:text-white mb-4 flex items-center gap-2"><i class="pi pi-ban text-red-500"></i> Bloquear Día</h3>
 
                             <div class="flex flex-col gap-4">

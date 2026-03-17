@@ -3,27 +3,24 @@ import { computed } from 'vue';
 import AppMenuItem from './AppMenuItem.vue';
 import authService from '@/service/authService';
 import { useRouter } from 'vue-router';
-import { useSession } from './composables/useSession';
 import { useUserStore } from '@/stores/user';
 
 const router = useRouter();
-const { clearUser } = useSession();
-const userStore = useUserStore(); // 3. Instanciar el store
+const userStore = useUserStore();
 
 async function handleLogout() {
+    userStore.startLogout();
     try {
         await authService.logout();
     } catch (e) {
-        console.error('Error cerrando sesión:', e);
+        console.error('Error cerrando sesion:', e);
     } finally {
-        clearUser();
-        router.push('/auth/login');
+        await router.replace('/auth/login?logged_out=1');
+        userStore.logout();
     }
 }
 
-// 4. Cambiamos 'ref' por 'computed' para poder usar lógica dinámica
 const model = computed(() => {
-    // Normalizamos el rol para evitar errores de mayúsculas/espacios
     const esDirector = userStore.rol?.toLowerCase().trim() === 'director';
 
     return [
@@ -39,7 +36,7 @@ const model = computed(() => {
             ]
         },
         {
-            label: 'Historias Clínicas',
+            label: 'Historias Clinicas',
             items: [{ label: 'Ver Historias', icon: 'pi pi-fw pi-book', to: '/historias' }]
         },
         {
@@ -48,32 +45,29 @@ const model = computed(() => {
                 { label: 'Agenda', icon: 'pi pi-fw pi-calendar', to: '/turnos' },
                 { label: 'Nuevo Turno', icon: 'pi pi-fw pi-calendar-plus', to: '/turnos/nuevo' },
                 { label: 'Disponibilidad', icon: 'pi pi-fw pi-clock', to: '/disponibilidad' },
-                // Configuración solo visible para profesionales (opcional, por si quieres ocultarlo a admin)
                 {
-                    label: 'Configuración de Turnos',
+                    label: 'Configuracion de Turnos',
                     icon: 'pi pi-clock',
                     to: '/turnos/configuracion',
                     visible: ['profesional', 'director', 'area'].includes(userStore.rol)
                 }
             ]
         },
-
-        // 🔒 SECCIÓN USUARIOS PROTEGIDA
         {
             label: 'Usuarios',
-            visible: esDirector, // <--- ESTA ES LA CLAVE: Solo se muestra si es true
+            visible: esDirector,
             items: [
                 { label: 'Listado', icon: 'pi pi-fw pi-id-card', to: '/usuarios' },
                 { label: 'Crear Usuario', icon: 'pi pi-fw pi-user-edit', to: '/usuarios/crear' },
                 { label: 'Inactivos', icon: 'pi pi-fw pi-user-minus', to: '/usuarios/inactivos' }
             ]
         },
-
         {
             label: 'Agendas Grupales',
             items: [
                 { label: 'Ver grupos', icon: 'pi pi-fw pi-users', to: '/grupos' },
-                { label: 'Crear grupo', icon: 'pi pi-plus', to: '/grupos/crear', visible: esDirector }
+                { label: 'Crear grupo', icon: 'pi pi-plus', to: '/grupos/crear', visible: esDirector },
+                { label: 'Modulo de Rehabilitacion', icon: 'pi pi-fw pi-heart', to: '/modulo-rehabilitacion' }
             ]
         },
         {
@@ -82,7 +76,7 @@ const model = computed(() => {
         },
         {
             label: 'Salir',
-            items: [{ label: 'Cerrar sesión', icon: 'pi pi-fw pi-sign-out', command: handleLogout }]
+            items: [{ label: 'Cerrar sesion', icon: 'pi pi-fw pi-sign-out', command: handleLogout }]
         }
     ];
 });

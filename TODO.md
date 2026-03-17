@@ -162,31 +162,31 @@ Estado: Pendiente de correccion
 
 ## P4 - Produccion (dominio, HTTPS, seguridad)
 
-- [ ] **P4-01 - Comprar dominio y configurar DNS**
+- [x] **P4-01 - Comprar dominio y configurar DNS**
   - Impacto: sin dominio no hay HTTPS ni marca profesional.
   - Referencia: `SECURE-DOMAIN.md`.
   - Criterio de cierre: dominio activo, DNS apuntando a VPS, `nslookup` OK.
   - Estado: pendiente.
 
-- [ ] **P4-02 - Configurar Nginx con HTTPS y certificados Lets Encrypt**
+- [x] **P4-02 - Configurar Nginx con HTTPS y certificados Lets Encrypt**
   - Impacto: sin HTTPS el proyecto no es apto para produccion.
   - Referencia: `SECURE-DOMAIN.md`.
   - Criterio de cierre: Nginx sirve HTTPS, redireccion HTTP->HTTPS, certificados validos.
   - Estado: pendiente.
 
-- [ ] **P4-03 - Endurecer cookies y sesiones**
+- [x] **P4-03 - Endurecer cookies y sesiones**
   - Impacto: seguridad de sesiones en entorno publico.
   - Referencia: `SECURE-DOMAIN.md`.
   - Criterio de cierre: `SESSION_COOKIE_SECURE=True`, `SAMESITE=Lax`.
   - Estado: pendiente.
 
-- [ ] **P4-04 - Firewall minimo en VPS**
+- [x] **P4-04 - Firewall minimo en VPS**
   - Impacto: exposicion innecesaria de puertos.
   - Referencia: `SECURE-DOMAIN.md`.
   - Criterio de cierre: solo 22, 80, 443 expuestos publicamente.
   - Estado: pendiente.
 
-- [ ] **P4-05 - Rotar secretos y asegurar `production.env`**
+- [x] **P4-05 - Rotar secretos y asegurar `production.env`**
   - Impacto: fuga de credenciales en entorno real.
   - Referencia: `SECURE-DOMAIN.md`.
   - Criterio de cierre: `production.env` fuera de Git, permisos `600`, secretos fuertes.
@@ -202,3 +202,26 @@ Estado: Pendiente de correccion
 - [ ] Frontend funciona sin URLs hardcodeadas a localhost.
 - [x] `npm run build` OK y `npm run lint` OK.
 - [x] Tests backend minimos ejecutando en CI/local.
+
+## Changes
+
+### Funcionalidad General
+
+- [ ] Cuando toco el cerrar sesion, por un momento el nombre del usuario pasa a ser 'Usuario' y luego de tocar algo mas recien cierra
+
+### Agenda
+
+- [ ] Se deberían poder ver agendas de todos los demas desde el rol de Administrativo y Director, pero deben verse como Agendas separadas, es decir, un desplegable de sujetos para poder ver cada agenda por separado, y poder con un click agregar turno a esa agenda.
+- [ ] En la agenda, se setea la Configuracion de Horarios de turno: esto DEBE ser el que define como se separa mi Agenda, si seteo cada 20 minutos, la agenda debe permitir solo bloquear/agregar turnos para esos cuadros de horarios
+- [ ] Los bloqueos de agenda deben permitir ingresar el horario de bloqueo (Inicio/Fin)
+- [ ] Cuando seteo la Disponibilidad, en MI agenda, debe figurar grayed out los dias y horarios en los que no estaría disponible.
+
+### Grupos
+
+- [ ] Cambiaremos como funcionan Grupos: Debe poderse agregar turnos a un Grupo, estos deben agregarsele a la agenda de todos los profesionales del grupo de forma directa, sea o no que el sujeto este disponible.
+- [ ] Los turnos en Grupos deben poder superponerse con los turnos individuales de los profesionales.
+- [ ] Cada profesional tendrá SU disponibilidad, pero si el grupo tiene un turno, este se le agregará a todos los profesionales del grupo de forma directa, sea o no que el sujeto este disponible. (se 'superpone' a la disponibilidad de cada profesional el turno grupal)
+
+### New
+
+- [ ] Así como está Agendas Grupales, tendremos la sección 'Módulo de Rehabilitación' que funcionará como una agenda a la que se agregan, en lugar de profesionales, Grupos. Funcionará como un visor de las Agendas Grupales juntas, pero con la diferencia de que se podrán agregar turnos directamente a los grupos desde esta agenda.
