@@ -7,6 +7,7 @@ import interactionPlugin from '@fullcalendar/interaction';
 import tippy from 'tippy.js';
 import 'tippy.js/dist/tippy.css';
 import api from '@/api/axios';
+import '@/assets/calendar-medical.css';
 
 import Dialog from 'primevue/dialog';
 import Button from 'primevue/button';
@@ -241,17 +242,22 @@ const calendarOptions = reactive({
 
         if (tipo === 'ausencia') {
             tippy(info.el, {
-                content: `<strong>No disponible:</strong> ${info.event.extendedProps.profesional || 'Profesional'}<br>${info.event.extendedProps.description || ''}`,
+                content: `<strong>No disponible</strong><br>${info.event.extendedProps.profesional || 'Profesional'}<br><span style="opacity:0.7">${info.event.extendedProps.description || ''}</span>`,
                 allowHTML: true,
-                placement: 'top'
+                placement: 'top',
+                theme: 'medical'
             });
             return;
         }
 
+        const pacNombre = info.event.extendedProps.paciente || '';
+        const profNombre = info.event.extendedProps.profesional || '';
+        const motivo = info.event.extendedProps.description || '';
         tippy(info.el, {
-            content: `<strong>${info.event.extendedProps.paciente || ''}</strong><br>${info.event.extendedProps.profesional || ''}`,
+            content: `<strong>${pacNombre}</strong><br>${profNombre}${motivo ? '<br><span style="opacity:0.7">' + motivo + '</span>' : ''}`,
             allowHTML: true,
-            placement: 'top'
+            placement: 'top',
+            theme: 'medical'
         });
     }
 });
@@ -298,9 +304,9 @@ function crearEventosAusencia(ausencia) {
             title: `No disponible: ${ausencia.nombre_usuario || 'Profesional'}`,
             start: ausencia.fecha_inicio,
             end: ausencia.fecha_fin,
-            backgroundColor: '#f87171',
-            borderColor: '#dc2626',
-            textColor: '#ffffff',
+            backgroundColor: 'rgba(239,68,68,0.12)',
+            borderColor: '#EF4444',
+            textColor: '#991B1B',
             classNames: ['evento-ausencia'],
             extendedProps: { tipo: 'ausencia', ausenciaId: ausencia.id, usuarioId: ausencia.usuario_id, profesional: ausencia.nombre_usuario, description: ausencia.motivo || '' }
         }
@@ -332,9 +338,9 @@ function adaptarEventoTurno(t) {
         title: esGrupal ? `${t.grupo_nombre || t.profesional} (${t.paciente})` : t.paciente,
         start: t.start,
         end: t.end,
-        backgroundColor: esGrupal ? 'rgba(59,130,246,0.15)' : '#1976D2',
-        borderColor: esGrupal ? '#2563eb' : '#1976D2',
-        textColor: esGrupal ? '#111827' : '#ffffff',
+        backgroundColor: esGrupal ? 'rgba(8,145,178,0.1)' : '#0891B2',
+        borderColor: esGrupal ? '#0891B2' : '#0E7490',
+        textColor: esGrupal ? '#134E4A' : '#ffffff',
         classNames: esGrupal ? ['evento-grupal'] : ['evento-propio'],
         extendedProps: {
             tipo,
@@ -493,10 +499,11 @@ onUnmounted(() => {
     <div class="p-6 h-screen flex flex-col">
         <Toast />
 
-        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
+        <!-- Header -->
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-5">
             <div>
-                <h1 class="text-2xl font-bold text-gray-800 dark:text-gray-100">Agenda</h1>
-                <p class="text-xs text-gray-500 mt-1">Click en celda para crear turno. Los horarios no disponibles se muestran en gris.</p>
+                <h1 class="text-2xl font-heading font-bold text-[#134E4A] dark:text-teal-100 tracking-tight">Agenda</h1>
+                <p class="text-xs text-slate-400 dark:text-slate-500 mt-1 font-sans">Click en una celda para crear un turno. Las zonas grises indican horarios no disponibles.</p>
             </div>
 
             <div class="flex items-center gap-3">
@@ -505,101 +512,158 @@ onUnmounted(() => {
                         {{ slotProps.option.nombre }} <span class="text-muted-color text-xs">({{ slotProps.option.rol }})</span>
                     </template>
                 </Select>
-                <span v-else class="text-sm text-gray-600 font-semibold">{{ sujetoActualNombre }}</span>
-                <Button label="Bloquear horario" icon="pi pi-lock" severity="secondary" @click="abrirModalBloqueo(new Date())" />
+                <span v-else class="text-sm font-heading font-semibold text-[#134E4A] dark:text-teal-200">{{ sujetoActualNombre }}</span>
+                <Button label="Bloquear horario" icon="pi pi-lock" severity="secondary" class="!rounded-lg !text-sm !font-sans" @click="abrirModalBloqueo(new Date())" />
             </div>
         </div>
 
         <!-- Leyenda -->
-        <div class="flex items-center gap-6 mb-3 text-xs text-muted-color">
-            <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-sm bg-[#1976D2] inline-block"></span> Turno individual</span>
-            <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-sm border-2 border-dashed border-[#2563eb] bg-blue-100 dark:bg-blue-900/30 inline-block"></span> Turno grupal</span>
-            <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-sm bg-[#f87171] inline-block"></span> Ausencia / Bloqueo</span>
-            <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-sm bg-gray-300 dark:bg-gray-600 inline-block"></span> No disponible</span>
+        <div class="flex items-center gap-4 mb-4 flex-wrap">
+            <span class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#0891B2]/10 text-[#0891B2] dark:bg-cyan-900/30 dark:text-cyan-300 text-xs font-medium">
+                <span class="w-2.5 h-2.5 rounded-full bg-[#0891B2] inline-block"></span> Individual
+            </span>
+            <span class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#0891B2]/5 border border-dashed border-[#0891B2] text-[#0891B2] dark:border-cyan-400 dark:text-cyan-300 text-xs font-medium">
+                <span class="w-2.5 h-2.5 rounded-full border-2 border-dashed border-[#0891B2] dark:border-cyan-400 inline-block"></span> Grupal
+            </span>
+            <span class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400 text-xs font-medium">
+                <span class="w-2.5 h-2.5 rounded-full bg-red-400 dark:bg-red-500 inline-block"></span> Ausencia
+            </span>
+            <span class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400 text-xs font-medium">
+                <span class="w-2.5 h-2.5 rounded-full bg-slate-300 dark:bg-slate-600 inline-block"></span> No disponible
+            </span>
         </div>
 
-        <div class="flex-1 bg-surface-0 dark:bg-surface-900 rounded-2xl shadow border border-surface-200 dark:border-surface-700 p-4 overflow-hidden transition-colors">
+        <!-- Calendar container -->
+        <div class="flex-1 bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-[#E0F2FE] dark:border-slate-700 p-4 overflow-hidden transition-colors">
             <FullCalendar :options="calendarOptions" class="h-full" />
         </div>
 
-        <Dialog v-model:visible="nuevoTurnoModalVisible" modal header="Nuevo turno" :style="{ width: '520px' }">
-            <div class="space-y-3">
-                <p class="text-sm text-gray-500">Fecha/hora: {{ nuevoTurnoFecha }}</p>
+        <!-- Modal: Nuevo turno -->
+        <Dialog v-model:visible="nuevoTurnoModalVisible" modal header="Nuevo turno" :style="{ width: '520px' }" :pt="{ header: { class: 'font-heading' } }">
+            <div class="space-y-4">
+                <div class="flex items-center gap-2 px-3 py-2 rounded-lg bg-[#F0FDFA] dark:bg-teal-900/20 text-[#0891B2] dark:text-cyan-300 text-sm font-medium">
+                    <i class="pi pi-calendar"></i>
+                    <span>{{ nuevoTurnoFecha }}</span>
+                </div>
                 <div>
-                    <label class="font-semibold block mb-1">Paciente</label>
-                    <InputText v-model="pacienteBusqueda" @input="buscarPacientes" class="w-full" placeholder="Buscar por DNI o nombre" />
-                    <ul v-if="pacientes.length" class="border border-surface-200 dark:border-surface-700 rounded-lg mt-1 max-h-40 overflow-y-auto bg-surface-0 dark:bg-surface-800 shadow-lg">
-                        <li v-for="p in pacientes" :key="p.id" class="px-3 py-2 hover:bg-primary/10 cursor-pointer transition-colors text-color text-sm" @click="seleccionarPaciente(p)">
-                            <span class="font-medium">{{ p.apellido }} {{ p.nombre }}</span> <span class="text-muted-color">(DNI: {{ p.dni }})</span>
+                    <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200"><i class="pi pi-user mr-1.5 text-[#0891B2]"></i>Paciente</label>
+                    <InputText v-model="pacienteBusqueda" @input="buscarPacientes" class="w-full" placeholder="Buscar por DNI o nombre..." />
+                    <ul v-if="pacientes.length" class="border border-[#E0F2FE] dark:border-slate-600 rounded-lg mt-1.5 max-h-40 overflow-y-auto bg-white dark:bg-slate-800 shadow-lg">
+                        <li v-for="p in pacientes" :key="p.id" class="px-3 py-2.5 hover:bg-[#F0FDFA] dark:hover:bg-teal-900/20 cursor-pointer transition-colors text-sm border-b border-[#E0F2FE] dark:border-slate-700 last:border-0" @click="seleccionarPaciente(p)">
+                            <span class="font-medium text-[#134E4A] dark:text-slate-200">{{ p.apellido }} {{ p.nombre }}</span> <span class="text-slate-400 ml-1">DNI: {{ p.dni }}</span>
                         </li>
                     </ul>
-                    <p v-if="pacienteSeleccionado" class="text-xs text-green-600 mt-1">Paciente seleccionado: {{ pacienteSeleccionado.apellido }} {{ pacienteSeleccionado.nombre }}</p>
+                    <div v-if="pacienteSeleccionado" class="flex items-center gap-2 mt-2 px-3 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 text-xs font-medium">
+                        <i class="pi pi-check-circle"></i>
+                        {{ pacienteSeleccionado.apellido }} {{ pacienteSeleccionado.nombre }}
+                    </div>
                 </div>
                 <div>
-                    <label class="font-semibold block mb-1">Motivo</label>
-                    <InputText v-model="nuevoTurnoMotivo" class="w-full" />
+                    <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200"><i class="pi pi-comment mr-1.5 text-[#0891B2]"></i>Motivo</label>
+                    <InputText v-model="nuevoTurnoMotivo" class="w-full" placeholder="Motivo de la consulta" />
                 </div>
             </div>
             <template #footer>
-                <Button label="Cancelar" text severity="secondary" @click="nuevoTurnoModalVisible = false" />
-                <Button label="Guardar turno" icon="pi pi-check" :loading="nuevoTurnoGuardando" @click="guardarNuevoTurno" />
+                <Button label="Cancelar" text severity="secondary" class="!rounded-lg" @click="nuevoTurnoModalVisible = false" />
+                <Button label="Guardar turno" icon="pi pi-check" :loading="nuevoTurnoGuardando" class="!rounded-lg !bg-[#0891B2] !border-[#0891B2]" @click="guardarNuevoTurno" />
             </template>
         </Dialog>
 
-        <Dialog v-model:visible="bloqueoModalVisible" modal header="Bloquear agenda" :style="{ width: '480px' }">
-            <div class="space-y-3">
-                <div><label class="font-semibold block mb-1">Fecha</label><InputText type="date" v-model="bloqueoForm.fecha" class="w-full" /></div>
-                <label class="flex items-center gap-2 cursor-pointer"><Checkbox v-model="bloqueoForm.todoDia" :binary="true" /><span>Todo el dia</span></label>
+        <!-- Modal: Bloquear agenda -->
+        <Dialog v-model:visible="bloqueoModalVisible" modal header="Bloquear agenda" :style="{ width: '480px' }" :pt="{ header: { class: 'font-heading' } }">
+            <div class="space-y-4">
+                <div>
+                    <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200"><i class="pi pi-calendar mr-1.5 text-red-500"></i>Fecha</label>
+                    <InputText type="date" v-model="bloqueoForm.fecha" class="w-full" />
+                </div>
+                <label class="flex items-center gap-2.5 cursor-pointer px-3 py-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+                    <Checkbox v-model="bloqueoForm.todoDia" :binary="true" />
+                    <span class="text-sm font-medium text-[#134E4A] dark:text-slate-200">Todo el dia</span>
+                </label>
                 <div class="grid grid-cols-2 gap-3">
-                    <div><label class="font-semibold block mb-1">Hora inicio</label><InputText type="time" v-model="bloqueoForm.horaInicio" class="w-full" :disabled="bloqueoForm.todoDia" /></div>
-                    <div><label class="font-semibold block mb-1">Hora fin</label><InputText type="time" v-model="bloqueoForm.horaFin" class="w-full" :disabled="bloqueoForm.todoDia" /></div>
+                    <div>
+                        <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200">Hora inicio</label>
+                        <InputText type="time" v-model="bloqueoForm.horaInicio" class="w-full" :disabled="bloqueoForm.todoDia" />
+                    </div>
+                    <div>
+                        <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200">Hora fin</label>
+                        <InputText type="time" v-model="bloqueoForm.horaFin" class="w-full" :disabled="bloqueoForm.todoDia" />
+                    </div>
                 </div>
-                <div><label class="font-semibold block mb-1">Motivo</label><InputText v-model="bloqueoForm.motivo" class="w-full" /></div>
+                <div>
+                    <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200"><i class="pi pi-comment mr-1.5 text-red-500"></i>Motivo</label>
+                    <InputText v-model="bloqueoForm.motivo" class="w-full" placeholder="Motivo del bloqueo" />
+                </div>
             </div>
             <template #footer>
-                <Button label="Cancelar" text severity="secondary" @click="bloqueoModalVisible = false" />
-                <Button label="Guardar bloqueo" icon="pi pi-lock" :loading="bloqueoGuardando" @click="guardarBloqueo" />
+                <Button label="Cancelar" text severity="secondary" class="!rounded-lg" @click="bloqueoModalVisible = false" />
+                <Button label="Guardar bloqueo" icon="pi pi-lock" :loading="bloqueoGuardando" severity="danger" class="!rounded-lg" @click="guardarBloqueo" />
             </template>
         </Dialog>
 
-        <Dialog v-model:visible="modalVisible" modal :header="editando ? 'Editar turno' : 'Detalle'" :style="{ width: '480px' }">
-            <div v-if="turnoSeleccionado" class="space-y-3">
+        <!-- Modal: Detalle / Editar turno -->
+        <Dialog v-model:visible="modalVisible" modal :header="editando ? 'Editar turno' : 'Detalle del turno'" :style="{ width: '480px' }" :pt="{ header: { class: 'font-heading' } }">
+            <div v-if="turnoSeleccionado" class="space-y-4">
+                <!-- Ausencia -->
                 <div v-if="turnoSeleccionado.tipo === 'ausencia'">
-                    <p><strong>Profesional:</strong> {{ turnoSeleccionado.profesional }}</p>
-                    <p><strong>Motivo:</strong> {{ turnoSeleccionado.description || 'Sin motivo' }}</p>
-                    <div class="flex justify-end gap-2 mt-4">
-                        <Button label="Cerrar" text severity="secondary" @click="modalVisible = false" />
-                        <Button v-if="canDeleteAusencia" label="Desbloquear" severity="danger" @click="eliminarAusencia" />
+                    <div class="flex items-center gap-2 mb-3 px-3 py-2 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 text-sm font-medium">
+                        <i class="pi pi-lock"></i> Horario bloqueado
+                    </div>
+                    <div class="space-y-2 text-sm">
+                        <p class="flex items-center gap-2"><i class="pi pi-user text-slate-400"></i> <strong class="text-[#134E4A] dark:text-slate-200">Profesional:</strong> <span class="text-slate-600 dark:text-slate-300">{{ turnoSeleccionado.profesional }}</span></p>
+                        <p class="flex items-center gap-2"><i class="pi pi-comment text-slate-400"></i> <strong class="text-[#134E4A] dark:text-slate-200">Motivo:</strong> <span class="text-slate-600 dark:text-slate-300">{{ turnoSeleccionado.description || 'Sin motivo' }}</span></p>
+                    </div>
+                    <div class="flex justify-end gap-2 mt-5">
+                        <Button label="Cerrar" text severity="secondary" class="!rounded-lg" @click="modalVisible = false" />
+                        <Button v-if="canDeleteAusencia" label="Desbloquear" severity="danger" icon="pi pi-unlock" class="!rounded-lg" @click="eliminarAusencia" />
                     </div>
                 </div>
+                <!-- Editando -->
                 <div v-else-if="editando">
-                    <div class="grid grid-cols-2 gap-3">
-                        <div><label class="font-semibold block mb-1">Fecha</label><InputText type="date" v-model="fechaEdit" class="w-full" /></div>
-                        <div><label class="font-semibold block mb-1">Hora</label><InputText type="time" v-model="horaEdit" class="w-full" /></div>
+                    <div class="grid grid-cols-2 gap-3 mb-3">
+                        <div>
+                            <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200">Fecha</label>
+                            <InputText type="date" v-model="fechaEdit" class="w-full" />
+                        </div>
+                        <div>
+                            <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200">Hora</label>
+                            <InputText type="time" v-model="horaEdit" class="w-full" />
+                        </div>
                     </div>
-                    <div><label class="font-semibold block mb-1">Motivo</label><InputText v-model="turnoSeleccionado.description" class="w-full" /></div>
-                    <div class="flex justify-end gap-2 mt-4">
-                        <Button label="Cancelar" text severity="secondary" @click="editando = false" />
-                        <Button label="Guardar cambios" @click="guardarEdicion" />
+                    <div>
+                        <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200">Motivo</label>
+                        <InputText v-model="turnoSeleccionado.description" class="w-full" />
+                    </div>
+                    <div class="flex justify-end gap-2 mt-5">
+                        <Button label="Cancelar" text severity="secondary" class="!rounded-lg" @click="editando = false" />
+                        <Button label="Guardar cambios" icon="pi pi-check" class="!rounded-lg !bg-[#0891B2] !border-[#0891B2]" @click="guardarEdicion" />
                     </div>
                 </div>
+                <!-- Vista detalle -->
                 <div v-else>
-                    <div class="mb-3">
-                        <Tag :value="turnoSeleccionado.tipo === 'grupal' ? 'Grupal' : 'Individual'" :severity="turnoSeleccionado.tipo === 'grupal' ? 'info' : 'primary'" rounded />
+                    <div class="mb-4">
+                        <Tag :value="turnoSeleccionado.tipo === 'grupal' ? 'Grupal' : 'Individual'" :severity="turnoSeleccionado.tipo === 'grupal' ? 'info' : 'primary'" rounded class="!font-heading" />
                     </div>
-                    <div class="space-y-2">
-                        <p class="flex items-center gap-2"><i class="pi pi-user text-muted-color"></i> <strong>Paciente:</strong> {{ turnoSeleccionado.paciente }}</p>
-                        <p class="flex items-center gap-2"><i class="pi pi-id-card text-muted-color"></i> <strong>DNI:</strong> {{ turnoSeleccionado.dni }}</p>
-                        <p class="flex items-center gap-2"><i class="pi pi-briefcase text-muted-color"></i> <strong>Profesional:</strong> {{ turnoSeleccionado.profesional }}</p>
-                        <p class="flex items-center gap-2"><i class="pi pi-comment text-muted-color"></i> <strong>Motivo:</strong> {{ turnoSeleccionado.description || 'Sin motivo' }}</p>
-                    </div>
-                    <div class="flex justify-between pt-4 border-t border-surface-200 dark:border-surface-700 mt-4">
-                        <div class="flex gap-2">
-                            <Button v-if="turnoSeleccionado.editable" icon="pi pi-pencil" label="Editar" text severity="warning" size="small" @click="iniciarEdicion" />
-                            <Button v-if="turnoSeleccionado.editable" icon="pi pi-trash" label="Eliminar" text severity="danger" size="small" @click="eliminarTurno" />
-                            <span v-if="!turnoSeleccionado.editable" class="text-xs text-muted-color italic flex items-center">Solo lectura</span>
+                    <div class="space-y-3 text-sm">
+                        <div class="flex items-center gap-3 p-3 rounded-lg bg-[#F0FDFA] dark:bg-teal-900/15">
+                            <div class="w-9 h-9 rounded-full bg-[#0891B2] flex items-center justify-center text-white text-sm font-heading font-bold shrink-0">
+                                {{ (turnoSeleccionado.paciente || '?')[0].toUpperCase() }}
+                            </div>
+                            <div>
+                                <p class="font-semibold text-[#134E4A] dark:text-slate-200">{{ turnoSeleccionado.paciente }}</p>
+                                <p class="text-xs text-slate-400">DNI: {{ turnoSeleccionado.dni }}</p>
+                            </div>
                         </div>
-                        <Button label="Cerrar" text severity="secondary" @click="modalVisible = false" />
+                        <p class="flex items-center gap-2"><i class="pi pi-briefcase text-[#0891B2]"></i> <span class="text-slate-600 dark:text-slate-300">{{ turnoSeleccionado.profesional }}</span></p>
+                        <p class="flex items-center gap-2"><i class="pi pi-comment text-[#0891B2]"></i> <span class="text-slate-600 dark:text-slate-300">{{ turnoSeleccionado.description || 'Sin motivo' }}</span></p>
+                    </div>
+                    <div class="flex justify-between pt-4 border-t border-[#E0F2FE] dark:border-slate-700 mt-4">
+                        <div class="flex gap-2">
+                            <Button v-if="turnoSeleccionado.editable" icon="pi pi-pencil" label="Editar" text severity="warning" size="small" class="!rounded-lg" @click="iniciarEdicion" />
+                            <Button v-if="turnoSeleccionado.editable" icon="pi pi-trash" label="Eliminar" text severity="danger" size="small" class="!rounded-lg" @click="eliminarTurno" />
+                            <span v-if="!turnoSeleccionado.editable" class="text-xs text-slate-400 italic flex items-center gap-1"><i class="pi pi-eye text-xs"></i>Solo lectura</span>
+                        </div>
+                        <Button label="Cerrar" text severity="secondary" class="!rounded-lg" @click="modalVisible = false" />
                     </div>
                 </div>
             </div>
@@ -608,141 +672,6 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-/* === Event types === */
-:deep(.evento-propio) {
-    border-left: 4px solid #0f4fa8 !important;
-    border-radius: 6px !important;
-}
-:deep(.evento-grupal) {
-    border-style: dashed !important;
-    border-width: 2px !important;
-    border-color: #2563eb !important;
-    background-color: rgba(59, 130, 246, 0.2) !important;
-    border-radius: 6px !important;
-}
-:deep(.evento-ausencia) {
-    border-style: solid !important;
-    border-width: 1px !important;
-    border-color: #dc2626 !important;
-    background-color: rgba(248, 113, 113, 0.75) !important;
-    background-image: repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.2) 0 6px, rgba(255, 255, 255, 0.05) 6px 12px) !important;
-    color: #ffffff !important;
-    border-radius: 6px !important;
-}
-
-/* === Background: unavailable hours === */
-:deep(.fc .fc-bg-event.no-disponible-background) {
-    pointer-events: none !important;
-    opacity: 1 !important;
-    border: 0 !important;
-    background-color: rgba(107, 114, 128, 0.22) !important;
-    background-image: none !important;
-}
-
-/* === Background: absence full day === */
-:deep(.fc .fc-bg-event.ausencia-background) {
-    pointer-events: none !important;
-    opacity: 1 !important;
-    border: 0 !important;
-    background-color: rgba(248, 113, 113, 0.1) !important;
-    background-image: none !important;
-}
-
-/* === Today highlight === */
-:deep(.fc .fc-day-today) {
-    background-color: rgba(56, 189, 248, 0.08) !important;
-}
-
-:deep(.fc .fc-col-header-cell.fc-day-today) {
-    background-color: rgba(56, 189, 248, 0.14) !important;
-}
-
-:deep(.fc .fc-col-header-cell.fc-day-today .fc-col-header-cell-cushion) {
-    color: #0369a1 !important;
-    font-weight: 700 !important;
-    text-decoration: underline;
-    text-decoration-color: rgba(3, 105, 161, 0.4);
-    text-underline-offset: 4px;
-}
-
-/* === Dark mode: FullCalendar chrome === */
-:deep(.app-dark .fc .fc-toolbar-title),
-:deep(html.dark .fc .fc-toolbar-title) {
-    color: var(--text-color) !important;
-}
-:deep(.app-dark .fc .fc-col-header-cell),
-:deep(html.dark .fc .fc-col-header-cell) {
-    background-color: var(--surface-card) !important;
-    color: var(--text-color) !important;
-}
-:deep(.app-dark .fc .fc-col-header-cell-cushion),
-:deep(html.dark .fc .fc-col-header-cell-cushion) {
-    color: var(--text-color) !important;
-}
-:deep(.app-dark .fc .fc-timegrid-slot),
-:deep(html.dark .fc .fc-timegrid-slot) {
-    border-color: var(--surface-border) !important;
-}
-:deep(.app-dark .fc .fc-timegrid-axis),
-:deep(html.dark .fc .fc-timegrid-axis) {
-    border-color: var(--surface-border) !important;
-}
-:deep(.app-dark .fc .fc-timegrid-slot-label-cushion),
-:deep(html.dark .fc .fc-timegrid-slot-label-cushion) {
-    color: var(--text-color) !important;
-}
-:deep(.app-dark .fc .fc-scrollgrid),
-:deep(html.dark .fc .fc-scrollgrid) {
-    border-color: var(--surface-border) !important;
-}
-:deep(.app-dark .fc td),
-:deep(html.dark .fc td),
-:deep(.app-dark .fc th),
-:deep(html.dark .fc th) {
-    border-color: var(--surface-border) !important;
-}
-:deep(.app-dark .fc .fc-button),
-:deep(html.dark .fc .fc-button) {
-    background-color: var(--surface-card) !important;
-    border-color: var(--surface-border) !important;
-    color: var(--text-color) !important;
-}
-:deep(.app-dark .fc .fc-button-active),
-:deep(html.dark .fc .fc-button-active) {
-    background-color: var(--primary-color) !important;
-    border-color: var(--primary-color) !important;
-    color: #ffffff !important;
-}
-:deep(.app-dark .fc .fc-daygrid-day-number),
-:deep(html.dark .fc .fc-daygrid-day-number) {
-    color: var(--text-color) !important;
-}
-
-/* === Dark mode: backgrounds === */
-:deep(.app-dark .fc .fc-bg-event.no-disponible-background),
-:deep(html.dark .fc .fc-bg-event.no-disponible-background) {
-    background-color: rgba(148, 163, 184, 0.2) !important;
-    background-image: none !important;
-}
-:deep(.app-dark .fc .fc-bg-event.ausencia-background),
-:deep(html.dark .fc .fc-bg-event.ausencia-background) {
-    background-color: rgba(220, 38, 38, 0.15) !important;
-    background-image: none !important;
-}
-
-:deep(.app-dark .fc .fc-day-today),
-:deep(html.dark .fc .fc-day-today) {
-    background-color: rgba(56, 189, 248, 0.12) !important;
-}
-
-:deep(.app-dark .fc .fc-col-header-cell.fc-day-today),
-:deep(html.dark .fc .fc-col-header-cell.fc-day-today) {
-    background-color: rgba(56, 189, 248, 0.2) !important;
-}
-
-:deep(.app-dark .fc .fc-col-header-cell.fc-day-today .fc-col-header-cell-cushion),
-:deep(html.dark .fc .fc-col-header-cell.fc-day-today .fc-col-header-cell-cushion) {
-    color: #7dd3fc !important;
-    text-decoration-color: rgba(125, 211, 252, 0.45);
-}
+/* Calendar Medical Clean theme is loaded from @/assets/calendar-medical.css */
+/* Only view-specific overrides go here */
 </style>

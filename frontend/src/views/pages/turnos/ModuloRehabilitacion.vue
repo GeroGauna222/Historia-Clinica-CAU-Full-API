@@ -5,6 +5,7 @@ import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
 import interactionPlugin from '@fullcalendar/interaction';
 import api from '@/api/axios';
+import '@/assets/calendar-medical.css';
 
 import Dialog from 'primevue/dialog';
 import Button from 'primevue/button';
@@ -151,9 +152,9 @@ function mapEvento(t) {
         title: `${t.grupo_nombre}: ${t.paciente}`,
         start: t.start,
         end: t.end,
-        backgroundColor: 'rgba(16, 185, 129, 0.18)',
+        backgroundColor: 'rgba(16, 185, 129, 0.12)',
         borderColor: '#059669',
-        textColor: '#111827',
+        textColor: '#064E3B',
         classNames: ['evento-rehab'],
         extendedProps: {
             turnoId: t.id,
@@ -308,137 +309,175 @@ onMounted(async () => {
 <template>
     <div class="p-6 h-screen flex flex-col">
         <Toast />
-        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
-            <div>
-                <h1 class="text-2xl font-bold text-gray-800 dark:text-gray-100">Modulo de Rehabilitacion</h1>
-                <p class="text-xs text-gray-500 mt-1">Visor combinado de turnos grupales de grupos marcados como rehabilitacion.</p>
+        <!-- Header -->
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-5">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-emerald-500 flex items-center justify-center shadow-sm">
+                    <i class="pi pi-heart text-white text-lg"></i>
+                </div>
+                <div>
+                    <h1 class="text-2xl font-heading font-bold text-[#134E4A] dark:text-teal-100 tracking-tight">Rehabilitacion</h1>
+                    <p class="text-xs text-slate-400 dark:text-slate-500 mt-0.5 font-sans">Turnos grupales de los equipos de rehabilitacion</p>
+                </div>
             </div>
             <div class="flex items-center gap-3">
-                <select v-model="filtroGrupoId" class="p-2 border border-gray-300 rounded min-w-56" @change="cargarTurnos">
-                    <option value="">Todos los grupos rehab</option>
+                <select v-model="filtroGrupoId" class="px-3 py-2 rounded-lg border border-[#E0F2FE] dark:border-slate-600 bg-white dark:bg-slate-800 text-sm text-[#134E4A] dark:text-slate-200 min-w-56 font-sans focus:outline-none focus:ring-2 focus:ring-[#0891B2]/30 focus:border-[#0891B2] transition-colors cursor-pointer" @change="cargarTurnos">
+                    <option value="">Todos los grupos</option>
                     <option v-for="g in gruposRehab" :key="g.id" :value="g.id">{{ g.nombre }}</option>
                 </select>
-                <Button v-if="canEdit()" label="Nuevo turno grupal" icon="pi pi-plus" @click="modalNuevoVisible = true" />
+                <Button v-if="canEdit()" label="Nuevo turno" icon="pi pi-plus" class="!rounded-lg !bg-emerald-600 !border-emerald-600 hover:!bg-emerald-700 !text-sm !font-sans" @click="modalNuevoVisible = true" />
             </div>
         </div>
 
-        <div class="flex-1 bg-surface-0 dark:bg-surface-900 rounded-2xl shadow border border-surface-200 dark:border-surface-700 p-4 overflow-hidden">
+        <!-- Calendar container -->
+        <div class="flex-1 bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-[#E0F2FE] dark:border-slate-700 p-4 overflow-hidden transition-colors">
             <FullCalendar :options="calendarOptions" class="h-full" />
         </div>
 
-        <Dialog v-model:visible="modalNuevoVisible" modal header="Nuevo turno grupal rehab" :style="{ width: '520px' }">
-            <div class="space-y-3">
+        <!-- Modal: Nuevo turno grupal rehab -->
+        <Dialog v-model:visible="modalNuevoVisible" modal header="Nuevo turno de rehabilitacion" :style="{ width: '540px' }" :pt="{ header: { class: 'font-heading' } }">
+            <div class="space-y-4">
+                <!-- Modo selector -->
                 <div>
-                    <label class="font-semibold block mb-1">Modo de carga</label>
-                    <select v-model="nuevo.modo_creacion" class="w-full p-2 border border-gray-300 rounded">
-                        <option value="simple">Simple (1 turno)</option>
-                        <option value="tanda">Tanda (dias + hora + cantidad)</option>
-                    </select>
+                    <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200">Modo de carga</label>
+                    <div class="flex gap-2">
+                        <button type="button"
+                            class="flex-1 px-4 py-2.5 rounded-lg text-sm font-medium transition-all cursor-pointer"
+                            :class="nuevo.modo_creacion === 'simple' ? 'bg-emerald-600 text-white shadow-md' : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-[#E0F2FE] dark:border-slate-600 hover:border-emerald-500'"
+                            @click="nuevo.modo_creacion = 'simple'">
+                            <i class="pi pi-calendar mr-1.5"></i> Simple
+                        </button>
+                        <button type="button"
+                            class="flex-1 px-4 py-2.5 rounded-lg text-sm font-medium transition-all cursor-pointer"
+                            :class="nuevo.modo_creacion === 'tanda' ? 'bg-emerald-600 text-white shadow-md' : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-[#E0F2FE] dark:border-slate-600 hover:border-emerald-500'"
+                            @click="nuevo.modo_creacion = 'tanda'">
+                            <i class="pi pi-replay mr-1.5"></i> Tanda
+                        </button>
+                    </div>
                 </div>
+                <!-- Grupo selector -->
                 <div>
-                    <label class="font-semibold block mb-1">Grupo</label>
-                    <select v-model="nuevo.grupo_id" class="w-full p-2 border border-gray-300 rounded">
+                    <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200"><i class="pi pi-users mr-1.5 text-emerald-600"></i>Grupo</label>
+                    <select v-model="nuevo.grupo_id" class="w-full px-3 py-2 rounded-lg border border-[#E0F2FE] dark:border-slate-600 bg-white dark:bg-slate-800 text-sm text-[#134E4A] dark:text-slate-200 font-sans focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 cursor-pointer">
                         <option value="" disabled>Seleccionar grupo</option>
                         <option v-for="g in gruposRehab" :key="g.id" :value="g.id">{{ g.nombre }}</option>
                     </select>
                 </div>
+                <!-- Simple mode -->
                 <div v-if="nuevo.modo_creacion === 'simple'">
-                    <label class="font-semibold block mb-1">Fecha/hora</label>
+                    <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200"><i class="pi pi-calendar mr-1.5 text-emerald-600"></i>Fecha/hora</label>
                     <InputText type="datetime-local" v-model="nuevo.fecha_inicio" class="w-full" />
                 </div>
-                <div v-else class="space-y-2">
-                    <div>
-                        <label class="font-semibold block mb-1">Fecha base</label>
-                        <InputText type="date" v-model="nuevo.fecha_base" class="w-full" />
+                <!-- Tanda mode -->
+                <div v-else class="space-y-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-[#E0F2FE] dark:border-slate-700">
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200">Fecha base</label>
+                            <InputText type="date" v-model="nuevo.fecha_base" class="w-full" />
+                        </div>
+                        <div>
+                            <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200">Hora</label>
+                            <InputText type="time" v-model="nuevo.hora_tanda" class="w-full" />
+                        </div>
                     </div>
                     <div>
-                        <label class="font-semibold block mb-1">Hora</label>
-                        <InputText type="time" v-model="nuevo.hora_tanda" class="w-full" />
-                    </div>
-                    <div>
-                        <label class="font-semibold block mb-1">Dias</label>
-                        <div class="flex flex-wrap gap-2">
-                            <button
-                                v-for="d in DIAS_TANDA"
-                                :key="d.value"
-                                type="button"
-                                class="px-2 py-1 border rounded text-sm"
-                                :class="nuevo.dias_tanda.includes(d.value) ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300'"
-                                @click="toggleDiaTanda(d.value)"
-                            >
+                        <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200">Dias de la semana</label>
+                        <div class="flex flex-wrap gap-1.5">
+                            <button v-for="d in DIAS_TANDA" :key="d.value" type="button"
+                                class="w-10 h-10 rounded-lg text-sm font-semibold transition-all cursor-pointer"
+                                :class="nuevo.dias_tanda.includes(d.value) ? 'bg-emerald-600 text-white shadow-md' : 'bg-white dark:bg-slate-700 text-slate-500 dark:text-slate-300 border border-[#E0F2FE] dark:border-slate-600 hover:border-emerald-500'"
+                                @click="toggleDiaTanda(d.value)">
                                 {{ d.label }}
                             </button>
                         </div>
                     </div>
                     <div>
-                        <label class="font-semibold block mb-1">Cantidad</label>
+                        <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200">Cantidad de semanas</label>
                         <InputText type="number" min="1" step="1" v-model.number="nuevo.cantidad_tanda" class="w-full" />
                     </div>
                 </div>
+                <!-- Paciente -->
                 <div>
-                    <label class="font-semibold block mb-1">Paciente</label>
-                    <InputText v-model="nuevo.pacienteBusqueda" @input="buscarPacientes" class="w-full" />
-                    <ul v-if="pacientes.length" class="border rounded mt-1 max-h-40 overflow-y-auto">
-                        <li v-for="p in pacientes" :key="p.id" class="px-2 py-1 hover:bg-gray-100 cursor-pointer" @click="seleccionarPaciente(p)">{{ p.apellido }} {{ p.nombre }} ({{ p.dni }})</li>
+                    <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200"><i class="pi pi-user mr-1.5 text-emerald-600"></i>Paciente</label>
+                    <InputText v-model="nuevo.pacienteBusqueda" @input="buscarPacientes" class="w-full" placeholder="Buscar por DNI o nombre..." />
+                    <ul v-if="pacientes.length" class="border border-[#E0F2FE] dark:border-slate-600 rounded-lg mt-1.5 max-h-40 overflow-y-auto bg-white dark:bg-slate-800 shadow-lg">
+                        <li v-for="p in pacientes" :key="p.id" class="px-3 py-2.5 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 cursor-pointer transition-colors text-sm border-b border-[#E0F2FE] dark:border-slate-700 last:border-0" @click="seleccionarPaciente(p)">
+                            <span class="font-medium text-[#134E4A] dark:text-slate-200">{{ p.apellido }} {{ p.nombre }}</span> <span class="text-slate-400 ml-1">DNI: {{ p.dni }}</span>
+                        </li>
                     </ul>
+                    <div v-if="nuevo.paciente" class="flex items-center gap-2 mt-2 px-3 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 text-xs font-medium">
+                        <i class="pi pi-check-circle"></i> {{ nuevo.paciente.apellido }} {{ nuevo.paciente.nombre }}
+                    </div>
                 </div>
-                <div>
-                    <label class="font-semibold block mb-1">Motivo</label>
-                    <InputText v-model="nuevo.motivo" class="w-full" />
-                </div>
-                <div>
-                    <label class="font-semibold block mb-1">Duracion (minutos)</label>
-                    <InputText type="number" min="5" step="5" v-model.number="nuevo.duracion_minutos" class="w-full" />
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200"><i class="pi pi-comment mr-1.5 text-emerald-600"></i>Motivo</label>
+                        <InputText v-model="nuevo.motivo" class="w-full" />
+                    </div>
+                    <div>
+                        <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200"><i class="pi pi-clock mr-1.5 text-emerald-600"></i>Duracion (min)</label>
+                        <InputText type="number" min="5" step="5" v-model.number="nuevo.duracion_minutos" class="w-full" />
+                    </div>
                 </div>
             </div>
             <template #footer>
-                <Button label="Cancelar" text severity="secondary" @click="modalNuevoVisible = false" />
-                <Button label="Guardar" icon="pi pi-check" :loading="guardandoNuevo" @click="crearTurno" />
+                <Button label="Cancelar" text severity="secondary" class="!rounded-lg" @click="modalNuevoVisible = false" />
+                <Button label="Guardar" icon="pi pi-check" :loading="guardandoNuevo" class="!rounded-lg !bg-emerald-600 !border-emerald-600" @click="crearTurno" />
             </template>
         </Dialog>
 
-        <Dialog v-model:visible="detalleVisible" modal header="Detalle turno rehab" :style="{ width: '460px' }">
-            <div v-if="seleccionado" class="space-y-2">
-                <p><strong>Grupo:</strong> {{ seleccionado.grupo_nombre }}</p>
-                <p><strong>Paciente:</strong> {{ seleccionado.paciente }}</p>
-                <p><strong>DNI:</strong> {{ seleccionado.dni }}</p>
-                <p><strong>Motivo:</strong> {{ seleccionado.description || 'Sin motivo' }}</p>
-                <div class="flex justify-between mt-4">
-                    <div class="flex gap-2">
-                        <Button v-if="seleccionado.editable" label="Editar" icon="pi pi-pencil" text severity="warning" @click="abrirEditar" />
-                        <Button v-if="seleccionado.editable" label="Eliminar" icon="pi pi-trash" text severity="danger" :loading="eliminando" @click="eliminarTurno" />
+        <!-- Modal: Detalle turno rehab -->
+        <Dialog v-model:visible="detalleVisible" modal header="Detalle de turno" :style="{ width: '480px' }" :pt="{ header: { class: 'font-heading' } }">
+            <div v-if="seleccionado" class="space-y-4">
+                <div class="flex items-center gap-3 p-3 rounded-lg bg-emerald-50 dark:bg-emerald-900/15">
+                    <div class="w-9 h-9 rounded-full bg-emerald-600 flex items-center justify-center text-white text-sm font-heading font-bold shrink-0">
+                        {{ (seleccionado.paciente || '?')[0].toUpperCase() }}
                     </div>
-                    <Button label="Cerrar" text severity="secondary" @click="detalleVisible = false" />
+                    <div>
+                        <p class="font-semibold text-[#134E4A] dark:text-slate-200">{{ seleccionado.paciente }}</p>
+                        <p class="text-xs text-slate-400">DNI: {{ seleccionado.dni }}</p>
+                    </div>
+                </div>
+                <div class="space-y-2 text-sm">
+                    <p class="flex items-center gap-2"><i class="pi pi-users text-emerald-600"></i> <span class="text-slate-600 dark:text-slate-300">{{ seleccionado.grupo_nombre }}</span></p>
+                    <p class="flex items-center gap-2"><i class="pi pi-comment text-emerald-600"></i> <span class="text-slate-600 dark:text-slate-300">{{ seleccionado.description || 'Sin motivo' }}</span></p>
+                </div>
+                <div class="flex justify-between pt-4 border-t border-[#E0F2FE] dark:border-slate-700">
+                    <div class="flex gap-2">
+                        <Button v-if="seleccionado.editable" label="Editar" icon="pi pi-pencil" text severity="warning" class="!rounded-lg" @click="abrirEditar" />
+                        <Button v-if="seleccionado.editable" label="Eliminar" icon="pi pi-trash" text severity="danger" :loading="eliminando" class="!rounded-lg" @click="eliminarTurno" />
+                    </div>
+                    <Button label="Cerrar" text severity="secondary" class="!rounded-lg" @click="detalleVisible = false" />
                 </div>
             </div>
         </Dialog>
 
-        <Dialog v-model:visible="modalEditarVisible" modal header="Editar turno rehab" :style="{ width: '460px' }">
-            <div class="space-y-3">
+        <!-- Modal: Editar turno rehab -->
+        <Dialog v-model:visible="modalEditarVisible" modal header="Editar turno" :style="{ width: '480px' }" :pt="{ header: { class: 'font-heading' } }">
+            <div class="space-y-4">
                 <div>
-                    <label class="font-semibold block mb-1">Fecha/hora</label>
+                    <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200"><i class="pi pi-calendar mr-1.5 text-emerald-600"></i>Fecha/hora</label>
                     <InputText type="datetime-local" v-model="edit.fecha_inicio" class="w-full" />
                 </div>
-                <div>
-                    <label class="font-semibold block mb-1">Motivo</label>
-                    <InputText v-model="edit.motivo" class="w-full" />
-                </div>
-                <div>
-                    <label class="font-semibold block mb-1">Duracion (minutos)</label>
-                    <InputText type="number" min="5" step="5" v-model.number="edit.duracion_minutos" class="w-full" />
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200"><i class="pi pi-comment mr-1.5 text-emerald-600"></i>Motivo</label>
+                        <InputText v-model="edit.motivo" class="w-full" />
+                    </div>
+                    <div>
+                        <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200"><i class="pi pi-clock mr-1.5 text-emerald-600"></i>Duracion (min)</label>
+                        <InputText type="number" min="5" step="5" v-model.number="edit.duracion_minutos" class="w-full" />
+                    </div>
                 </div>
             </div>
             <template #footer>
-                <Button label="Cancelar" text severity="secondary" @click="modalEditarVisible = false" />
-                <Button label="Guardar" icon="pi pi-check" :loading="guardandoEdit" @click="guardarEdicion" />
+                <Button label="Cancelar" text severity="secondary" class="!rounded-lg" @click="modalEditarVisible = false" />
+                <Button label="Guardar" icon="pi pi-check" :loading="guardandoEdit" class="!rounded-lg !bg-emerald-600 !border-emerald-600" @click="guardarEdicion" />
             </template>
         </Dialog>
     </div>
 </template>
 
 <style scoped>
-:deep(.evento-rehab) {
-    border-style: dashed !important;
-    border-width: 2px !important;
-}
+/* Calendar Medical Clean theme is loaded from @/assets/calendar-medical.css */
 </style>

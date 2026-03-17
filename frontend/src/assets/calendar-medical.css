@@ -1,0 +1,361 @@
+/*
+ * Medical Clean Theme — FullCalendar shared styles
+ * Paleta teal médica con tipografía Figtree/Noto Sans
+ * Importar en cada vista que use FullCalendar
+ */
+
+/* ============================================
+   CALENDAR CHROME — toolbar, headers, grid
+   ============================================ */
+
+/* Toolbar title */
+.fc .fc-toolbar-title {
+    font-family: 'Figtree', sans-serif;
+    font-weight: 600;
+    font-size: 1.25rem;
+    color: #134E4A;
+}
+
+/* Toolbar buttons */
+.fc .fc-button {
+    font-family: 'Noto Sans', sans-serif;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    border-radius: 8px !important;
+    padding: 0.4rem 0.75rem;
+    border: 1px solid #E0F2FE !important;
+    background-color: #ffffff !important;
+    color: #134E4A !important;
+    transition: all 200ms ease;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+.fc .fc-button:hover {
+    background-color: #F0FDFA !important;
+    border-color: #0891B2 !important;
+    color: #0891B2 !important;
+}
+.fc .fc-button-active,
+.fc .fc-button-active:hover {
+    background-color: #0891B2 !important;
+    border-color: #0891B2 !important;
+    color: #ffffff !important;
+    box-shadow: 0 2px 6px rgba(8, 145, 178, 0.3);
+}
+.fc .fc-button-group {
+    gap: 2px;
+}
+.fc .fc-button-group .fc-button {
+    border-radius: 0 !important;
+}
+.fc .fc-button-group .fc-button:first-child {
+    border-radius: 8px 0 0 8px !important;
+}
+.fc .fc-button-group .fc-button:last-child {
+    border-radius: 0 8px 8px 0 !important;
+}
+
+/* Column headers */
+.fc .fc-col-header-cell {
+    background-color: #F0FDFA;
+    border-color: #E0F2FE;
+    padding: 10px 0;
+}
+.fc .fc-col-header-cell-cushion {
+    font-family: 'Figtree', sans-serif;
+    font-weight: 600;
+    font-size: 0.8125rem;
+    color: #134E4A;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    text-decoration: none !important;
+}
+
+/* Grid borders & slots */
+.fc .fc-scrollgrid {
+    border-color: #E0F2FE !important;
+    border-radius: 12px;
+    overflow: hidden;
+}
+.fc td, .fc th {
+    border-color: #E0F2FE !important;
+}
+.fc .fc-timegrid-slot {
+    height: 2.2rem;
+    border-color: #f1f5f9 !important;
+}
+.fc .fc-timegrid-slot-minor {
+    border-color: transparent !important;
+}
+.fc .fc-timegrid-slot-label-cushion {
+    font-family: 'Noto Sans', sans-serif;
+    font-size: 0.7rem;
+    font-weight: 500;
+    color: #94A3B8;
+    padding-right: 12px;
+}
+.fc .fc-timegrid-axis {
+    border-color: #E0F2FE !important;
+}
+
+/* Today highlight */
+.fc .fc-day-today {
+    background-color: rgba(8, 145, 178, 0.04) !important;
+}
+.fc .fc-col-header-cell.fc-day-today {
+    background-color: rgba(8, 145, 178, 0.1) !important;
+}
+.fc .fc-col-header-cell.fc-day-today .fc-col-header-cell-cushion {
+    color: #0891B2 !important;
+    font-weight: 700 !important;
+    position: relative;
+}
+
+/* Day grid (month view) */
+.fc .fc-daygrid-day-number {
+    font-family: 'Figtree', sans-serif;
+    font-weight: 500;
+    font-size: 0.8125rem;
+    color: #334155;
+    padding: 6px 8px;
+}
+.fc .fc-daygrid-day.fc-day-today .fc-daygrid-day-number {
+    background-color: #0891B2;
+    color: #ffffff;
+    border-radius: 50%;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* ============================================
+   EVENT TYPES — turnos, grupales, ausencias
+   ============================================ */
+
+/* Base event styling */
+.fc .fc-event {
+    border-radius: 6px !important;
+    font-family: 'Noto Sans', sans-serif;
+    font-size: 0.75rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: box-shadow 200ms ease, transform 150ms ease;
+    border: none !important;
+    padding: 2px 6px;
+}
+.fc .fc-event:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+    z-index: 10 !important;
+}
+
+/* Individual turnos — teal solid */
+.fc .fc-event.evento-propio,
+.fc .fc-event.evento-individual {
+    background-color: #0891B2 !important;
+    border-left: 4px solid #0E7490 !important;
+    color: #ffffff !important;
+}
+.fc .fc-event.evento-propio:hover,
+.fc .fc-event.evento-individual:hover {
+    background-color: #0E7490 !important;
+}
+
+/* Group turnos — teal dashed outline */
+.fc .fc-event.evento-grupal {
+    background-color: rgba(8, 145, 178, 0.1) !important;
+    border: 2px dashed #0891B2 !important;
+    border-left: 4px solid #0891B2 !important;
+    color: #134E4A !important;
+}
+.fc .fc-event.evento-grupal:hover {
+    background-color: rgba(8, 145, 178, 0.18) !important;
+}
+
+/* Rehabilitation turnos — emerald */
+.fc .fc-event.evento-rehab {
+    background-color: rgba(16, 185, 129, 0.12) !important;
+    border: 2px dashed #059669 !important;
+    border-left: 4px solid #059669 !important;
+    color: #064E3B !important;
+}
+.fc .fc-event.evento-rehab:hover {
+    background-color: rgba(16, 185, 129, 0.22) !important;
+}
+
+/* Ausencias/bloqueos — red soft */
+.fc .fc-event.evento-ausencia {
+    background-color: rgba(239, 68, 68, 0.12) !important;
+    border: 1px solid #EF4444 !important;
+    border-left: 4px solid #DC2626 !important;
+    color: #991B1B !important;
+    background-image: repeating-linear-gradient(
+        135deg,
+        rgba(239, 68, 68, 0.06) 0 6px,
+        transparent 6px 12px
+    ) !important;
+}
+.fc .fc-event.evento-ausencia:hover {
+    background-color: rgba(239, 68, 68, 0.2) !important;
+}
+
+/* Background: unavailable hours */
+.fc .fc-bg-event.no-disponible-background {
+    pointer-events: none !important;
+    opacity: 1 !important;
+    border: 0 !important;
+    background-color: rgba(148, 163, 184, 0.12) !important;
+    background-image: repeating-linear-gradient(
+        90deg,
+        rgba(148, 163, 184, 0.08) 0 1px,
+        transparent 1px 8px
+    ) !important;
+}
+
+/* Background: absence full day */
+.fc .fc-bg-event.ausencia-background {
+    pointer-events: none !important;
+    opacity: 1 !important;
+    border: 0 !important;
+    background-color: rgba(239, 68, 68, 0.05) !important;
+    background-image: none !important;
+}
+
+/* ============================================
+   DARK MODE
+   ============================================ */
+
+.app-dark .fc .fc-toolbar-title,
+html.dark .fc .fc-toolbar-title {
+    color: #E2E8F0 !important;
+}
+.app-dark .fc .fc-button,
+html.dark .fc .fc-button {
+    background-color: #1E293B !important;
+    border-color: #334155 !important;
+    color: #CBD5E1 !important;
+}
+.app-dark .fc .fc-button:hover,
+html.dark .fc .fc-button:hover {
+    background-color: #334155 !important;
+    border-color: #22D3EE !important;
+    color: #22D3EE !important;
+}
+.app-dark .fc .fc-button-active,
+.app-dark .fc .fc-button-active:hover,
+html.dark .fc .fc-button-active,
+html.dark .fc .fc-button-active:hover {
+    background-color: #0891B2 !important;
+    border-color: #0891B2 !important;
+    color: #ffffff !important;
+}
+.app-dark .fc .fc-col-header-cell,
+html.dark .fc .fc-col-header-cell {
+    background-color: #1E293B !important;
+    border-color: #334155 !important;
+}
+.app-dark .fc .fc-col-header-cell-cushion,
+html.dark .fc .fc-col-header-cell-cushion {
+    color: #94A3B8 !important;
+}
+.app-dark .fc .fc-scrollgrid,
+html.dark .fc .fc-scrollgrid {
+    border-color: #334155 !important;
+}
+.app-dark .fc td,
+.app-dark .fc th,
+html.dark .fc td,
+html.dark .fc th {
+    border-color: #334155 !important;
+}
+.app-dark .fc .fc-timegrid-slot,
+html.dark .fc .fc-timegrid-slot {
+    border-color: #1E293B !important;
+}
+.app-dark .fc .fc-timegrid-slot-label-cushion,
+html.dark .fc .fc-timegrid-slot-label-cushion {
+    color: #64748B !important;
+}
+.app-dark .fc .fc-timegrid-axis,
+html.dark .fc .fc-timegrid-axis {
+    border-color: #334155 !important;
+}
+.app-dark .fc .fc-daygrid-day-number,
+html.dark .fc .fc-daygrid-day-number {
+    color: #CBD5E1 !important;
+}
+
+/* Dark — today */
+.app-dark .fc .fc-day-today,
+html.dark .fc .fc-day-today {
+    background-color: rgba(8, 145, 178, 0.08) !important;
+}
+.app-dark .fc .fc-col-header-cell.fc-day-today,
+html.dark .fc .fc-col-header-cell.fc-day-today {
+    background-color: rgba(8, 145, 178, 0.15) !important;
+}
+.app-dark .fc .fc-col-header-cell.fc-day-today .fc-col-header-cell-cushion,
+html.dark .fc .fc-col-header-cell.fc-day-today .fc-col-header-cell-cushion {
+    color: #22D3EE !important;
+}
+
+/* Dark — events */
+.app-dark .fc .fc-event.evento-propio,
+.app-dark .fc .fc-event.evento-individual,
+html.dark .fc .fc-event.evento-propio,
+html.dark .fc .fc-event.evento-individual {
+    background-color: #0E7490 !important;
+    border-left-color: #22D3EE !important;
+}
+.app-dark .fc .fc-event.evento-grupal,
+html.dark .fc .fc-event.evento-grupal {
+    background-color: rgba(34, 211, 238, 0.1) !important;
+    border-color: #22D3EE !important;
+    color: #E0F2FE !important;
+}
+.app-dark .fc .fc-event.evento-rehab,
+html.dark .fc .fc-event.evento-rehab {
+    background-color: rgba(16, 185, 129, 0.12) !important;
+    border-color: #34D399 !important;
+    color: #D1FAE5 !important;
+}
+.app-dark .fc .fc-event.evento-ausencia,
+html.dark .fc .fc-event.evento-ausencia {
+    background-color: rgba(239, 68, 68, 0.15) !important;
+    border-color: #F87171 !important;
+    color: #FCA5A5 !important;
+}
+.app-dark .fc .fc-bg-event.no-disponible-background,
+html.dark .fc .fc-bg-event.no-disponible-background {
+    background-color: rgba(100, 116, 139, 0.15) !important;
+    background-image: none !important;
+}
+.app-dark .fc .fc-bg-event.ausencia-background,
+html.dark .fc .fc-bg-event.ausencia-background {
+    background-color: rgba(220, 38, 38, 0.08) !important;
+    background-image: none !important;
+}
+
+/* ============================================
+   TIPPY TOOLTIPS — Medical theme
+   ============================================ */
+
+.tippy-box[data-theme~='medical'] {
+    background-color: #0F172A;
+    border-radius: 10px;
+    padding: 4px 2px;
+    font-family: 'Noto Sans', sans-serif;
+    font-size: 0.8rem;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+    border: 1px solid #1E293B;
+}
+.tippy-box[data-theme~='medical'] .tippy-arrow {
+    color: #0F172A;
+}
+.tippy-box[data-theme~='medical'] .tippy-content {
+    padding: 8px 12px;
+    line-height: 1.5;
+}
+.tippy-box[data-theme~='medical'] strong {
+    color: #22D3EE;
+}

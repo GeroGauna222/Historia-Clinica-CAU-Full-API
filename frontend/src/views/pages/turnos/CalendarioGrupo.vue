@@ -8,6 +8,7 @@ import interactionPlugin from '@fullcalendar/interaction';
 import tippy from 'tippy.js';
 import 'tippy.js/dist/tippy.css';
 import api from '@/api/axios';
+import '@/assets/calendar-medical.css';
 
 import Dialog from 'primevue/dialog';
 import Button from 'primevue/button';
@@ -157,17 +158,22 @@ const calendarOptions = reactive({
         if (tipo === 'ausencia_bg') return;
         if (tipo === 'ausencia') {
             tippy(info.el, {
-                content: `<strong>No disponible:</strong> ${info.event.extendedProps.profesional || 'Profesional'}`,
+                content: `<strong>No disponible</strong><br>${info.event.extendedProps.profesional || 'Profesional'}<br><span style="opacity:0.7">${info.event.extendedProps.description || ''}</span>`,
                 allowHTML: true,
-                placement: 'top'
+                placement: 'top',
+                theme: 'medical'
             });
             return;
         }
 
+        const pacNombre = info.event.extendedProps.paciente || '';
+        const profNombre = info.event.extendedProps.profesional || '';
+        const desc = info.event.extendedProps.description || '';
         tippy(info.el, {
-            content: `<strong>${info.event.extendedProps.paciente || ''}</strong><br>${info.event.extendedProps.profesional || ''}`,
+            content: `<strong>${pacNombre}</strong><br>${profNombre}${desc ? '<br><span style="opacity:0.7">' + desc + '</span>' : ''}`,
             allowHTML: true,
-            placement: 'top'
+            placement: 'top',
+            theme: 'medical'
         });
     }
 });
@@ -183,8 +189,8 @@ function crearEventoIndividual(t) {
         title: t.paciente,
         start: t.start,
         end: t.end,
-        backgroundColor: t.color || grupo.value?.color || '#00936B',
-        borderColor: t.color || grupo.value?.color || '#00936B',
+        backgroundColor: t.color || grupo.value?.color || '#0891B2',
+        borderColor: t.color || grupo.value?.color || '#0E7490',
         textColor: '#ffffff',
         classNames: ['evento-individual'],
         extendedProps: {
@@ -205,9 +211,9 @@ function crearEventoGrupal(t) {
         title: t.paciente,
         start: t.start,
         end: t.end,
-        backgroundColor: 'rgba(37, 99, 235, 0.2)',
-        borderColor: '#1d4ed8',
-        textColor: '#111827',
+        backgroundColor: 'rgba(8, 145, 178, 0.1)',
+        borderColor: '#0891B2',
+        textColor: '#134E4A',
         classNames: ['evento-grupal'],
         extendedProps: {
             tipo: 'turno_grupal',
@@ -244,9 +250,9 @@ function crearEventosAusencia(a) {
             title: `No disponible: ${a.nombre_usuario}`,
             start: a.fecha_inicio,
             end: a.fecha_fin,
-            backgroundColor: '#9ca3af',
-            borderColor: '#6b7280',
-            textColor: '#111827',
+            backgroundColor: 'rgba(239,68,68,0.12)',
+            borderColor: '#EF4444',
+            textColor: '#991B1B',
             classNames: ['evento-ausencia'],
             extendedProps: { tipo: 'ausencia', profesional: a.nombre_usuario, description: a.motivo || '' }
         }
@@ -415,143 +421,170 @@ onMounted(async () => {
     <div class="p-6 h-screen flex flex-col">
         <Toast />
 
-        <div class="flex justify-between items-center mb-4">
-            <h1 class="text-2xl font-bold text-gray-800 dark:text-white flex items-center gap-2">
-                <span class="w-4 h-4 rounded-full" :style="{ backgroundColor: grupo?.color }"></span>
-                Agenda de Grupo: {{ grupo?.nombre || 'Cargando...' }}
-            </h1>
-            <div class="text-sm text-gray-500">Turnos individuales + grupales</div>
+        <!-- Header -->
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-5">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl flex items-center justify-center shadow-sm" :style="{ backgroundColor: grupo?.color || '#0891B2' }">
+                    <i class="pi pi-users text-white text-lg"></i>
+                </div>
+                <div>
+                    <h1 class="text-2xl font-heading font-bold text-[#134E4A] dark:text-teal-100 tracking-tight">{{ grupo?.nombre || 'Cargando...' }}</h1>
+                    <p class="text-xs text-slate-400 dark:text-slate-500 mt-0.5 font-sans">Turnos individuales y grupales del equipo</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-4 flex-wrap">
+                <span class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#0891B2]/10 text-[#0891B2] dark:bg-cyan-900/30 dark:text-cyan-300 text-xs font-medium">
+                    <span class="w-2 h-2 rounded-full bg-[#0891B2] inline-block"></span> Individual
+                </span>
+                <span class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#0891B2]/5 border border-dashed border-[#0891B2] text-[#0891B2] dark:border-cyan-400 dark:text-cyan-300 text-xs font-medium">
+                    <span class="w-2 h-2 rounded-full border-2 border-dashed border-[#0891B2] dark:border-cyan-400 inline-block"></span> Grupal
+                </span>
+                <span class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400 text-xs font-medium">
+                    <span class="w-2 h-2 rounded-full bg-red-400 dark:bg-red-500 inline-block"></span> Ausencia
+                </span>
+            </div>
         </div>
 
-        <div class="flex-1 bg-surface-0 dark:bg-surface-900 rounded-xl shadow-lg p-4 overflow-hidden">
+        <!-- Calendar container -->
+        <div class="flex-1 bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-[#E0F2FE] dark:border-slate-700 p-4 overflow-hidden transition-colors">
             <FullCalendar :options="calendarOptions" class="h-full" />
         </div>
 
-        <Dialog v-model:visible="modalNuevoVisible" modal header="Nuevo turno grupal" :style="{ width: '520px' }">
-            <div class="space-y-3">
+        <!-- Modal: Nuevo turno grupal -->
+        <Dialog v-model:visible="modalNuevoVisible" modal header="Nuevo turno grupal" :style="{ width: '540px' }" :pt="{ header: { class: 'font-heading' } }">
+            <div class="space-y-4">
+                <!-- Modo selector -->
                 <div>
-                    <label class="font-semibold block mb-1">Modo de carga</label>
-                    <select v-model="nuevoTurno.modo_creacion" class="w-full p-2 border border-gray-300 rounded">
-                        <option value="simple">Simple (1 turno)</option>
-                        <option value="tanda">Tanda (dias + hora + cantidad)</option>
-                    </select>
+                    <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200">Modo de carga</label>
+                    <div class="flex gap-2">
+                        <button type="button"
+                            class="flex-1 px-4 py-2.5 rounded-lg text-sm font-medium transition-all cursor-pointer"
+                            :class="nuevoTurno.modo_creacion === 'simple' ? 'bg-[#0891B2] text-white shadow-md' : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-[#E0F2FE] dark:border-slate-600 hover:border-[#0891B2]'"
+                            @click="nuevoTurno.modo_creacion = 'simple'">
+                            <i class="pi pi-calendar mr-1.5"></i> Simple
+                        </button>
+                        <button type="button"
+                            class="flex-1 px-4 py-2.5 rounded-lg text-sm font-medium transition-all cursor-pointer"
+                            :class="nuevoTurno.modo_creacion === 'tanda' ? 'bg-[#0891B2] text-white shadow-md' : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-[#E0F2FE] dark:border-slate-600 hover:border-[#0891B2]'"
+                            @click="nuevoTurno.modo_creacion = 'tanda'">
+                            <i class="pi pi-replay mr-1.5"></i> Tanda
+                        </button>
+                    </div>
                 </div>
-                <p v-if="nuevoTurno.modo_creacion === 'simple'" class="text-sm text-gray-500">Fecha/hora: {{ nuevoTurno.fecha }}</p>
-                <div v-else class="space-y-2">
-                    <div>
-                        <label class="font-semibold block mb-1">Fecha base</label>
-                        <InputText type="date" v-model="nuevoTurno.fecha_base" class="w-full" />
+                <!-- Simple mode -->
+                <div v-if="nuevoTurno.modo_creacion === 'simple'" class="flex items-center gap-2 px-3 py-2 rounded-lg bg-[#F0FDFA] dark:bg-teal-900/20 text-[#0891B2] dark:text-cyan-300 text-sm font-medium">
+                    <i class="pi pi-calendar"></i> {{ nuevoTurno.fecha }}
+                </div>
+                <!-- Tanda mode -->
+                <div v-else class="space-y-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-[#E0F2FE] dark:border-slate-700">
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200">Fecha base</label>
+                            <InputText type="date" v-model="nuevoTurno.fecha_base" class="w-full" />
+                        </div>
+                        <div>
+                            <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200">Hora</label>
+                            <InputText type="time" v-model="nuevoTurno.hora_tanda" class="w-full" />
+                        </div>
                     </div>
                     <div>
-                        <label class="font-semibold block mb-1">Hora</label>
-                        <InputText type="time" v-model="nuevoTurno.hora_tanda" class="w-full" />
-                    </div>
-                    <div>
-                        <label class="font-semibold block mb-1">Dias</label>
-                        <div class="flex flex-wrap gap-2">
-                            <button
-                                v-for="d in DIAS_TANDA"
-                                :key="d.value"
-                                type="button"
-                                class="px-2 py-1 border rounded text-sm"
-                                :class="nuevoTurno.dias_tanda.includes(d.value) ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300'"
-                                @click="toggleDiaTanda(d.value)"
-                            >
+                        <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200">Dias de la semana</label>
+                        <div class="flex flex-wrap gap-1.5">
+                            <button v-for="d in DIAS_TANDA" :key="d.value" type="button"
+                                class="w-10 h-10 rounded-lg text-sm font-semibold transition-all cursor-pointer"
+                                :class="nuevoTurno.dias_tanda.includes(d.value) ? 'bg-[#0891B2] text-white shadow-md' : 'bg-white dark:bg-slate-700 text-slate-500 dark:text-slate-300 border border-[#E0F2FE] dark:border-slate-600 hover:border-[#0891B2]'"
+                                @click="toggleDiaTanda(d.value)">
                                 {{ d.label }}
                             </button>
                         </div>
                     </div>
                     <div>
-                        <label class="font-semibold block mb-1">Cantidad</label>
+                        <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200">Cantidad de semanas</label>
                         <InputText type="number" min="1" step="1" v-model.number="nuevoTurno.cantidad_tanda" class="w-full" />
                     </div>
                 </div>
+                <!-- Paciente -->
                 <div>
-                    <label class="font-semibold block mb-1">Paciente</label>
-                    <InputText v-model="nuevoTurno.pacienteBusqueda" @input="buscarPacientes" class="w-full" placeholder="Buscar por DNI o nombre" />
-                    <ul v-if="pacientes.length" class="border rounded mt-1 max-h-40 overflow-y-auto">
-                        <li v-for="p in pacientes" :key="p.id" class="px-2 py-1 hover:bg-gray-100 cursor-pointer" @click="seleccionarPaciente(p)">{{ p.apellido }} {{ p.nombre }} ({{ p.dni }})</li>
+                    <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200"><i class="pi pi-user mr-1.5 text-[#0891B2]"></i>Paciente</label>
+                    <InputText v-model="nuevoTurno.pacienteBusqueda" @input="buscarPacientes" class="w-full" placeholder="Buscar por DNI o nombre..." />
+                    <ul v-if="pacientes.length" class="border border-[#E0F2FE] dark:border-slate-600 rounded-lg mt-1.5 max-h-40 overflow-y-auto bg-white dark:bg-slate-800 shadow-lg">
+                        <li v-for="p in pacientes" :key="p.id" class="px-3 py-2.5 hover:bg-[#F0FDFA] dark:hover:bg-teal-900/20 cursor-pointer transition-colors text-sm border-b border-[#E0F2FE] dark:border-slate-700 last:border-0" @click="seleccionarPaciente(p)">
+                            <span class="font-medium text-[#134E4A] dark:text-slate-200">{{ p.apellido }} {{ p.nombre }}</span> <span class="text-slate-400 ml-1">DNI: {{ p.dni }}</span>
+                        </li>
                     </ul>
+                    <div v-if="nuevoTurno.paciente" class="flex items-center gap-2 mt-2 px-3 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 text-xs font-medium">
+                        <i class="pi pi-check-circle"></i> {{ nuevoTurno.paciente.apellido }} {{ nuevoTurno.paciente.nombre }}
+                    </div>
                 </div>
-                <div>
-                    <label class="font-semibold block mb-1">Motivo</label>
-                    <InputText v-model="nuevoTurno.motivo" class="w-full" />
-                </div>
-                <div>
-                    <label class="font-semibold block mb-1">Duracion (minutos)</label>
-                    <InputText type="number" min="5" step="5" v-model.number="nuevoTurno.duracion_minutos" class="w-full" />
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200"><i class="pi pi-comment mr-1.5 text-[#0891B2]"></i>Motivo</label>
+                        <InputText v-model="nuevoTurno.motivo" class="w-full" />
+                    </div>
+                    <div>
+                        <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200"><i class="pi pi-clock mr-1.5 text-[#0891B2]"></i>Duracion (min)</label>
+                        <InputText type="number" min="5" step="5" v-model.number="nuevoTurno.duracion_minutos" class="w-full" />
+                    </div>
                 </div>
             </div>
             <template #footer>
-                <Button label="Cancelar" text severity="secondary" @click="modalNuevoVisible = false" />
-                <Button label="Guardar" icon="pi pi-check" :loading="guardandoNuevo" @click="crearTurnoGrupal" />
+                <Button label="Cancelar" text severity="secondary" class="!rounded-lg" @click="modalNuevoVisible = false" />
+                <Button label="Guardar" icon="pi pi-check" :loading="guardandoNuevo" class="!rounded-lg !bg-[#0891B2] !border-[#0891B2]" @click="crearTurnoGrupal" />
             </template>
         </Dialog>
 
-        <Dialog v-model:visible="mostrarModal" modal header="Detalle" :style="{ width: '460px' }">
-            <div v-if="turnoSeleccionado" class="space-y-2">
-                <p><strong>Paciente:</strong> {{ turnoSeleccionado.paciente }}</p>
-                <p><strong>Profesional/Grupo:</strong> {{ turnoSeleccionado.profesional }}</p>
-                <p><strong>Motivo:</strong> {{ turnoSeleccionado.description || 'Sin motivo' }}</p>
-                <div class="flex justify-between mt-4">
-                    <div class="flex gap-2">
-                        <Button v-if="turnoSeleccionado.tipo === 'turno_grupal' && turnoSeleccionado.editable" label="Editar" icon="pi pi-pencil" text severity="warning" @click="abrirEdicionGrupal" />
-                        <Button v-if="turnoSeleccionado.tipo === 'turno_grupal' && turnoSeleccionado.editable" label="Eliminar" icon="pi pi-trash" text severity="danger" :loading="eliminando" @click="eliminarTurnoGrupal" />
+        <!-- Modal: Detalle turno -->
+        <Dialog v-model:visible="mostrarModal" modal header="Detalle del turno" :style="{ width: '480px' }" :pt="{ header: { class: 'font-heading' } }">
+            <div v-if="turnoSeleccionado" class="space-y-4">
+                <div class="flex items-center gap-3 p-3 rounded-lg bg-[#F0FDFA] dark:bg-teal-900/15">
+                    <div class="w-9 h-9 rounded-full bg-[#0891B2] flex items-center justify-center text-white text-sm font-heading font-bold shrink-0">
+                        {{ (turnoSeleccionado.paciente || '?')[0].toUpperCase() }}
                     </div>
-                    <Button label="Cerrar" text severity="secondary" @click="mostrarModal = false" />
+                    <div>
+                        <p class="font-semibold text-[#134E4A] dark:text-slate-200">{{ turnoSeleccionado.paciente }}</p>
+                        <p class="text-xs text-slate-400">DNI: {{ turnoSeleccionado.dni }}</p>
+                    </div>
+                </div>
+                <div class="space-y-2 text-sm">
+                    <p class="flex items-center gap-2"><i class="pi pi-users text-[#0891B2]"></i> <span class="text-slate-600 dark:text-slate-300">{{ turnoSeleccionado.profesional }}</span></p>
+                    <p class="flex items-center gap-2"><i class="pi pi-comment text-[#0891B2]"></i> <span class="text-slate-600 dark:text-slate-300">{{ turnoSeleccionado.description || 'Sin motivo' }}</span></p>
+                </div>
+                <div class="flex justify-between pt-4 border-t border-[#E0F2FE] dark:border-slate-700">
+                    <div class="flex gap-2">
+                        <Button v-if="turnoSeleccionado.tipo === 'turno_grupal' && turnoSeleccionado.editable" label="Editar" icon="pi pi-pencil" text severity="warning" class="!rounded-lg" @click="abrirEdicionGrupal" />
+                        <Button v-if="turnoSeleccionado.tipo === 'turno_grupal' && turnoSeleccionado.editable" label="Eliminar" icon="pi pi-trash" text severity="danger" :loading="eliminando" class="!rounded-lg" @click="eliminarTurnoGrupal" />
+                    </div>
+                    <Button label="Cerrar" text severity="secondary" class="!rounded-lg" @click="mostrarModal = false" />
                 </div>
             </div>
         </Dialog>
 
-        <Dialog v-model:visible="modalEditarVisible" modal header="Editar turno grupal" :style="{ width: '460px' }">
-            <div class="space-y-3">
+        <!-- Modal: Editar turno grupal -->
+        <Dialog v-model:visible="modalEditarVisible" modal header="Editar turno grupal" :style="{ width: '480px' }" :pt="{ header: { class: 'font-heading' } }">
+            <div class="space-y-4">
                 <div>
-                    <label class="font-semibold block mb-1">Fecha/hora</label>
+                    <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200"><i class="pi pi-calendar mr-1.5 text-[#0891B2]"></i>Fecha/hora</label>
                     <InputText type="datetime-local" v-model="editForm.fecha" class="w-full" />
                 </div>
-                <div>
-                    <label class="font-semibold block mb-1">Motivo</label>
-                    <InputText v-model="editForm.motivo" class="w-full" />
-                </div>
-                <div>
-                    <label class="font-semibold block mb-1">Duracion (minutos)</label>
-                    <InputText type="number" min="5" step="5" v-model.number="editForm.duracion_minutos" class="w-full" />
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200"><i class="pi pi-comment mr-1.5 text-[#0891B2]"></i>Motivo</label>
+                        <InputText v-model="editForm.motivo" class="w-full" />
+                    </div>
+                    <div>
+                        <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200"><i class="pi pi-clock mr-1.5 text-[#0891B2]"></i>Duracion (min)</label>
+                        <InputText type="number" min="5" step="5" v-model.number="editForm.duracion_minutos" class="w-full" />
+                    </div>
                 </div>
             </div>
             <template #footer>
-                <Button label="Cancelar" text severity="secondary" @click="modalEditarVisible = false" />
-                <Button label="Guardar" icon="pi pi-check" :loading="guardandoEdicion" @click="guardarEdicionGrupal" />
+                <Button label="Cancelar" text severity="secondary" class="!rounded-lg" @click="modalEditarVisible = false" />
+                <Button label="Guardar" icon="pi pi-check" :loading="guardandoEdicion" class="!rounded-lg !bg-[#0891B2] !border-[#0891B2]" @click="guardarEdicionGrupal" />
             </template>
         </Dialog>
     </div>
 </template>
 
 <style scoped>
-:deep(.evento-grupal) {
-    border-style: dashed !important;
-    border-width: 2px !important;
-}
-
-:deep(.evento-ausencia) {
-    border-style: solid !important;
-    border-width: 1px !important;
-    border-color: #6b7280 !important;
-    background-color: rgba(107, 114, 128, 0.72) !important;
-    background-image: repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.24) 0 6px, rgba(255, 255, 255, 0.08) 6px 12px) !important;
-    color: #111827 !important;
-}
-
-:deep(.fc .fc-bg-event.ausencia-background) {
-    pointer-events: none !important;
-    opacity: 1 !important;
-    border: 0 !important;
-    background-color: rgba(107, 114, 128, 0.2) !important;
-    background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0)), repeating-linear-gradient(45deg, rgba(55, 65, 81, 0.2) 0 6px, rgba(55, 65, 81, 0.08) 6px 12px) !important;
-}
-
-:deep(html.dark .fc .fc-bg-event.ausencia-background),
-:deep(.app-dark .fc .fc-bg-event.ausencia-background) {
-    background-color: rgba(75, 85, 99, 0.3) !important;
-    background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(0, 0, 0, 0)), repeating-linear-gradient(45deg, rgba(209, 213, 219, 0.14) 0 6px, rgba(209, 213, 219, 0.05) 6px 12px) !important;
-}
+/* Calendar Medical Clean theme is loaded from @/assets/calendar-medical.css */
 </style>

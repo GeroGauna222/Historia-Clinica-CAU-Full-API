@@ -9,6 +9,10 @@ export default {
 
     theme: {
         extend: {
+            fontFamily: {
+                sans: ['Noto Sans', 'sans-serif'],
+                heading: ['Figtree', 'sans-serif']
+            },
             colors: {
                 primary: {
                     DEFAULT: '#00BFA5', // verde institucional CAU
