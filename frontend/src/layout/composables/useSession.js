@@ -18,7 +18,7 @@ export function useSession() {
 
         return {
             id: userStore.id,
-            nombre: userStore.nombre || userStore.username || 'Usuario',
+            nombre: userStore.nombre || userStore.username || '',
             username: userStore.username || '',
             email: userStore.email || '',
             rol: userStore.rol || '',

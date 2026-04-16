@@ -1,9 +1,9 @@
-<script setup>
-import { ref, onMounted } from 'vue';
+﻿<script setup>
+import { ref, onMounted, computed } from 'vue';
 import api from '@/api/axios';
 import { useRouter } from 'vue-router';
+import { useUserStore } from '@/stores/user';
 
-// Imports PrimeVue
 import Button from 'primevue/button';
 import Card from 'primevue/card';
 import Dialog from 'primevue/dialog';
@@ -12,16 +12,17 @@ import Select from 'primevue/select';
 import Avatar from 'primevue/avatar';
 
 const router = useRouter();
+const userStore = useUserStore();
+
 const grupos = ref([]);
 const loading = ref(true);
+const esDirector = computed(() => (userStore.rol || '').toLowerCase().trim() === 'director');
 
-// Modal
 const modalMiembros = ref(false);
 const grupoActual = ref(null);
 const miembros = ref([]);
 const cargandoMiembros = ref(false);
 
-// Agregar miembros
 const usuarios = ref([]);
 const nuevoMiembro = ref('');
 
@@ -45,7 +46,7 @@ function crearGrupo() {
 }
 
 async function eliminar(grupo) {
-    if (!confirm(`¿Eliminar el grupo "${grupo.nombre}"?`)) return;
+    if (!confirm(`Eliminar el grupo "${grupo.nombre}"?`)) return;
 
     try {
         await api.delete(`/grupos/${grupo.id}`, { withCredentials: true });
@@ -61,63 +62,53 @@ async function verMiembros(grupo) {
     cargandoMiembros.value = true;
 
     try {
-        const [resMiembros, resUsuarios] = await Promise.all([api.get(`/grupos/${grupo.id}/miembros`, { withCredentials: true }), api.get('/usuarios', { withCredentials: true })]);
-
-        // Lista de miembros actuales
+        const resMiembros = await api.get(`/grupos/${grupo.id}/miembros`, { withCredentials: true });
         const miembrosActuales = resMiembros.data || [];
         miembros.value = miembrosActuales;
 
-        // 🔓 CORRECCIÓN: Quitamos el filtro de 'profesional' o 'area'
-        // Ahora solo ocultamos a los que YA son miembros del grupo
-        const todosUsuarios = resUsuarios.data || [];
-
-        usuarios.value = todosUsuarios.filter((u) => {
-            const yaEsMiembro = miembrosActuales.some((m) => m.id === u.id);
-            return !yaEsMiembro; // Si NO es miembro, lo mostramos para agregar
-        });
+        if (esDirector.value) {
+            const resUsuarios = await api.get('/usuarios', { withCredentials: true });
+            const todosUsuarios = resUsuarios.data || [];
+            usuarios.value = todosUsuarios.filter((u) => !miembrosActuales.some((m) => m.id === u.id));
+        } else {
+            usuarios.value = [];
+        }
     } catch (err) {
-        console.error('Error cargando datos:', err);
+        console.error('Error cargando datos del grupo:', err);
     } finally {
         cargandoMiembros.value = false;
     }
 }
 
 async function agregarMiembro() {
-    if (!nuevoMiembro.value) return;
+    if (!esDirector.value || !nuevoMiembro.value) return;
 
     try {
         await api.post(`/grupos/${grupoActual.value.id}/miembros`, { usuario_id: nuevoMiembro.value }, { withCredentials: true });
 
-        // Buscamos el usuario agregado en la lista 'usuarios' para pasarlo a 'miembros'
         const userIndex = usuarios.value.findIndex((u) => u.id === nuevoMiembro.value);
-
         if (userIndex !== -1) {
-            // Lo agregamos a la lista visual de miembros
             miembros.value.push(usuarios.value[userIndex]);
-            // Lo quitamos del desplegable para que no se pueda volver a agregar
             usuarios.value.splice(userIndex, 1);
         }
 
         nuevoMiembro.value = '';
     } catch (err) {
         console.error('Error agregando miembro:', err);
-        // Sería bueno agregar un Toast aquí si tuvieras useToast importado
-        alert('Error al agregar miembro: Verifique que sea Profesional o Área.');
+        alert('Error al agregar miembro.');
     }
 }
 
 async function quitarMiembro(m) {
-    if (!confirm(`¿Quitar a ${m.nombre}?`)) return;
+    if (!esDirector.value) return;
+    if (!confirm(`Quitar a ${m.nombre}?`)) return;
 
     try {
         await api.delete(`/grupos/${grupoActual.value.id}/miembros/${m.id}`, { withCredentials: true });
-        // Quitar de la lista visual de miembros
         miembros.value = miembros.value.filter((x) => x.id !== m.id);
 
-        // (Opcional) Devolverlo a la lista de "disponibles" si cumple el rol
         if (['profesional', 'area'].includes(m.rol)) {
             usuarios.value.push(m);
-            // Ordenar alfabéticamente para mantener orden
             usuarios.value.sort((a, b) => a.nombre.localeCompare(b.nombre));
         }
     } catch (err) {
@@ -128,6 +119,10 @@ async function quitarMiembro(m) {
 function verCalendario(grupo) {
     router.push({ name: 'CalendarioGrupo', params: { grupoId: grupo.id } });
 }
+
+function irPosteos(grupo) {
+    router.push({ name: 'PosteosGrupo', params: { grupoId: grupo.id } });
+}
 </script>
 
 <template>
@@ -135,7 +130,7 @@ function verCalendario(grupo) {
         <div class="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
             <h1 class="text-3xl font-bold text-gray-800 dark:text-white">Agendas Grupales</h1>
 
-            <Button label="Nuevo Grupo" icon="pi pi-plus" @click="crearGrupo" raised />
+            <Button v-if="esDirector" label="Nuevo Grupo" icon="pi pi-plus" @click="crearGrupo" raised />
         </div>
 
         <div v-if="loading" class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
@@ -152,7 +147,7 @@ function verCalendario(grupo) {
         <div v-else-if="grupos.length === 0" class="text-center py-10">
             <i class="pi pi-folder-open text-6xl text-gray-300 dark:text-gray-600 mb-4"></i>
             <p class="text-gray-500 dark:text-gray-400 text-lg">No hay grupos registrados.</p>
-            <Button label="Crear el primero" class="mt-4" text @click="crearGrupo" />
+            <Button v-if="esDirector" label="Crear el primero" class="mt-4" text @click="crearGrupo" />
         </div>
 
         <div v-else class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
@@ -163,7 +158,7 @@ function verCalendario(grupo) {
                             <span class="text-xl font-bold truncate" :title="grupo.nombre">{{ grupo.nombre }}</span>
                             <span v-if="grupo.es_rehabilitacion" class="text-[10px] uppercase tracking-wide px-2 py-1 rounded bg-green-100 text-green-700 border border-green-300">Rehab</span>
                         </div>
-                        <div class="flex gap-1">
+                        <div v-if="esDirector" class="flex gap-1">
                             <Button icon="pi pi-pencil" text rounded size="small" @click="editarGrupo(grupo)" v-tooltip.top="'Editar'" />
                             <Button icon="pi pi-trash" text rounded severity="danger" size="small" @click="eliminar(grupo)" v-tooltip.top="'Eliminar'" />
                         </div>
@@ -172,7 +167,7 @@ function verCalendario(grupo) {
 
                 <template #content>
                     <p class="text-gray-600 dark:text-gray-300 text-sm h-10 line-clamp-2">
-                        {{ grupo.descripcion || 'Sin descripción' }}
+                        {{ grupo.descripcion || 'Sin descripcion' }}
                     </p>
                 </template>
 
@@ -180,6 +175,7 @@ function verCalendario(grupo) {
                     <div class="flex flex-col gap-2 mt-2">
                         <Button label="Ver Miembros" icon="pi pi-users" severity="secondary" outlined class="w-full" @click="verMiembros(grupo)" />
                         <Button label="Ver Calendario" icon="pi pi-calendar" class="w-full" @click="verCalendario(grupo)" />
+                        <Button label="Posteos" icon="pi pi-comments" severity="contrast" outlined class="w-full" @click="irPosteos(grupo)" />
                     </div>
                 </template>
             </Card>
@@ -200,12 +196,12 @@ function verCalendario(grupo) {
                                 <span class="text-xs text-gray-500 capitalize">{{ m.rol }}</span>
                             </div>
                         </div>
-                        <Button icon="pi pi-times" text rounded severity="danger" @click="quitarMiembro(m)" v-tooltip.left="'Quitar del grupo'" />
+                        <Button v-if="esDirector" icon="pi pi-times" text rounded severity="danger" @click="quitarMiembro(m)" v-tooltip.left="'Quitar del grupo'" />
                     </li>
-                    <li v-if="miembros.length === 0" class="text-center py-4 text-gray-500 text-sm">Este grupo aún no tiene miembros.</li>
+                    <li v-if="miembros.length === 0" class="text-center py-4 text-gray-500 text-sm">Este grupo aun no tiene miembros.</li>
                 </ul>
 
-                <div class="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg border border-gray-100 dark:border-gray-700">
+                <div v-if="esDirector" class="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg border border-gray-100 dark:border-gray-700">
                     <label class="block text-sm font-semibold mb-2 text-gray-700 dark:text-gray-300">Agregar profesional:</label>
                     <div class="flex gap-2">
                         <Select v-model="nuevoMiembro" :options="usuarios" optionLabel="nombre" optionValue="id" placeholder="Seleccionar..." class="w-full" filter />

@@ -101,6 +101,8 @@ from app.routes.ausencias_routes import bp_ausencias
 from app.routes.dashboard_routes import bp_dashboard
 from app.routes.disponibilidades_routes import bp_disponibilidades
 from app.routes.grupos_routes import bp_grupos
+from app.routes.comunicados_routes import bp_comunicados
+from app.routes.grupo_posteos_routes import bp_grupo_posteos
 from app.routes.health_routes import bp_health
 
 app.register_blueprint(bp_auth)
@@ -112,6 +114,8 @@ app.register_blueprint(bp_ausencias)
 app.register_blueprint(bp_dashboard)
 app.register_blueprint(bp_disponibilidades)
 app.register_blueprint(bp_grupos)
+app.register_blueprint(bp_comunicados)
+app.register_blueprint(bp_grupo_posteos)
 app.register_blueprint(bp_blockchain)
 app.register_blueprint(bp_health)
 

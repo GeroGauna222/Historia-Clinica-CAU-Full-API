@@ -10,13 +10,14 @@ const userStore = useUserStore();
 
 async function handleLogout() {
     userStore.startLogout();
-    try {
-        await authService.logout();
-    } catch (e) {
+    const logoutPromise = authService.logout().catch((e) => {
         console.error('Error cerrando sesion:', e);
-    } finally {
-        await router.replace('/auth/login?logged_out=1');
+    });
+    try {
         userStore.logout();
+        await router.replace('/auth/login?logged_out=1');
+    } finally {
+        await logoutPromise;
     }
 }
 
@@ -61,6 +62,10 @@ const model = computed(() => {
                 { label: 'Crear Usuario', icon: 'pi pi-fw pi-user-edit', to: '/usuarios/crear' },
                 { label: 'Inactivos', icon: 'pi pi-fw pi-user-minus', to: '/usuarios/inactivos' }
             ]
+        },
+        {
+            label: 'Comunicados',
+            items: [{ label: 'Institucionales', icon: 'pi pi-fw pi-megaphone', to: '/comunicados' }]
         },
         {
             label: 'Agendas Grupales',

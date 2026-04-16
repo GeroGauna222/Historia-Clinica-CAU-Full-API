@@ -457,16 +457,20 @@ onMounted(async () => {
                 <div>
                     <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200">Modo de carga</label>
                     <div class="flex gap-2">
-                        <button type="button"
+                        <button
+                            type="button"
                             class="flex-1 px-4 py-2.5 rounded-lg text-sm font-medium transition-all cursor-pointer"
                             :class="nuevoTurno.modo_creacion === 'simple' ? 'bg-[#0891B2] text-white shadow-md' : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-[#E0F2FE] dark:border-slate-600 hover:border-[#0891B2]'"
-                            @click="nuevoTurno.modo_creacion = 'simple'">
+                            @click="nuevoTurno.modo_creacion = 'simple'"
+                        >
                             <i class="pi pi-calendar mr-1.5"></i> Simple
                         </button>
-                        <button type="button"
+                        <button
+                            type="button"
                             class="flex-1 px-4 py-2.5 rounded-lg text-sm font-medium transition-all cursor-pointer"
                             :class="nuevoTurno.modo_creacion === 'tanda' ? 'bg-[#0891B2] text-white shadow-md' : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-[#E0F2FE] dark:border-slate-600 hover:border-[#0891B2]'"
-                            @click="nuevoTurno.modo_creacion = 'tanda'">
+                            @click="nuevoTurno.modo_creacion = 'tanda'"
+                        >
                             <i class="pi pi-replay mr-1.5"></i> Tanda
                         </button>
                     </div>
@@ -490,10 +494,16 @@ onMounted(async () => {
                     <div>
                         <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200">Dias de la semana</label>
                         <div class="flex flex-wrap gap-1.5">
-                            <button v-for="d in DIAS_TANDA" :key="d.value" type="button"
+                            <button
+                                v-for="d in DIAS_TANDA"
+                                :key="d.value"
+                                type="button"
                                 class="w-10 h-10 rounded-lg text-sm font-semibold transition-all cursor-pointer"
-                                :class="nuevoTurno.dias_tanda.includes(d.value) ? 'bg-[#0891B2] text-white shadow-md' : 'bg-white dark:bg-slate-700 text-slate-500 dark:text-slate-300 border border-[#E0F2FE] dark:border-slate-600 hover:border-[#0891B2]'"
-                                @click="toggleDiaTanda(d.value)">
+                                :class="
+                                    nuevoTurno.dias_tanda.includes(d.value) ? 'bg-[#0891B2] text-white shadow-md' : 'bg-white dark:bg-slate-700 text-slate-500 dark:text-slate-300 border border-[#E0F2FE] dark:border-slate-600 hover:border-[#0891B2]'
+                                "
+                                @click="toggleDiaTanda(d.value)"
+                            >
                                 {{ d.label }}
                             </button>
                         </div>
@@ -508,7 +518,12 @@ onMounted(async () => {
                     <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200"><i class="pi pi-user mr-1.5 text-[#0891B2]"></i>Paciente</label>
                     <InputText v-model="nuevoTurno.pacienteBusqueda" @input="buscarPacientes" class="w-full" placeholder="Buscar por DNI o nombre..." />
                     <ul v-if="pacientes.length" class="border border-[#E0F2FE] dark:border-slate-600 rounded-lg mt-1.5 max-h-40 overflow-y-auto bg-white dark:bg-slate-800 shadow-lg">
-                        <li v-for="p in pacientes" :key="p.id" class="px-3 py-2.5 hover:bg-[#F0FDFA] dark:hover:bg-teal-900/20 cursor-pointer transition-colors text-sm border-b border-[#E0F2FE] dark:border-slate-700 last:border-0" @click="seleccionarPaciente(p)">
+                        <li
+                            v-for="p in pacientes"
+                            :key="p.id"
+                            class="px-3 py-2.5 hover:bg-[#F0FDFA] dark:hover:bg-teal-900/20 cursor-pointer transition-colors text-sm border-b border-[#E0F2FE] dark:border-slate-700 last:border-0"
+                            @click="seleccionarPaciente(p)"
+                        >
                             <span class="font-medium text-[#134E4A] dark:text-slate-200">{{ p.apellido }} {{ p.nombre }}</span> <span class="text-slate-400 ml-1">DNI: {{ p.dni }}</span>
                         </li>
                     </ul>
@@ -546,8 +561,12 @@ onMounted(async () => {
                     </div>
                 </div>
                 <div class="space-y-2 text-sm">
-                    <p class="flex items-center gap-2"><i class="pi pi-users text-[#0891B2]"></i> <span class="text-slate-600 dark:text-slate-300">{{ turnoSeleccionado.profesional }}</span></p>
-                    <p class="flex items-center gap-2"><i class="pi pi-comment text-[#0891B2]"></i> <span class="text-slate-600 dark:text-slate-300">{{ turnoSeleccionado.description || 'Sin motivo' }}</span></p>
+                    <p class="flex items-center gap-2">
+                        <i class="pi pi-users text-[#0891B2]"></i> <span class="text-slate-600 dark:text-slate-300">{{ turnoSeleccionado.profesional }}</span>
+                    </p>
+                    <p class="flex items-center gap-2">
+                        <i class="pi pi-comment text-[#0891B2]"></i> <span class="text-slate-600 dark:text-slate-300">{{ turnoSeleccionado.description || 'Sin motivo' }}</span>
+                    </p>
                 </div>
                 <div class="flex justify-between pt-4 border-t border-[#E0F2FE] dark:border-slate-700">
                     <div class="flex gap-2">

@@ -10,7 +10,7 @@ const userStore = useUserStore();
 
 const menuActive = ref(false);
 const menuRef = ref(null);
-const imageError = ref(false); // Variable para saber si la imagen falló
+const imageError = ref(false);
 
 onMounted(async () => {
     if (!userStore.id) {
@@ -23,28 +23,22 @@ onBeforeUnmount(() => {
     document.removeEventListener('click', onOutsideClick);
 });
 
-// URL de la foto (escuchando la versión para romper caché)
 const fotoUrl = computed(() => {
-    // Si hubo error de carga, devolvemos null para mostrar la inicial
     if (imageError.value) return null;
-
     if (userStore.foto) {
         return buildFotoURL(userStore.foto, userStore.fotoVersion);
     }
     return null;
 });
 
-// Inicial del nombre
 const inicial = computed(() => (userStore.nombre ? userStore.nombre.charAt(0).toUpperCase() : 'U'));
 
-// Resetear el error si cambia la versión de la foto (nueva subida)
 userStore.$subscribe((mutation) => {
     if (mutation.events.key === 'fotoVersion') {
         imageError.value = false;
     }
 });
 
-// --- ACCIONES ---
 const toggleMenu = () => {
     menuActive.value = !menuActive.value;
 };
@@ -70,14 +64,15 @@ const irPassword = () => {
 
 const logout = async () => {
     userStore.startLogout();
+    const logoutPromise = authService.logout().catch((e) => {
+        console.error('Error cerrando sesion en backend:', e);
+    });
     try {
-        await authService.logout();
-    } catch (e) {
-        console.error('Error cerrando sesión en backend:', e);
-    } finally {
         closeMenu();
         userStore.logout();
-        router.replace('/auth/login?logged_out=1');
+        await router.replace('/auth/login?logged_out=1');
+    } finally {
+        await logoutPromise;
     }
 };
 </script>
@@ -123,14 +118,14 @@ const logout = async () => {
 
                     <button @click="irPassword" class="flex w-full items-center px-4 py-2.5 text-sm text-color hover:bg-primary/10 transition text-left">
                         <i class="pi pi-key mr-3 text-muted-color"></i>
-                        Cambiar contraseña
+                        Cambiar contrasena
                     </button>
 
                     <div class="border-t border-surface-200 dark:border-surface-700 my-1"></div>
 
                     <button @click="logout" class="flex w-full items-center px-4 py-2.5 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-950 transition text-left">
                         <i class="pi pi-sign-out mr-3"></i>
-                        Cerrar Sesión
+                        Cerrar Sesion
                     </button>
                 </div>
             </div>

@@ -1,7 +1,6 @@
 # TODO - Auditoria tecnica (bugs y riesgos)
 
-Fecha de auditoria: 2026-03-09
-Estado: Pendiente de correccion
+Fecha de auditoria: 2026-04-13
 
 ## Como usar este archivo
 
@@ -56,7 +55,7 @@ Estado: Pendiente de correccion
   - Criterio de cierre: rotacion completa + eliminacion de secretos del repo.
   - Estado: parcial. Se eliminaron hardcodeados SQL y se separo `production.env`; falta rotacion real de secretos y saneo de historico Git.
 
-- [ ] **P0-07 - Levantar dominio - pending**
+- [x] **P0-07 - Levantar dominio - pending**
   - Impacto: roles no permitidos pueden cambiar duraciones ajenas.
   - Referencia: `SECURE-DOMAIN.md`.
   - Nota de Negocio: NIC Argentina y HTTPs
@@ -207,21 +206,24 @@ Estado: Pendiente de correccion
 
 ### Funcionalidad General
 
-- [ ] Cuando toco el cerrar sesion, por un momento el nombre del usuario pasa a ser 'Usuario' y luego de tocar algo mas recien cierra
+- [x] Cuando toco el cerrar sesion, por un momento el nombre del usuario pasa a ser 'Usuario' y luego de tocar algo mas recien cierra
+  - Estado: ajustado logout para limpiar store y redirigir de inmediato; se removio fallback a `Usuario`.
 
-### Agenda
+- [x] Agendas: por defecto, cuando entro a la seccion debe mostrarme mi agenda, luego si tengo el permiso tendre el desplegable
+  - Estado: ahora Director/Administrativo ven desplegable, pero la seleccion inicial es su propia agenda.
 
-- [ ] Se deberían poder ver agendas de todos los demas desde el rol de Administrativo y Director, pero deben verse como Agendas separadas, es decir, un desplegable de sujetos para poder ver cada agenda por separado, y poder con un click agregar turno a esa agenda.
-- [ ] En la agenda, se setea la Configuracion de Horarios de turno: esto DEBE ser el que define como se separa mi Agenda, si seteo cada 20 minutos, la agenda debe permitir solo bloquear/agregar turnos para esos cuadros de horarios
-- [ ] Los bloqueos de agenda deben permitir ingresar el horario de bloqueo (Inicio/Fin)
-- [ ] Cuando seteo la Disponibilidad, en MI agenda, debe figurar grayed out los dias y horarios en los que no estaría disponible.
+- [x] Los botones no permitidos NO deben ser visibles para quien no puede usarlos
+  - Estado: ocultadas acciones de gestion de grupos para no-director y bloqueada carga de usuarios no permitida.
 
-### Grupos
+- [x] Agregar alternativas a Turnos ademas de Bloqueos:
+  - Reunion
+  - Turno
+  - Bloqueo
+  - Ausencia
+  - Estado: modal de eventos de agenda con selector de tipo y persistencia via `motivo` etiquetado.
 
-- [ ] Cambiaremos como funcionan Grupos: Debe poderse agregar turnos a un Grupo, estos deben agregarsele a la agenda de todos los profesionales del grupo de forma directa, sea o no que el sujeto este disponible.
-- [ ] Los turnos en Grupos deben poder superponerse con los turnos individuales de los profesionales.
-- [ ] Cada profesional tendrá SU disponibilidad, pero si el grupo tiene un turno, este se le agregará a todos los profesionales del grupo de forma directa, sea o no que el sujeto este disponible. (se 'superpone' a la disponibilidad de cada profesional el turno grupal)
+- [x] Agregar seccion de Comunicados, donde Directivos y Administrativos pueden postear Avisos institucionales
+  - Estado: creada vista + servicios + endpoints `/api/comunicados`.
 
-### New
-
-- [ ] Así como está Agendas Grupales, tendremos la sección 'Módulo de Rehabilitación' que funcionará como una agenda a la que se agregan, en lugar de profesionales, Grupos. Funcionará como un visor de las Agendas Grupales juntas, pero con la diferencia de que se podrán agregar turnos directamente a los grupos desde esta agenda.
+- [x] Agregar seccion de Posteos de Grupo en cada grupo, donde los integrantes del Equipo pueden postear comunicados para que el grupo lea
+  - Estado: creada vista por grupo + servicios + endpoints `/api/grupos/<grupo_id>/posteos`.

@@ -12,16 +12,19 @@ SET time_zone = '-3:00';
 --  ELIMINAR TABLAS (solo para entorno de desarrollo)
 -- ==============================================
 DROP TABLE IF EXISTS auditorias_blockchain;
-DROP TABLE IF EXISTS historias;
-DROP TABLE IF EXISTS turnos;
 DROP TABLE IF EXISTS evolucion_archivos;
-DROP TABLE IF EXISTS evoluciones;
-DROP TABLE IF EXISTS pacientes;
-DROP TABLE IF EXISTS usuarios;
+DROP TABLE IF EXISTS turnos;
 DROP TABLE IF EXISTS ausencias;
 DROP TABLE IF EXISTS disponibilidades;
-DROP TABLE IF EXISTS grupos_profesionales;
+DROP TABLE IF EXISTS turnos_grupales;
+DROP TABLE IF EXISTS grupo_posteos;
 DROP TABLE IF EXISTS grupo_miembros;
+DROP TABLE IF EXISTS historias;
+DROP TABLE IF EXISTS evoluciones;
+DROP TABLE IF EXISTS comunicados;
+DROP TABLE IF EXISTS pacientes;
+DROP TABLE IF EXISTS grupos_profesionales;
+DROP TABLE IF EXISTS usuarios;
 
 -- ==============================================
 -- TABLA DE USUARIOS
@@ -215,6 +218,35 @@ CREATE TABLE grupo_miembros (
     UNIQUE KEY idx_grupo_usuario (grupo_id, usuario_id),
     FOREIGN KEY (grupo_id) REFERENCES grupos_profesionales(id) ON DELETE CASCADE,
     FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
+) ENGINE=InnoDB
+  DEFAULT CHARSET=utf8mb4
+  COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE comunicados (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    titulo VARCHAR(180) NOT NULL,
+    contenido TEXT NOT NULL,
+    autor_id INT NOT NULL,
+    creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    actualizado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (autor_id) REFERENCES usuarios(id),
+    INDEX idx_comunicados_creado_en (creado_en)
+) ENGINE=InnoDB
+  DEFAULT CHARSET=utf8mb4
+  COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE grupo_posteos (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    grupo_id INT NOT NULL,
+    autor_id INT NOT NULL,
+    titulo VARCHAR(180) DEFAULT NULL,
+    contenido TEXT NOT NULL,
+    creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    actualizado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (grupo_id) REFERENCES grupos_profesionales(id) ON DELETE CASCADE,
+    FOREIGN KEY (autor_id) REFERENCES usuarios(id) ON DELETE CASCADE,
+    INDEX idx_grupo_posteos_grupo (grupo_id),
+    INDEX idx_grupo_posteos_creado (creado_en)
 ) ENGINE=InnoDB
   DEFAULT CHARSET=utf8mb4
   COLLATE=utf8mb4_unicode_ci;

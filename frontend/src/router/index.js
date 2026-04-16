@@ -135,6 +135,12 @@ const router = createRouter({
                     name: 'disponibilidadProfesional',
                     component: () => import('@/views/pages/disponibilidades/DisponibilidadProfesional.vue')
                 },
+                {
+                    path: 'comunicados',
+                    name: 'comunicados',
+                    component: () => import('@/views/pages/comunicados/Comunicados.vue'),
+                    meta: { requiresAuth: true }
+                },
 
                 // 📌 Grupos
                 {
@@ -147,6 +153,12 @@ const router = createRouter({
                     path: 'calendario-grupo/:grupoId',
                     name: 'CalendarioGrupo',
                     component: () => import('../views/pages/turnos/CalendarioGrupo.vue'),
+                    meta: { requiresAuth: true }
+                },
+                {
+                    path: 'grupos/:grupoId/posteos',
+                    name: 'PosteosGrupo',
+                    component: () => import('../views/pages/grupos/PosteosGrupo.vue'),
                     meta: { requiresAuth: true }
                 },
                 {
