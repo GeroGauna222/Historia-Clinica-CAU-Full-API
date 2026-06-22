@@ -14,6 +14,7 @@ import Message from 'primevue/message';
 import { useRoute } from 'vue-router';
 
 const historiaId = ref(null);
+const tipoEntidad = ref('historia');
 const resultado = ref(null);
 const error = ref(null);
 const loadingAccion = ref(false);
@@ -39,13 +40,19 @@ const registrarEnBfa = async () => {
     limpiarEstado();
     loadingAccion.value = true;
     try {
-        const { data } = await api.post(`/blockchain/registrar/${historiaId.value}`, {}, { withCredentials: true });
+        const endpoint = tipoEntidad.value === 'evolucion' ? `/blockchain/registrar/evolucion/${historiaId.value}` : `/blockchain/registrar/${historiaId.value}`;
+        const { data } = await api.post(endpoint, {}, { withCredentials: true });
         resultado.value = {
             accion: 'registrar',
-            mensaje: data.mensaje || 'Hash publicado correctamente',
+            mensaje: data.mensaje || 'Hash sellado correctamente',
+            tipo: tipoEntidad.value,
+            entidad_id: data.historia_id || data.evolucion_id || historiaId.value,
             hash_local: data.hash,
             hash_bfa: null,
             tx_hash: data.tx_hash,
+            estado_bfa: data.estado_bfa || 'anclado',
+            block_number: null,
+            attestation_time: null,
             valido: null
         };
     } catch (e) {
@@ -63,14 +70,21 @@ const verificar = async () => {
     limpiarEstado();
     loadingAccion.value = true;
     try {
-        const { data } = await api.get(`/blockchain/verificar/${historiaId.value}`, { withCredentials: true });
+        const endpoint = tipoEntidad.value === 'evolucion' ? `/blockchain/verificar/evolucion/${historiaId.value}` : `/blockchain/verificar/${historiaId.value}`;
+        const { data } = await api.get(endpoint, { withCredentials: true });
         resultado.value = {
             accion: 'verificar',
             mensaje: data.mensaje,
+            tipo: tipoEntidad.value,
+            entidad_id: data.historia_id || data.evolucion_id || historiaId.value,
             hash_local: data.hash_local,
             hash_bfa: data.hash_bfa,
             tx_hash: data.tx_hash,
-            valido: !!data.valido
+            estado_bfa: data.estado_bfa,
+            block_number: data.block_number ?? null,
+            attestation_time: data.attestation_time ?? null,
+            // valido es true (verificado), false (alterado) o null (pendiente de blockchain)
+            valido: data.valido ?? null
         };
         // refrescamos auditorías para que aparezca la última verificación
         await cargarAuditorias();
@@ -124,6 +138,11 @@ onMounted(() => {
     const pathParts = window.location.pathname.split('/');
     const posibleId = parseInt(pathParts[pathParts.length - 1]);
     const queryId = route.query.id ? parseInt(route.query.id) : null;
+    const queryTipo = route.query.tipo ? String(route.query.tipo) : null;
+
+    if (queryTipo === 'historia' || queryTipo === 'evolucion') {
+        tipoEntidad.value = queryTipo;
+    }
 
     if (!isNaN(posibleId)) {
         historiaId.value = posibleId;
@@ -141,7 +160,15 @@ onMounted(() => {
     <div class="p-4 md:p-6 max-w-6xl mx-auto space-y-6">
         <div class="flex items-end gap-4 flex-wrap">
             <div class="w-64">
-                <label class="block text-sm mb-1">ID de historia</label>
+                <label class="block text-sm mb-1">Tipo</label>
+                <select v-model="tipoEntidad" class="w-full p-2 border rounded bg-white">
+                    <option value="historia">Historia consolidada</option>
+                    <option value="evolucion">Evolucion</option>
+                </select>
+            </div>
+
+            <div class="w-64">
+                <label class="block text-sm mb-1">ID</label>
                 <!-- Si no usás PrimeVue InputNumber, podés cambiar por input type="number" -->
                 <InputNumber v-model="historiaId" inputClass="w-full p-2 border rounded" :useGrouping="false" :min="1" placeholder="Ej: 12" />
             </div>
@@ -169,27 +196,40 @@ onMounted(() => {
                     <span class="text-lg font-semibold">
                         {{ resultado.accion === 'registrar' ? 'Registro en Blockchain' : 'Verificación de Integridad' }}
                     </span>
-                    <Tag v-if="resultado.valido === true" value="VÁLIDO" severity="success" />
-                    <Tag v-else-if="resultado.valido === false" value="NO VÁLIDO" severity="danger" />
-                    <Tag v-else value="OK" severity="info" />
+                    <Tag v-if="resultado.estado_bfa === 'verificado'" value="VÁLIDO" severity="success" />
+                    <Tag v-else-if="resultado.estado_bfa === 'error'" value="NO VÁLIDO" severity="danger" />
+                    <Tag v-else-if="resultado.estado_bfa === 'pendiente'" value="PENDIENTE" severity="warn" />
+                    <Tag v-else value="SELLADO" severity="info" />
                 </div>
             </template>
             <template #content>
                 <div class="grid md:grid-cols-2 gap-4 text-sm">
                     <div class="space-y-1">
+                        <div class="font-medium">Entidad</div>
+                        <div class="font-mono break-all">{{ resultado.tipo }} #{{ resultado.entidad_id }}</div>
+                    </div>
+                    <div class="space-y-1">
                         <div class="font-medium">Mensaje</div>
                         <div class="font-mono break-all">{{ resultado.mensaje }}</div>
                     </div>
-                    <div class="space-y-1">
-                        <div class="font-medium">Tx Hash</div>
+                    <div class="space-y-1" v-if="resultado.block_number">
+                        <div class="font-medium">Bloque BFA</div>
+                        <div class="font-mono break-all">#{{ resultado.block_number }}</div>
+                    </div>
+                    <div class="space-y-1" v-if="resultado.attestation_time">
+                        <div class="font-medium">Sellado en blockchain</div>
+                        <div class="font-mono break-all">{{ resultado.attestation_time }}</div>
+                    </div>
+                    <div class="space-y-1 md:col-span-2">
+                        <div class="font-medium">Recibo TSA (rd)</div>
                         <div class="font-mono break-all">{{ resultado.tx_hash || '—' }}</div>
                     </div>
                     <div class="space-y-1 md:col-span-2">
                         <div class="font-medium">Hash local (recalculado / registrado)</div>
                         <div class="font-mono break-all">{{ resultado.hash_local || '—' }}</div>
                     </div>
-                    <div class="space-y-1 md:col-span-2" v-if="resultado.hash_bfa !== null">
-                        <div class="font-medium">Hash en BFA (tx.input)</div>
+                    <div class="space-y-1 md:col-span-2" v-if="resultado.hash_bfa">
+                        <div class="font-medium">Hash sellado en BFA</div>
                         <div class="font-mono break-all">{{ resultado.hash_bfa || '—' }}</div>
                     </div>
                 </div>
@@ -228,7 +268,14 @@ onMounted(() => {
                     >
                         <Column field="fecha" header="Fecha" sortable />
                         <Column field="usuario" header="Usuario" sortable />
+                        <Column field="entidad_tipo" header="Tipo" sortable />
+                        <Column field="entidad_id" header="Entidad" sortable />
                         <Column field="historia_id" header="Historia" sortable />
+                        <Column field="tx_hash" header="Tx">
+                            <template #body="{ data }">
+                                <span class="font-mono break-all block max-w-[220px] truncate" :title="data.tx_hash">{{ data.tx_hash || '-' }}</span>
+                            </template>
+                        </Column>
                         <Column header="Resultado">
                             <template #body="{ data }">
                                 <Tag :value="data.valido ? 'VÁLIDO' : 'NO VÁLIDO'" :severity="data.valido ? 'success' : 'danger'" />

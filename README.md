@@ -1,9 +1,9 @@
 # 🏥 Historia Clínica CAU – Full API  
-**Flask + React + MySQL + Docker + Nginx + Blockchain Federal Argentina (BFA)**
+**Flask + Vue 3 + MySQL + Docker + Nginx + Blockchain Federal Argentina (BFA)**
 
 Sistema web para la gestión de **historias clínicas unificadas** y **agendas médicas**, desarrollado como **Trabajo Final de Ingeniería en Telecomunicaciones (UNSAM)**.
 
-La solución integra un backend API en Flask, un frontend en React (Vite) y persistencia en MySQL, incorporando **auditoría de integridad** mediante hashing y (opcionalmente) publicación/verificación en **BFA**.
+La solución integra un backend API en Flask, un frontend en Vue 3 (Vite) y persistencia en MySQL, incorporando **auditoría de integridad** mediante hashing y (opcionalmente) sellado/verificación en **BFA** a través de su API oficial de **Timestamp Authority (TSA)**.
 
 ---
 
@@ -65,7 +65,7 @@ historia_clinica_bfa/
 │       ├── services/            # Servicios (BFA / lógica)
 │       ├── main.py              # Entry Flask
 │       └── Dockerfile
-├── frontend/                    # React + Vite
+├── frontend/                    # Vue 3 + Vite
 ├── nginx/                       # Reverse proxy
 ├── db/init.sql                  # Esquema MySQL
 └── docker-compose.yml
@@ -107,10 +107,8 @@ MAIL_USERNAME=tu_email@gmail.com
 MAIL_PASSWORD=tu_app_password
 MAIL_DEFAULT_SENDER=tu_email@gmail.com
 
-# Blockchain (opcional)
-PRIVATE_KEY_BFA=0x...
-ADDRESS_BFA=0x...
-BFA_RPC_URL=http://bfa-node:8545
+# Blockchain (opcional - BFA TSA API)
+BFA_TSA_URL=https://tsaapi.bfa.ar/api/tsa
 ```
 
 ### 3) Build + up
@@ -139,14 +137,26 @@ docker compose --env-file production.env up -d --build
 
 ---
 
-## ⛓️ Integridad y Blockchain (BFA)
+## ⛓️ Integridad y Blockchain (BFA TSA API)
 
-Flujo típico:
+El sellado de integridad usa la **API oficial de Timestamp Authority (TSA)** de la BFA (`tsaapi.bfa.ar`), en lugar de un nodo Geth local. Esto elimina el contenedor `bfa-node` y la dependencia de `web3`, bajando drásticamente el consumo de RAM/CPU.
 
-1. Generar **hash SHA-256** del contenido clínico (o del registro consolidado).
-2. Guardar el hash localmente.
-3. (Opcional) Publicar el hash en BFA como transacción.
-4. Verificar integridad comparando **hash BD ↔ hash blockchain**.
+### Flujo de auditoría
+
+1. El sistema genera un **hash SHA-256** del contenido clínico consolidado y lo guarda localmente (`hash_local`).
+2. El hash se sella mediante `POST {BFA_TSA_URL}/stamp/`, obteniendo un recibo temporal (`temporary_rd`) que se persiste en la base de datos (`tx_hash`).
+3. Para verificar, el sistema consulta `POST {BFA_TSA_URL}/verify/` con el hash actual y el recibo. La respuesta tiene **tres estados**:
+   - `success`: el hash está confirmado en la blockchain → integridad válida.
+   - `pending`: el sellado existe pero el batch de la TSA aún no subió a la blockchain (puede tardar minutos). **No es una alteración**; se reporta como pendiente y se reintenta más tarde.
+   - `failure`: el hash no coincide con lo sellado → posible alteración.
+4. En `success`, el recibo definitivo (`permanent_rd`) se decodifica en el backend para mostrar el **número de bloque** y la **fecha/hora de sellado** real en la red.
+
+### Notas de la migración (rama `refactor/bfa-tsa-api`)
+
+- **Infraestructura**: se eliminó el contenedor `bfa-node` del `docker-compose.yml` y la librería `web3` de Python.
+- **Backend**: `bfa_client.py` reescrito con `requests` contra `tsaapi.bfa.ar`. La verificación distingue los tres estados de la TSA (`success` / `pending` / `failure`); un sellado `pending` se reporta como pendiente y **nunca** como alterado, evitando el "falso inválido" al verificar inmediatamente después de sellar.
+- **Hash exacto**: se sella exactamente el `hash_local` guardado en BD (sin re-aplicar `.strip()`), evitando que el hash sellado difiera del almacenado.
+- **Base de datos**: las columnas `tx_hash` y `hash_bfa` se ampliaron a `VARCHAR(512)` para soportar los recibos Base64 extensos de la TSA.
 
 ---
 

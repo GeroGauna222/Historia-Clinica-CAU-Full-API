@@ -12,6 +12,17 @@ export const useUserStore = defineStore('user', {
         email: '',
         duracion_turno: 20,
         foto: null,
+        especialidad: '',
+        dni: '',
+        sexo: '',
+        telefono: '',
+        matricula_tipo: '',
+        matricula_numero: '',
+        matricula_provincia: '',
+        lugar_atencion_nombre: '',
+        lugar_atencion_direccion: '',
+        lugar_atencion_contacto: '',
+        lugar_atencion_email: '',
         fotoVersion: Date.now(),
         loggingOut: false
     }),
@@ -25,6 +36,17 @@ export const useUserStore = defineStore('user', {
             this.email = data.email ?? '';
             this.duracion_turno = data.duracion_turno ?? this.duracion_turno;
             this.foto = data.foto ?? null;
+            this.especialidad = data.especialidad ?? '';
+            this.dni = data.dni ?? '';
+            this.sexo = data.sexo ?? '';
+            this.telefono = data.telefono ?? '';
+            this.matricula_tipo = data.matricula_tipo ?? '';
+            this.matricula_numero = data.matricula_numero ?? '';
+            this.matricula_provincia = data.matricula_provincia ?? '';
+            this.lugar_atencion_nombre = data.lugar_atencion_nombre ?? '';
+            this.lugar_atencion_direccion = data.lugar_atencion_direccion ?? '';
+            this.lugar_atencion_contacto = data.lugar_atencion_contacto ?? '';
+            this.lugar_atencion_email = data.lugar_atencion_email ?? '';
             this.loggingOut = false;
 
             console.log('✅ Usuario cargado en store:', this.$state);

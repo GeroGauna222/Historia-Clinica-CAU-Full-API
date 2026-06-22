@@ -223,13 +223,36 @@ const abrirFormEvolucion = async () => {
 /**
  * Verifica la integridad de una evolución individual
  */
+const registrarEvolucionBfa = async (evoId) => {
+    try {
+        const { data } = await api.post(`/blockchain/registrar/evolucion/${evoId}`, {}, { withCredentials: true });
+        toast.add({
+            severity: 'success',
+            summary: 'Blockchain',
+            detail: data.mensaje || 'Evolucion anclada en BFA',
+            life: 4000
+        });
+        await fetchHistoria();
+    } catch (err) {
+        console.error('Error al anclar evolucion:', err);
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: err?.response?.data?.error || 'No se pudo anclar la evolucion en BFA.',
+            life: 4000
+        });
+    }
+};
+
 const verificarEvolucion = async (evoId) => {
     try {
         const { data } = await api.get(`/blockchain/verificar/evolucion/${evoId}`, {
             withCredentials: true
         });
+        // estado_bfa: 'verificado' (ok), 'error' (alterado), 'pendiente' (aun no en blockchain)
+        const severityPorEstado = { verificado: 'success', error: 'error', pendiente: 'warn' };
         toast.add({
-            severity: data.valido ? 'success' : 'warn',
+            severity: severityPorEstado[data.estado_bfa] || 'info',
             summary: 'Verificación Blockchain',
             detail: data.mensaje,
             life: 4000
@@ -268,7 +291,7 @@ const verAuditoriasBlockchain = () => {
 
     setTimeout(() => {
         // ✅ pasamos el id correcto de la tabla `historias`
-        router.push({ path: '/blockchain/verificar', query: { id: idHistoria } });
+        router.push({ path: '/blockchain/verificar', query: { id: idHistoria, tipo: 'historia' } });
     }, 300);
 };
 
@@ -347,6 +370,8 @@ onMounted(fetchHistoria);
                             <button @click="$router.push({ name: 'evolucionDetalle', params: { id: pacienteId, evoId: evo.id } })" class="text-blue-600 hover:text-blue-800 text-sm flex items-center"><i class="pi pi-eye mr-1"></i> Ver Detalle</button>
 
                             <button @click="descargarEvolucionPDF(evo.id)" class="text-red-600 hover:text-red-800 text-sm flex items-center"><i class="pi pi-file-pdf mr-1"></i> Exportar PDF</button>
+
+                            <button v-if="!evo.tx_hash" @click="registrarEvolucionBfa(evo.id)" class="text-purple-600 hover:text-purple-800 text-sm flex items-center"><i class="pi pi-link mr-1"></i> Anclar BFA</button>
 
                             <button @click="verificarEvolucion(evo.id)" class="text-purple-600 hover:text-blue-800 text-sm flex items-center"><i class="pi pi-shield mr-1"></i> Verificar Integridad</button>
                         </div>

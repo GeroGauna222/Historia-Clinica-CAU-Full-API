@@ -41,16 +41,27 @@ const model = computed(() => {
             items: [{ label: 'Ver Historias', icon: 'pi pi-fw pi-book', to: '/historias' }]
         },
         {
+            label: 'Recetas',
+            visible: ['director', 'profesional'].includes(userStore.rol),
+            items: [{ label: 'Electronicas', icon: 'pi pi-fw pi-file-edit', to: '/recetas' }]
+        },
+        {
             label: 'Turnos',
             items: [
                 { label: 'Agenda', icon: 'pi pi-fw pi-calendar', to: '/turnos' },
                 { label: 'Nuevo Turno', icon: 'pi pi-fw pi-calendar-plus', to: '/turnos/nuevo' },
-                { label: 'Disponibilidad', icon: 'pi pi-fw pi-clock', to: '/disponibilidad' },
                 {
-                    label: 'Configuracion de Turnos',
-                    icon: 'pi pi-clock',
-                    to: '/turnos/configuracion',
-                    visible: ['profesional', 'director', 'area'].includes(userStore.rol)
+                    label: 'Configuracion',
+                    icon: 'pi pi-fw pi-cog',
+                    items: [
+                        { label: 'Disponibilidad', icon: 'pi pi-fw pi-clock', to: '/disponibilidad' },
+                        {
+                            label: 'Configuracion de Turnos',
+                            icon: 'pi pi-fw pi-sliders-h',
+                            to: '/turnos/configuracion',
+                            visible: ['profesional', 'director', 'area'].includes(userStore.rol)
+                        }
+                    ]
                 }
             ]
         },

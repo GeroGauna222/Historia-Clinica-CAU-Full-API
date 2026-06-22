@@ -12,12 +12,11 @@ services:
     #   - "5000:5000"   <-- COMENTADO POR SEGURIDAD (Solo Nginx accede aquí)
     volumes:
       - ./backend_flask/app:/app
+      - ./db/migrations:/app/migrations:ro
       - uploads_data:/app/uploads # donde Flask guarda archivos subidos
     depends_on:
       db:
         condition: service_healthy
-      bfa-node:
-        condition: service_started
     env_file:
       - ${APP_ENV_FILE:-.env}
     environment:
@@ -55,34 +54,14 @@ services:
       retries: 10
 
   # ============================
-  # ⛓️ NODO BLOCKCHAIN (BFA / Geth)
+  # ⛓️ INTEGRIDAD BFA (TSA API)
   # ============================
-  bfa-node:
-    image: ethereum/client-go:stable
-    container_name: bfa-node
-    restart: always
-    entrypoint: ["geth"]
-    # NOTA PARA INFRA: Actualmente en modo --dev para despliegue inicial.
-    # Para conectar a Mainnet, se debe cambiar este comando y montar el genesis.json.
-    command: >
-      --dev
-      --http --http.addr 0.0.0.0 --http.vhosts="*" --http.corsdomain="*"
-      --http.api admin,eth,net,web3,miner,personal,txpool
-      --datadir /nucleo/test2network
-      --rpc.allow-unprotected-txs
-      --verbosity 3
-    ports:
-      # 8545 (RPC) no se expone publicamente; el backend accede por red interna Docker.
-      - "30303:30303/tcp" # P2P (BFA Discovery) - TCP
-      - "30303:30303/udp" # P2P (BFA Discovery) - UDP
-    volumes:
-      - ./bfa-node/nucleo:/nucleo
-      - bfa_data:/nucleo/test2network/geth
-    networks:
-      - historia_net
+  # Ya no se usa un nodo Geth local. El sellado de integridad se hace contra la API
+  # oficial de Timestamp Authority de la BFA (BFA_TSA_URL, por defecto
+  # https://tsaapi.bfa.ar/api/tsa). No requiere contenedor propio.
 
   # ============================
-  # 💻 FRONTEND (React / Vite)
+  # 💻 FRONTEND (Vue 3 / Vite)
   # ============================
   frontend:
     build:
@@ -120,5 +99,4 @@ networks:
 
 volumes:
   db_data:
-  bfa_data:
   uploads_data:

@@ -13,6 +13,50 @@ bp_usuarios = Blueprint("usuarios", __name__)
 
 # ✅ AGREGADO "area"
 ROLES_VALIDOS = {"director", "profesional", "administrativo", "area"}
+PROFESSIONAL_FIELDS = (
+    "dni",
+    "sexo",
+    "telefono",
+    "matricula_tipo",
+    "matricula_numero",
+    "matricula_provincia",
+    "lugar_atencion_nombre",
+    "lugar_atencion_direccion",
+    "lugar_atencion_contacto",
+    "lugar_atencion_email",
+)
+
+
+def _professional_values(data):
+    values = {field: (data.get(field) or None) for field in PROFESSIONAL_FIELDS}
+    if values["sexo"] not in ("F", "M", "X", None):
+        values["sexo"] = None
+    if values["matricula_tipo"] not in ("MN", "MP", "OP", None):
+        values["matricula_tipo"] = None
+    return values
+
+
+def _current_user_payload():
+    return {
+        "id": current_user.id,
+        "nombre": current_user.nombre,
+        "username": current_user.username,
+        "email": current_user.email,
+        "rol": current_user.rol,
+        "foto": getattr(current_user, 'foto', None),
+        "duracion_turno": getattr(current_user, 'duracion_turno', 20),
+        "especialidad": getattr(current_user, "especialidad", None),
+        "dni": getattr(current_user, "dni", None),
+        "sexo": getattr(current_user, "sexo", None),
+        "telefono": getattr(current_user, "telefono", None),
+        "matricula_tipo": getattr(current_user, "matricula_tipo", None),
+        "matricula_numero": getattr(current_user, "matricula_numero", None),
+        "matricula_provincia": getattr(current_user, "matricula_provincia", None),
+        "lugar_atencion_nombre": getattr(current_user, "lugar_atencion_nombre", None),
+        "lugar_atencion_direccion": getattr(current_user, "lugar_atencion_direccion", None),
+        "lugar_atencion_contacto": getattr(current_user, "lugar_atencion_contacto", None),
+        "lugar_atencion_email": getattr(current_user, "lugar_atencion_email", None),
+    }
 
 # ============================================================
 #  CREAR USUARIO
@@ -28,6 +72,7 @@ def api_crear_usuario():
     password = data.get('password')
     rol = data.get('rol')
     especialidad = data.get('especialidad')
+    professional_values = _professional_values(data)
 
     if not nombre or not username or not email or not password or not rol:
         return jsonify({'error': 'Todos los campos son obligatorios'}), 400
@@ -57,9 +102,21 @@ def api_crear_usuario():
         especialidad = None
 
     cursor.execute("""
-        INSERT INTO usuarios (nombre, username, email, password_hash, rol, especialidad)
-        VALUES (%s, %s, %s, %s, %s, %s)
-    """, (nombre, username, email, password_hash, rol, especialidad))
+        INSERT INTO usuarios (
+            nombre, username, email, password_hash, rol, especialidad,
+            dni, sexo, telefono, matricula_tipo, matricula_numero, matricula_provincia,
+            lugar_atencion_nombre, lugar_atencion_direccion, lugar_atencion_contacto,
+            lugar_atencion_email
+        )
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+    """, (
+        nombre, username, email, password_hash, rol, especialidad,
+        professional_values["dni"], professional_values["sexo"], professional_values["telefono"],
+        professional_values["matricula_tipo"], professional_values["matricula_numero"],
+        professional_values["matricula_provincia"], professional_values["lugar_atencion_nombre"],
+        professional_values["lugar_atencion_direccion"], professional_values["lugar_atencion_contacto"],
+        professional_values["lugar_atencion_email"]
+    ))
 
     conn.commit()
     cursor.close()
@@ -86,7 +143,8 @@ def api_usuarios_listado():
     if q:
         like = f"%{q}%"
         cursor.execute(f"""
-            SELECT id, nombre, username, email, rol, especialidad, activo
+            SELECT id, nombre, username, email, rol, especialidad, dni, matricula_tipo,
+                   matricula_numero, lugar_atencion_direccion, activo
             FROM usuarios
             WHERE (nombre LIKE %s OR username LIKE %s OR email LIKE %s)
             {filtro_activo}
@@ -94,7 +152,8 @@ def api_usuarios_listado():
         """, (like, like, like))
     else:
         cursor.execute(f"""
-            SELECT id, nombre, username, email, rol, especialidad, activo
+            SELECT id, nombre, username, email, rol, especialidad, dni, matricula_tipo,
+                   matricula_numero, lugar_atencion_direccion, activo
             FROM usuarios
             WHERE 1=1 {filtro_activo}
             ORDER BY nombre
@@ -116,7 +175,10 @@ def api_usuarios_detalle(usuario_id):
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
     cursor.execute("""
-        SELECT id, nombre, username, email, rol, especialidad
+        SELECT id, nombre, username, email, rol, especialidad, dni, sexo, telefono,
+               matricula_tipo, matricula_numero, matricula_provincia,
+               lugar_atencion_nombre, lugar_atencion_direccion, lugar_atencion_contacto,
+               lugar_atencion_email
         FROM usuarios
         WHERE id = %s
     """, (usuario_id,))
@@ -142,6 +204,7 @@ def api_usuarios_editar(usuario_id):
     rol = (data.get("rol") or "").strip()
     especialidad = (data.get("especialidad") or "").strip()
     password = data.get("password")
+    professional_values = _professional_values(data)
 
     conn = get_connection()
     cur = conn.cursor(dictionary=True)
@@ -180,6 +243,11 @@ def api_usuarios_editar(usuario_id):
             sets.append("especialidad=%s"); params.append(especialidad.upper() if especialidad else None)
         else:
             sets.append("especialidad=%s"); params.append(None)
+
+    for field, value in professional_values.items():
+        if field in data:
+            sets.append(f"{field}=%s")
+            params.append(value)
 
     if password:
         if not password_valida(password):
@@ -308,27 +376,13 @@ def actualizar_duracion_turno(usuario_id):
 @bp_usuarios.route('/api/usuarios/me', methods=['GET'])
 @login_required
 def api_get_me():
-    return jsonify({
-        "id": current_user.id,
-        "nombre": current_user.nombre,
-        "username": current_user.username,
-        "email": current_user.email,
-        "rol": current_user.rol,
-        "foto": getattr(current_user, 'foto', None),
-        "duracion_turno": getattr(current_user, 'duracion_turno', 20)
-    })
+    return jsonify(_current_user_payload())
 
 # 2. RUTA PARA OBTENER DATOS SIMPLES (usada por perfil)
 @bp_usuarios.route('/api/usuario/perfil', methods=['GET'])
 @login_required
 def obtener_perfil():
-    return jsonify({
-        "id": current_user.id,
-        "nombre": current_user.nombre,
-        "email": current_user.email,
-        "foto": current_user.foto,
-        "rol": current_user.rol
-    })
+    return jsonify(_current_user_payload())
 
 # 3. ACTUALIZAR PERFIL
 @bp_usuarios.route('/api/usuario/perfil', methods=['POST'])
@@ -375,6 +429,16 @@ def actualizar_perfil():
 
     cursor.execute("UPDATE usuarios SET nombre=%s, email=%s, foto=%s WHERE id=%s", 
                    (nuevo_nombre, nuevo_email, nueva_foto, current_user.id))
+    professional_values = _professional_values(request.form)
+    sets = []
+    params = []
+    for field, value in professional_values.items():
+        if field in request.form:
+            sets.append(f"{field}=%s")
+            params.append(value)
+    if sets:
+        params.append(current_user.id)
+        cursor.execute(f"UPDATE usuarios SET {', '.join(sets)} WHERE id=%s", tuple(params))
     conn.commit()
     conn.close()
     return jsonify({"message": "Perfil actualizado correctamente.", "foto": nueva_foto})

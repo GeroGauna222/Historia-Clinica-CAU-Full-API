@@ -16,6 +16,13 @@ class Config:
     _test_endpoints_default = ENV != "production"
     ENABLE_BLOCKCHAIN_TEST_ENDPOINTS = os.getenv("ENABLE_BLOCKCHAIN_TEST_ENDPOINTS", str(_test_endpoints_default)).lower() == "true"
 
+    # ⛓️ Integridad BFA via API oficial de Timestamp Authority (TSA)
+    BFA_TSA_URL = os.getenv("BFA_TSA_URL", "https://tsaapi.bfa.ar/api/tsa").rstrip("/")
+    QBITOS_RECIPE_BASE_URL = os.getenv("QBITOS_RECIPE_BASE_URL", "https://apirecipe.hml.qbitos.com").rstrip("/")
+    QBITOS_RECIPE_TOKEN = os.getenv("QBITOS_RECIPE_TOKEN")
+    QBITOS_RECIPE_CLIENT_APP_ID = int(os.getenv("QBITOS_RECIPE_CLIENT_APP_ID", "0") or 0)
+    QBITOS_RECIPE_TIMEOUT = int(os.getenv("QBITOS_RECIPE_TIMEOUT", "30") or 30)
+
     # 📧 Configuración de correo (ahora desde entorno)
     MAIL_SERVER = os.getenv("MAIL_SERVER", "smtp.gmail.com")
     MAIL_PORT = int(os.getenv("MAIL_PORT", 587))

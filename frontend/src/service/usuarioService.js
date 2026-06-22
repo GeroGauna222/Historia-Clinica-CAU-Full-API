@@ -12,8 +12,8 @@ export default {
         return api.get(`${API_URL}/${id}`, { withCredentials: true });
     },
 
-    createUsuario({ nombre, username, email, password, rol, especialidad }) {
-        return api.post(API_URL, { nombre, username, email, password, rol, especialidad }, { withCredentials: true });
+    createUsuario(data) {
+        return api.post(API_URL, data, { withCredentials: true });
     },
 
     updateUsuario(id, data) {

@@ -1,0 +1,10 @@
+ALTER TABLE usuarios ADD COLUMN dni VARCHAR(20) DEFAULT NULL AFTER especialidad;
+ALTER TABLE usuarios ADD COLUMN sexo ENUM('F', 'M', 'X') DEFAULT NULL AFTER dni;
+ALTER TABLE usuarios ADD COLUMN telefono VARCHAR(50) DEFAULT NULL AFTER sexo;
+ALTER TABLE usuarios ADD COLUMN matricula_tipo ENUM('MN', 'MP', 'OP') DEFAULT NULL AFTER telefono;
+ALTER TABLE usuarios ADD COLUMN matricula_numero VARCHAR(50) DEFAULT NULL AFTER matricula_tipo;
+ALTER TABLE usuarios ADD COLUMN matricula_provincia VARCHAR(100) DEFAULT NULL AFTER matricula_numero;
+ALTER TABLE usuarios ADD COLUMN lugar_atencion_nombre VARCHAR(150) DEFAULT NULL AFTER matricula_provincia;
+ALTER TABLE usuarios ADD COLUMN lugar_atencion_direccion VARCHAR(255) DEFAULT NULL AFTER lugar_atencion_nombre;
+ALTER TABLE usuarios ADD COLUMN lugar_atencion_contacto VARCHAR(150) DEFAULT NULL AFTER lugar_atencion_direccion;
+ALTER TABLE usuarios ADD COLUMN lugar_atencion_email VARCHAR(100) DEFAULT NULL AFTER lugar_atencion_contacto;

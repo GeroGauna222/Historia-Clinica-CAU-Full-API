@@ -22,7 +22,7 @@ function irAgenda() {
             </button>
 
             <router-link to="/" class="layout-topbar-logo flex items-center gap-2">
-                <img src="@/assets/logo_unsam_sin_letras.png" alt="Logo UNSAM" class="h-8 md:h-10" />
+                <img src="@/assets/cau_icon.png" alt="Logo CAU" class="h-8 md:h-10" />
                 <div class="flex flex-col leading-tight">
                     <div class="font-bold text-lg">CAU <span class="font-normal">UNSAM</span></div>
                     <div class="text-xs text-gray-500">Centro Asistencial Universitario</div>

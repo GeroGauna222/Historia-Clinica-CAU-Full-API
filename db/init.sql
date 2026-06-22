@@ -12,6 +12,7 @@ SET time_zone = '-3:00';
 --  ELIMINAR TABLAS (solo para entorno de desarrollo)
 -- ==============================================
 DROP TABLE IF EXISTS auditorias_blockchain;
+DROP TABLE IF EXISTS recetas_electronicas;
 DROP TABLE IF EXISTS evolucion_archivos;
 DROP TABLE IF EXISTS turnos;
 DROP TABLE IF EXISTS ausencias;
@@ -37,6 +38,16 @@ CREATE TABLE usuarios (
     password_hash TEXT NOT NULL,
     rol ENUM('director', 'profesional', 'administrativo','area') NOT NULL,
     especialidad VARCHAR(100) NULL,
+    dni VARCHAR(20) DEFAULT NULL,
+    sexo ENUM('F', 'M', 'X') DEFAULT NULL,
+    telefono VARCHAR(50) DEFAULT NULL,
+    matricula_tipo ENUM('MN', 'MP', 'OP') DEFAULT NULL,
+    matricula_numero VARCHAR(50) DEFAULT NULL,
+    matricula_provincia VARCHAR(100) DEFAULT NULL,
+    lugar_atencion_nombre VARCHAR(150) DEFAULT NULL,
+    lugar_atencion_direccion VARCHAR(255) DEFAULT NULL,
+    lugar_atencion_contacto VARCHAR(150) DEFAULT NULL,
+    lugar_atencion_email VARCHAR(100) DEFAULT NULL,
     duracion_turno INT NOT NULL DEFAULT 20,
     foto VARCHAR(255) DEFAULT NULL,
     activo TINYINT(1) NOT NULL DEFAULT 1 
@@ -94,7 +105,9 @@ CREATE TABLE historias (
     fecha DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     resumen LONGTEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
     hash_local CHAR(64) DEFAULT NULL,        -- Hash SHA-256 del contenido
-    tx_hash VARCHAR(100) DEFAULT NULL,       -- Hash de la transacción en BFA
+    tx_hash VARCHAR(512) DEFAULT NULL,       -- Recibo TSA (temporary_rd) de BFA
+    fecha_anclaje_bfa DATETIME DEFAULT NULL,
+    estado_bfa VARCHAR(20) NOT NULL DEFAULT 'pendiente',
     FOREIGN KEY (paciente_id) REFERENCES pacientes(id) ON DELETE CASCADE,
     FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
 ) ENGINE=InnoDB
@@ -112,6 +125,10 @@ CREATE TABLE evoluciones (
     indicaciones TEXT,
     usuario_id INT NOT NULL,
     creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    hash_local CHAR(64) DEFAULT NULL,
+    tx_hash VARCHAR(512) DEFAULT NULL,
+    fecha_anclaje_bfa DATETIME DEFAULT NULL,
+    estado_bfa VARCHAR(20) NOT NULL DEFAULT 'pendiente',
     FOREIGN KEY (paciente_id) REFERENCES pacientes(id),
     FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
 ) ENGINE=InnoDB
@@ -128,6 +145,41 @@ CREATE TABLE evolucion_archivos (
     filepath TEXT,
     creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (evolucion_id) REFERENCES evoluciones(id)
+) ENGINE=InnoDB
+  DEFAULT CHARSET=utf8mb4
+  COLLATE=utf8mb4_unicode_ci;
+
+-- ==============================================
+-- RECETAS ELECTRONICAS QBITOS
+-- ==============================================
+CREATE TABLE recetas_electronicas (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    paciente_id INT NOT NULL,
+    usuario_id INT NOT NULL,
+    tipo ENUM('receta', 'estudio') NOT NULL DEFAULT 'receta',
+    qbitos_endpoint VARCHAR(120) DEFAULT NULL,
+    qbitos_id_receta VARCHAR(100) DEFAULT NULL,
+    qbitos_s3_link TEXT DEFAULT NULL,
+    qbitos_verificador TEXT DEFAULT NULL,
+    id_transaccion VARCHAR(100) DEFAULT NULL,
+    estado VARCHAR(50) DEFAULT NULL,
+    financiador_nombre VARCHAR(150) DEFAULT NULL,
+    afiliado_numero VARCHAR(40) DEFAULT NULL,
+    request_json JSON NOT NULL,
+    response_json JSON DEFAULT NULL,
+    error_json JSON DEFAULT NULL,
+    creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    hash_local CHAR(64) DEFAULT NULL,
+    tx_hash VARCHAR(512) DEFAULT NULL,
+    fecha_anclaje_bfa DATETIME DEFAULT NULL,
+    estado_bfa VARCHAR(20) NOT NULL DEFAULT 'pendiente',
+    actualizado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (paciente_id) REFERENCES pacientes(id),
+    FOREIGN KEY (usuario_id) REFERENCES usuarios(id),
+    INDEX idx_recetas_paciente (paciente_id),
+    INDEX idx_recetas_usuario (usuario_id),
+    INDEX idx_recetas_tipo (tipo),
+    INDEX idx_recetas_qbitos_id (qbitos_id_receta)
 ) ENGINE=InnoDB
   DEFAULT CHARSET=utf8mb4
   COLLATE=utf8mb4_unicode_ci;
@@ -256,13 +308,18 @@ CREATE TABLE grupo_posteos (
 -- ==============================================
 CREATE TABLE auditorias_blockchain (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    historia_id INT NOT NULL,
+    historia_id INT NULL,
+    evolucion_id INT NULL,
+    entidad_tipo VARCHAR(20) NOT NULL DEFAULT 'historia',
+    entidad_id INT NULL,
+    tx_hash VARCHAR(512) DEFAULT NULL,
     hash_local VARCHAR(200) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
-    hash_bfa   VARCHAR(200) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+    hash_bfa   VARCHAR(512) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
     valido TINYINT(1) NOT NULL,
     usuario VARCHAR(100) NOT NULL,
     fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (historia_id) REFERENCES historias(id) ON DELETE CASCADE
+    FOREIGN KEY (historia_id) REFERENCES historias(id) ON DELETE CASCADE,
+    FOREIGN KEY (evolucion_id) REFERENCES evoluciones(id) ON DELETE CASCADE
 ) ENGINE=InnoDB
   DEFAULT CHARSET=utf8mb4
   COLLATE=utf8mb4_unicode_ci;

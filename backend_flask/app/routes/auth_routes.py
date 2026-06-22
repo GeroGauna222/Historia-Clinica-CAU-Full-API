@@ -39,7 +39,18 @@ def api_login():
                 'nombre': user.nombre,
                 'username': user.username,
                 'email': user.email,
-                'rol': user.rol
+                'rol': user.rol,
+                'especialidad': user.especialidad,
+                'dni': user.dni,
+                'sexo': user.sexo,
+                'telefono': user.telefono,
+                'matricula_tipo': user.matricula_tipo,
+                'matricula_numero': user.matricula_numero,
+                'matricula_provincia': user.matricula_provincia,
+                'lugar_atencion_nombre': user.lugar_atencion_nombre,
+                'lugar_atencion_direccion': user.lugar_atencion_direccion,
+                'lugar_atencion_contacto': user.lugar_atencion_contacto,
+                'lugar_atencion_email': user.lugar_atencion_email
             }
         })
     return jsonify({'error': 'Credenciales incorrectas ❌'}), 401
@@ -68,7 +79,18 @@ def api_user():
         "email": current_user.email,
         "rol": current_user.rol,
         "duracion_turno": current_user.duracion_turno,
-        "foto": current_user.foto
+        "foto": current_user.foto,
+        "especialidad": current_user.especialidad,
+        "dni": current_user.dni,
+        "sexo": current_user.sexo,
+        "telefono": current_user.telefono,
+        "matricula_tipo": current_user.matricula_tipo,
+        "matricula_numero": current_user.matricula_numero,
+        "matricula_provincia": current_user.matricula_provincia,
+        "lugar_atencion_nombre": current_user.lugar_atencion_nombre,
+        "lugar_atencion_direccion": current_user.lugar_atencion_direccion,
+        "lugar_atencion_contacto": current_user.lugar_atencion_contacto,
+        "lugar_atencion_email": current_user.lugar_atencion_email
     })
 
 

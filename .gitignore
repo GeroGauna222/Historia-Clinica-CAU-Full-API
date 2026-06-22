@@ -12,6 +12,8 @@ instance/
 *.db
 venv/
 migrations/
+!db/migrations/
+!db/migrations/*.sql
 *.log
 *.tmp
 

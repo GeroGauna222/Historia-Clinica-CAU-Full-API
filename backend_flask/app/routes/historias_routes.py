@@ -1,12 +1,9 @@
 # app/routes/historias_routes.py
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, jsonify
 from flask_login import login_required, current_user
-from datetime import datetime
 from app.database import get_connection
-from app.utils.hashing import generar_hash
-from app.utils.bfa_client import registrar_hash_en_bfa, verificar_hash_en_bfa
+from app.utils.hashing import generar_hash_evolucion
 from app.utils.permisos import requiere_rol
-from web3 import Web3
 import hashlib, json
 
 bp_historias = Blueprint("historias", __name__)
@@ -24,7 +21,7 @@ def actualizar_historia(paciente_id, usuario_id):
 
     # 1️⃣ Obtener todas las evoluciones del paciente
     cursor.execute("""
-        SELECT id, fecha, contenido, usuario_id
+        SELECT id, fecha, contenido, indicaciones, usuario_id
         FROM evoluciones
         WHERE paciente_id = %s
         ORDER BY fecha ASC
@@ -52,6 +49,9 @@ def actualizar_historia(paciente_id, usuario_id):
         ON DUPLICATE KEY UPDATE
             usuario_id = VALUES(usuario_id),
             resumen = VALUES(resumen),
+            tx_hash = IF(hash_local <> VALUES(hash_local), NULL, tx_hash),
+            fecha_anclaje_bfa = IF(hash_local <> VALUES(hash_local), NULL, fecha_anclaje_bfa),
+            estado_bfa = IF(hash_local <> VALUES(hash_local), 'pendiente', estado_bfa),
             hash_local = VALUES(hash_local),
             fecha = NOW();
     """, (paciente_id, usuario_id, resumen_json, hash_local))
@@ -60,6 +60,34 @@ def actualizar_historia(paciente_id, usuario_id):
     cursor.close()
     conn.close()
     return hash_local
+
+
+def actualizar_hash_evolucion(evolucion_id):
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("SELECT * FROM evoluciones WHERE id = %s", (evolucion_id,))
+        evolucion = cursor.fetchone()
+        if not evolucion:
+            return None
+
+        hash_local = generar_hash_evolucion(evolucion)
+        cursor.execute(
+            """
+            UPDATE evoluciones
+            SET hash_local = %s,
+                tx_hash = IF(hash_local IS NULL OR hash_local = %s, tx_hash, NULL),
+                fecha_anclaje_bfa = IF(hash_local IS NULL OR hash_local = %s, fecha_anclaje_bfa, NULL),
+                estado_bfa = IF(hash_local IS NULL OR hash_local = %s, estado_bfa, 'pendiente')
+            WHERE id = %s
+            """,
+            (hash_local, hash_local, hash_local, hash_local, evolucion_id),
+        )
+        conn.commit()
+        return hash_local
+    finally:
+        cursor.close()
+        conn.close()
 
 
 # =========================================================

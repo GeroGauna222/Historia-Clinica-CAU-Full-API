@@ -71,6 +71,12 @@ const router = createRouter({
                 },
                 // 📌 Turnos
                 {
+                    path: 'recetas',
+                    name: 'recetasElectronicas',
+                    component: () => import('@/views/pages/recetas/RecetasElectronicas.vue'),
+                    meta: { roles: ['director', 'profesional'] }
+                },
+                {
                     path: 'turnos',
                     name: 'turnos',
                     component: () => import('@/views/pages/historias/Turnos.vue')

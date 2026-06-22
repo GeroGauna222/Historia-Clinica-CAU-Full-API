@@ -74,7 +74,18 @@ def load_user(user_id):
             password_hash=data["password_hash"],
             rol=data["rol"],
             duracion_turno = data.get("duracion_turno"),
-            foto=data.get("foto")
+            foto=data.get("foto"),
+            dni=data.get("dni"),
+            sexo=data.get("sexo"),
+            telefono=data.get("telefono"),
+            especialidad=data.get("especialidad"),
+            matricula_tipo=data.get("matricula_tipo"),
+            matricula_numero=data.get("matricula_numero"),
+            matricula_provincia=data.get("matricula_provincia"),
+            lugar_atencion_nombre=data.get("lugar_atencion_nombre"),
+            lugar_atencion_direccion=data.get("lugar_atencion_direccion"),
+            lugar_atencion_contacto=data.get("lugar_atencion_contacto"),
+            lugar_atencion_email=data.get("lugar_atencion_email")
 
         )
     return None
@@ -104,6 +115,7 @@ from app.routes.grupos_routes import bp_grupos
 from app.routes.comunicados_routes import bp_comunicados
 from app.routes.grupo_posteos_routes import bp_grupo_posteos
 from app.routes.health_routes import bp_health
+from app.routes.recetas_routes import bp_recetas
 
 app.register_blueprint(bp_auth)
 app.register_blueprint(bp_usuarios)
@@ -118,6 +130,7 @@ app.register_blueprint(bp_comunicados)
 app.register_blueprint(bp_grupo_posteos)
 app.register_blueprint(bp_blockchain)
 app.register_blueprint(bp_health)
+app.register_blueprint(bp_recetas)
 
 # -------------------------
 # Servir fotos de usuario

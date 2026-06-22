@@ -11,7 +11,7 @@ from reportlab.pdfbase.cidfonts import UnicodeCIDFont
 from reportlab.pdfbase import pdfmetrics
 from reportlab.lib.enums import TA_CENTER, TA_RIGHT
 from datetime import datetime
-from app.routes.historias_routes import actualizar_historia
+from app.routes.historias_routes import actualizar_hash_evolucion, actualizar_historia
 import os
 from reportlab.lib.colors import Color
 from reportlab.lib import colors
@@ -283,6 +283,7 @@ def agregar_evolucion(id):
     """, (id, fecha, contenido, indicaciones, current_user.id))
     conn.commit()
     evolucion_id = cursor.lastrowid
+    hash_evolucion = None
 
     upload_dir = os.path.join(os.getcwd(), 'uploads', 'evoluciones', str(evolucion_id))
     os.makedirs(upload_dir, exist_ok=True)
@@ -300,10 +301,20 @@ def agregar_evolucion(id):
     cursor.close()
     conn.close()
 
+    try:
+        hash_evolucion = actualizar_hash_evolucion(evolucion_id)
+    except Exception as e:
+        print(f"Error calculando hash de evolucion: {e}")
+
     # 🔁 Actualizar historia consolidada automáticamente
     try:
         hash_local = actualizar_historia(id, current_user.id)
-        msg_extra = f" (Historia actualizada, hash {hash_local[:10]}...)" if hash_local else ""
+        partes = []
+        if hash_evolucion:
+            partes.append(f"evolucion hash {hash_evolucion[:10]}...")
+        if hash_local:
+            partes.append(f"historia hash {hash_local[:10]}...")
+        msg_extra = f" ({', '.join(partes)})" if partes else ""
     except Exception as e:
         print(f"⚠️ Error actualizando historia consolidada: {e}")
         msg_extra = " (⚠️ No se pudo actualizar historia)"
@@ -325,6 +336,10 @@ def get_evoluciones(id):
             e.indicaciones,
             e.creado_en,
             e.usuario_id,
+            e.hash_local,
+            e.tx_hash,
+            e.fecha_anclaje_bfa,
+            e.estado_bfa,
             u.nombre AS nombre_usuario,
             CASE 
                 WHEN u.rol = 'director' THEN 'Director'

@@ -158,6 +158,16 @@ function construirMotivoEvento(tipoEvento, motivoLibre) {
     return detalle ? `[${tipo}] ${detalle}` : `[${tipo}]`;
 }
 
+function esTurnoAgenda(tipoEvento) {
+    return normalizarTipoEvento(tipoEvento) === 'Turno';
+}
+
+function limpiarPacienteSeleccionado() {
+    pacienteBusqueda.value = '';
+    pacientes.value = [];
+    pacienteSeleccionado.value = null;
+}
+
 function crearEventosNoDisponibilidad(disponibilidades) {
     const disponiblesPorDia = {};
     const eventos = [];
@@ -437,12 +447,14 @@ function abrirModalBloqueo(fechaBase = new Date()) {
     bloqueoForm.tipo_evento = 'Bloqueo';
     bloqueoForm.motivo = '';
     bloqueoForm.usuario_id = sujetoSeleccionadoId.value;
+    limpiarPacienteSeleccionado();
     bloqueoModalVisible.value = true;
 }
 
 async function guardarBloqueo() {
     if (!bloqueoForm.fecha) return;
-    if (!bloqueoForm.todoDia) {
+    const tipoEvento = normalizarTipoEvento(bloqueoForm.tipo_evento);
+    if (tipoEvento !== 'Turno' && !bloqueoForm.todoDia) {
         const inicioMin = minutosDesdeHHMM(bloqueoForm.horaInicio);
         const finMin = minutosDesdeHHMM(bloqueoForm.horaFin);
         if (finMin <= inicioMin) {
@@ -455,7 +467,18 @@ async function guardarBloqueo() {
     const motivo = construirMotivoEvento(bloqueoForm.tipo_evento, bloqueoForm.motivo);
     bloqueoGuardando.value = true;
     try {
-        await api.post('/ausencias', { fecha_inicio: fechaInicio, fecha_fin: fechaFin, motivo, usuario_id: Number(bloqueoForm.usuario_id) }, { withCredentials: true });
+        if (tipoEvento === 'Turno') {
+            if (!pacienteSeleccionado.value) {
+                toast.add({ severity: 'warn', summary: 'Paciente requerido', detail: 'Selecciona un paciente para crear un turno.', life: 3500 });
+                return;
+            }
+            const resp = await api.post('/turnos', { paciente_id: pacienteSeleccionado.value.id, usuario_id: Number(bloqueoForm.usuario_id), fecha_inicio: fechaInicio, motivo: bloqueoForm.motivo }, { withCredentials: true });
+            if (resp.data?.ajuste_horario?.aplicado) {
+                toast.add({ severity: 'info', summary: 'Horario ajustado', detail: `Inicio ajustado a ${resp.data.ajuste_horario.inicio_ajustado}`, life: 4500 });
+            }
+        } else {
+            await api.post('/ausencias', { fecha_inicio: fechaInicio, fecha_fin: fechaFin, motivo, usuario_id: Number(bloqueoForm.usuario_id) }, { withCredentials: true });
+        }
         bloqueoModalVisible.value = false;
         await cargarAgenda();
     } finally {
@@ -466,9 +489,7 @@ async function guardarBloqueo() {
 function abrirModalNuevoTurno(date) {
     nuevoTurnoFecha.value = toLocalDateTimeString(date);
     nuevoTurnoTipoEvento.value = 'Turno';
-    pacienteBusqueda.value = '';
-    pacientes.value = [];
-    pacienteSeleccionado.value = null;
+    limpiarPacienteSeleccionado();
     nuevoTurnoMotivo.value = '';
     nuevoTurnoModalVisible.value = true;
 }
@@ -498,11 +519,7 @@ async function guardarNuevoTurno() {
                 toast.add({ severity: 'warn', summary: 'Paciente requerido', detail: 'Selecciona un paciente para crear un turno.', life: 3500 });
                 return;
             }
-            const resp = await api.post(
-                '/turnos',
-                { paciente_id: pacienteSeleccionado.value.id, usuario_id: Number(sujetoSeleccionadoId.value), fecha_inicio: nuevoTurnoFecha.value, motivo: nuevoTurnoMotivo.value },
-                { withCredentials: true }
-            );
+            const resp = await api.post('/turnos', { paciente_id: pacienteSeleccionado.value.id, usuario_id: Number(sujetoSeleccionadoId.value), fecha_inicio: nuevoTurnoFecha.value, motivo: nuevoTurnoMotivo.value }, { withCredentials: true });
             if (resp.data?.ajuste_horario?.aplicado) {
                 toast.add({ severity: 'info', summary: 'Horario ajustado', detail: `Inicio ajustado a ${resp.data.ajuste_horario.inicio_ajustado}`, life: 4500 });
             }
@@ -568,6 +585,17 @@ watch(sujetoSeleccionadoId, async () => {
     await cargarAgenda();
 });
 
+watch(
+    () => bloqueoForm.tipo_evento,
+    (tipoEvento) => {
+        if (esTurnoAgenda(tipoEvento)) {
+            bloqueoForm.todoDia = false;
+        } else {
+            limpiarPacienteSeleccionado();
+        }
+    }
+);
+
 onMounted(async () => {
     await cargarDatosUsuario();
     await cargarSujetos();
@@ -624,13 +652,7 @@ onUnmounted(() => {
         </div>
 
         <!-- Modal: Nuevo turno -->
-        <Dialog
-            v-model:visible="nuevoTurnoModalVisible"
-            modal
-            :header="nuevoTurnoTipoEvento === 'Turno' ? 'Nuevo turno' : 'Nuevo evento de agenda'"
-            :style="{ width: '520px' }"
-            :pt="{ header: { class: 'font-heading' } }"
-        >
+        <Dialog v-model:visible="nuevoTurnoModalVisible" modal :header="nuevoTurnoTipoEvento === 'Turno' ? 'Nuevo turno' : 'Nuevo evento de agenda'" :style="{ width: '520px' }" :pt="{ header: { class: 'font-heading' } }">
             <div class="space-y-4">
                 <div class="flex items-center gap-2 px-3 py-2 rounded-lg bg-[#F0FDFA] dark:bg-teal-900/20 text-[#0891B2] dark:text-cyan-300 text-sm font-medium">
                     <i class="pi pi-calendar"></i>
@@ -659,25 +681,13 @@ onUnmounted(() => {
                     </div>
                 </div>
                 <div>
-                    <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200">
-                        <i class="pi pi-comment mr-1.5 text-[#0891B2]"></i>{{ nuevoTurnoTipoEvento === 'Turno' ? 'Motivo' : 'Detalle' }}
-                    </label>
-                    <InputText
-                        v-model="nuevoTurnoMotivo"
-                        class="w-full"
-                        :placeholder="nuevoTurnoTipoEvento === 'Turno' ? 'Motivo de la consulta' : 'Detalle opcional del evento'"
-                    />
+                    <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200"> <i class="pi pi-comment mr-1.5 text-[#0891B2]"></i>{{ nuevoTurnoTipoEvento === 'Turno' ? 'Motivo' : 'Detalle' }} </label>
+                    <InputText v-model="nuevoTurnoMotivo" class="w-full" :placeholder="nuevoTurnoTipoEvento === 'Turno' ? 'Motivo de la consulta' : 'Detalle opcional del evento'" />
                 </div>
             </div>
             <template #footer>
                 <Button label="Cancelar" text severity="secondary" class="!rounded-lg" @click="nuevoTurnoModalVisible = false" />
-                <Button
-                    :label="nuevoTurnoTipoEvento === 'Turno' ? 'Guardar turno' : 'Guardar evento'"
-                    icon="pi pi-check"
-                    :loading="nuevoTurnoGuardando"
-                    class="!rounded-lg !bg-[#0891B2] !border-[#0891B2]"
-                    @click="guardarNuevoTurno"
-                />
+                <Button :label="nuevoTurnoTipoEvento === 'Turno' ? 'Guardar turno' : 'Guardar evento'" icon="pi pi-check" :loading="nuevoTurnoGuardando" class="!rounded-lg !bg-[#0891B2] !border-[#0891B2]" @click="guardarNuevoTurno" />
             </template>
         </Dialog>
 
@@ -688,32 +698,50 @@ onUnmounted(() => {
                     <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200"><i class="pi pi-tag mr-1.5 text-red-500"></i>Tipo de evento</label>
                     <Select v-model="bloqueoForm.tipo_evento" :options="TIPOS_EVENTO_AGENDA" optionLabel="label" optionValue="value" class="w-full" />
                 </div>
+                <div v-if="esTurnoAgenda(bloqueoForm.tipo_evento)">
+                    <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200"><i class="pi pi-user mr-1.5 text-[#0891B2]"></i>Paciente</label>
+                    <InputText v-model="pacienteBusqueda" @input="buscarPacientes" class="w-full" placeholder="Buscar por DNI o nombre..." />
+                    <ul v-if="pacientes.length" class="border border-[#E0F2FE] dark:border-slate-600 rounded-lg mt-1.5 max-h-40 overflow-y-auto bg-white dark:bg-slate-800 shadow-lg">
+                        <li
+                            v-for="p in pacientes"
+                            :key="p.id"
+                            class="px-3 py-2.5 hover:bg-[#F0FDFA] dark:hover:bg-teal-900/20 cursor-pointer transition-colors text-sm border-b border-[#E0F2FE] dark:border-slate-700 last:border-0"
+                            @click="seleccionarPaciente(p)"
+                        >
+                            <span class="font-medium text-[#134E4A] dark:text-slate-200">{{ p.apellido }} {{ p.nombre }}</span> <span class="text-slate-400 ml-1">DNI: {{ p.dni }}</span>
+                        </li>
+                    </ul>
+                    <div v-if="pacienteSeleccionado" class="flex items-center gap-2 mt-2 px-3 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 text-xs font-medium">
+                        <i class="pi pi-check-circle"></i>
+                        {{ pacienteSeleccionado.apellido }} {{ pacienteSeleccionado.nombre }}
+                    </div>
+                </div>
                 <div>
                     <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200"><i class="pi pi-calendar mr-1.5 text-red-500"></i>Fecha</label>
                     <InputText type="date" v-model="bloqueoForm.fecha" class="w-full" />
                 </div>
-                <label class="flex items-center gap-2.5 cursor-pointer px-3 py-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+                <label v-if="!esTurnoAgenda(bloqueoForm.tipo_evento)" class="flex items-center gap-2.5 cursor-pointer px-3 py-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
                     <Checkbox v-model="bloqueoForm.todoDia" :binary="true" />
                     <span class="text-sm font-medium text-[#134E4A] dark:text-slate-200">Todo el dia</span>
                 </label>
-                <div class="grid grid-cols-2 gap-3">
+                <div :class="esTurnoAgenda(bloqueoForm.tipo_evento) ? 'grid grid-cols-1 gap-3' : 'grid grid-cols-2 gap-3'">
                     <div>
                         <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200">Hora inicio</label>
                         <InputText type="time" v-model="bloqueoForm.horaInicio" class="w-full" :disabled="bloqueoForm.todoDia" />
                     </div>
-                    <div>
+                    <div v-if="!esTurnoAgenda(bloqueoForm.tipo_evento)">
                         <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200">Hora fin</label>
                         <InputText type="time" v-model="bloqueoForm.horaFin" class="w-full" :disabled="bloqueoForm.todoDia" />
                     </div>
                 </div>
                 <div>
-                    <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200"><i class="pi pi-comment mr-1.5 text-red-500"></i>Detalle</label>
-                    <InputText v-model="bloqueoForm.motivo" class="w-full" placeholder="Detalle opcional del evento" />
+                    <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200"> <i class="pi pi-comment mr-1.5 text-red-500"></i>{{ esTurnoAgenda(bloqueoForm.tipo_evento) ? 'Motivo' : 'Detalle' }} </label>
+                    <InputText v-model="bloqueoForm.motivo" class="w-full" :placeholder="esTurnoAgenda(bloqueoForm.tipo_evento) ? 'Motivo de la consulta' : 'Detalle opcional del evento'" />
                 </div>
             </div>
             <template #footer>
                 <Button label="Cancelar" text severity="secondary" class="!rounded-lg" @click="bloqueoModalVisible = false" />
-                <Button label="Guardar evento" icon="pi pi-check" :loading="bloqueoGuardando" severity="danger" class="!rounded-lg" @click="guardarBloqueo" />
+                <Button :label="esTurnoAgenda(bloqueoForm.tipo_evento) ? 'Guardar turno' : 'Guardar evento'" icon="pi pi-check" :loading="bloqueoGuardando" severity="danger" class="!rounded-lg" @click="guardarBloqueo" />
             </template>
         </Dialog>
 

@@ -1,0 +1,22 @@
+A) INSTRUCCIONES PARA OBTENER CLAVES PUBLICA Y PRIVADA EN WINDOWS:
+==================================================================
+
+	1. Instale el utilitario geth.
+	2. Desde una intefaz de comando, ejecute "geth account new"; el sistema le solicitará una password, que puede ser vacía, y le mostrará 
+	   la clave pública (public address) y la ruta al archivo que contiene su clave privada.
+	   Puede usted cambiar el nombre y la ubicación de este archivo.
+
+
+B) OBTENCION DE LA FIRMA (SIGNATURE):
+=====================================
+
+	1. Abra una interfaz de comando y desplácese al directorio que contiene el archivo sign.py (se encuentra junto con estas instrucciones).
+	2. Ejecute "python sign.py <ruta al archivo de la clave privada> [<password>]"; <ruta al archivo de la clave privada> es la obtenida en el paso anterior;
+	   solo indique el parámetro password si en A)2 ingresó una.
+	3. De la respuesta que obtendrá, copie la signature ( está dentro de signature=HexBytes('0x...) Sólo la cadena hexadecimal, sin las comillas!)
+	
+Con la clave pública obtenida en A) y la firma obtenida en B), tiene lo necesario para dar el alta a su cuenta en BFA.
+	
+	
+
+	

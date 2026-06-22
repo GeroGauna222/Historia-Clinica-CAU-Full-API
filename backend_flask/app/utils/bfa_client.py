@@ -1,84 +1,105 @@
-# app/utils/bfa_client.py
-from web3 import Web3
-from web3.middleware import geth_poa_middleware
-import os, time
+import os
+import base64
 
-# ==============================================================
-# 🌐 Configuración de conexión con el nodo BFA
-# ==============================================================
-BFA_URL = os.getenv("BFA_URL", "http://bfa-node:8545")
-ADDRESS = os.getenv("ADDRESS_BFA")
-CHAIN_ID = int(os.getenv("BFA_CHAIN_ID", "1337"))
+import requests
 
-# ==============================================================
-# 🧱 Función principal: registrar hash en la blockchain BFA
-# ==============================================================
+
+# La integridad se ancla en BFA usando su API oficial de Timestamp Authority (TSA),
+# en lugar de un nodo Geth local. No requiere web3 ni cuentas/keystore.
+TSA_BASE_URL = os.getenv("BFA_TSA_URL", "https://tsaapi.bfa.ar/api/tsa").rstrip("/")
+TIMEOUT = 30
+
+
+def _normalize_hash(hash_hex):
+    """Normaliza el hash a hex sin prefijo 0x. Sella exactamente el hash recibido."""
+    if not isinstance(hash_hex, str):
+        raise ValueError("hash_hex debe ser str")
+    return hash_hex[2:] if hash_hex.startswith("0x") else hash_hex
+
+
+def parse_permanent_rd(permanent_rd):
+    """
+    Decodifica el `permanent_rd` que devuelve la TSA tras verificar con exito.
+    Formato (tras base64-decode): `1x-{file_hash}-{nonce}-{0xleaf}-{block_number}`.
+    Devuelve dict con los campos utiles para auditoria; {} si no parsea.
+    """
+    if not permanent_rd:
+        return {}
+    try:
+        raw = base64.b64decode(permanent_rd).decode("utf-8")
+        parts = raw.split("-")
+        if len(parts) < 5:
+            return {}
+        return {
+            "file_hash": parts[1],
+            "block_number": int(parts[-1]),
+            "raw": raw,
+        }
+    except Exception:
+        return {}
+
+
 def registrar_hash_en_bfa(hash_hex):
     """
-    Publica un hash (SHA256) en la Blockchain Federal Argentina (modo test).
-    El hash se almacena en el campo 'input' de una transacción autoinvocada.
-    Reintenta automáticamente si hay error 'underpriced' o 'already known'.
+    Sella un hash SHA-256 en BFA usando la API oficial TSA.
+    Devuelve el `temporary_rd` (recibo) que identifica el sellado; se persiste y
+    luego se usa para verificar.
     """
-    web3 = Web3(Web3.HTTPProvider(BFA_URL))
-    web3.middleware_onion.inject(geth_poa_middleware, layer=0)
-
-    if not web3.is_connected():
-        raise ConnectionError(f"❌ No se pudo conectar al nodo BFA en {BFA_URL}")
-
-    cuenta = Web3.to_checksum_address(ADDRESS)
-    nonce = web3.eth.get_transaction_count(cuenta)
-    base_gas_price = web3.eth.gas_price or web3.to_wei("1", "gwei")
-
-    # Intentamos hasta 3 veces
-    for intento in range(3):
-        gas_price = base_gas_price + web3.to_wei(intento, "gwei")
-
-        tx = {
-            "nonce": nonce,
-            "to": "0x000000000000000000000000000000000000dEaD",
-            "value": 0,
-            "data": web3.to_bytes(hexstr=hash_hex),
-            "gasPrice": gas_price,
-            "chainId": CHAIN_ID,
-            "from": cuenta
-        }
-
-        try:
-            estimated_gas = web3.eth.estimate_gas(tx)
-            tx["gas"] = max(estimated_gas, 21000)
-        except Exception:
-            tx["gas"] = 50000
-
-        try:
-            # ✅ Enviar directamente al nodo (sin firmar manualmente)
-            tx_hash = web3.eth.send_transaction(tx)
-            tx_hex = web3.to_hex(tx_hash)
-            print(f"✅ Transacción enviada a BFA: {tx_hex} (gasPrice={gas_price})")
-            return tx_hex
-
-        except Exception as e:
-            msg = str(e)
-            if "already known" in msg:
-                print("⚠️ El hash ya se encuentra registrado en la Blockchain BFA.")
-                return "already_known"
-            elif "underpriced" in msg or "replacement transaction underpriced" in msg:
-                print(f"⚠️ Transacción rechazada por underpriced, reintentando con mayor gas... intento {intento+1}")
-                time.sleep(1)
-                continue
-            else:
-                print(f"❌ Error al enviar transacción: {msg}")
-                raise
-
-    # Si fallan los 3 intentos:
-    raise RuntimeError("❌ No se pudo enviar la transacción tras 3 intentos consecutivos (underpriced).")
+    file_hash = _normalize_hash(hash_hex)
+    resp = requests.post(
+        f"{TSA_BASE_URL}/stamp/",
+        json={"file_hash": file_hash},
+        timeout=TIMEOUT,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    if data.get("status") != "success":
+        raise RuntimeError(f"TSA stamp rechazado: {data.get('messages')}")
+    return data["temporary_rd"]
 
 
-# ==============================================================
-# 🧩 Verificación simulada del hash
-# ==============================================================
-def verificar_hash_en_bfa(hash_local):
-    """Simula la verificación del hash en la BFA (modo test)."""
-    w3 = Web3(Web3.HTTPProvider(BFA_URL))
-    if not w3.is_connected():
-        raise ConnectionError(f"❌ No se pudo conectar al nodo BFA en {BFA_URL}")
-    return hash_local
+def verificar_hash_en_bfa(hash_hex, rd):
+    """
+    Consulta el estado de un sellado contra la TSA de BFA y devuelve el cuerpo de la
+    respuesta tal cual, que tiene tres estados posibles:
+
+    - status == "success": el hash esta confirmado en blockchain. Incluye
+      `attestation_time` y `permanent_rd` (con el numero de bloque).
+    - status == "pending": el sellado existe pero el batch aun no subio a la
+      blockchain. NO significa alteracion; puede tardar minutos. Reintentar mas tarde.
+    - status == "failure": el hash no coincide con lo sellado (posible alteracion) o
+      el recibo es invalido.
+
+    No se hace backoff bloqueante porque la confirmacion del batch puede tardar
+    minutos: bloquear un worker de Flask no aporta. El caller decide como tratar el
+    estado `pending`. Las excepciones de red (requests) se propagan.
+    """
+    if not rd:
+        raise ValueError("rd requerido para verificar")
+    file_hash = _normalize_hash(hash_hex)
+    resp = requests.post(
+        f"{TSA_BASE_URL}/verify/",
+        json={"file_hash": file_hash, "rd": rd},
+        timeout=TIMEOUT,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+def get_bfa_status():
+    """
+    Chequeo de disponibilidad de la TSA para el endpoint de health.
+    `connected` es True si la API responde (cualquier codigo HTTP).
+    """
+    status = {
+        "tsa_url": TSA_BASE_URL,
+        "connected": False,
+        "status_code": None,
+    }
+    try:
+        resp = requests.get(TSA_BASE_URL, timeout=5)
+        status["connected"] = True
+        status["status_code"] = resp.status_code
+    except requests.RequestException as exc:
+        status["error"] = str(exc)
+    return status

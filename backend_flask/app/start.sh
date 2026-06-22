@@ -1,6 +1,8 @@
 #!/bin/bash
 set -e
 
+python /app/migrate.py
+
 if [ "$FLASK_ENV" = "production" ]; then
   echo "🚀 Running in PRODUCTION mode (Gunicorn)"
   exec gunicorn \
