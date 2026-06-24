@@ -80,7 +80,11 @@ def run_migrations():
         return
 
     conn = get_connection()
-    cursor = conn.cursor()
+    # buffered=True consume cada result set al ejecutar, evitando el error 2014
+    # "Commands out of sync" del conector C cuando una sentencia (p.ej. CREATE TABLE
+    # IF NOT EXISTS sobre una tabla existente) deja resultados sin leer antes del
+    # siguiente execute (mark_applied).
+    cursor = conn.cursor(buffered=True)
     try:
         ensure_schema_migrations(cursor)
         conn.commit()
