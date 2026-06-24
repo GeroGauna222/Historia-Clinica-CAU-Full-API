@@ -49,7 +49,9 @@ export const useUserStore = defineStore('user', {
             this.lugar_atencion_email = data.lugar_atencion_email ?? '';
             this.loggingOut = false;
 
-            console.log('✅ Usuario cargado en store:', this.$state);
+            if (import.meta.env.DEV) {
+                console.log('✅ Usuario cargado en store (id:', this.id, 'rol:', this.rol, ')');
+            }
             emit('user:updated', { ...this.$state });
         },
 

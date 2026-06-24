@@ -18,6 +18,15 @@ from flask import send_from_directory
 # -------------------------
 app = Flask(__name__)
 app.config.from_object(Config)
+
+_INSECURE_SECRET = "CambiaEstoPorUnValorSeguro"
+if app.config.get("ENV") == "production":
+    secret_key = app.config.get("SECRET_KEY", "")
+    if not secret_key or secret_key == _INSECURE_SECRET:
+        raise RuntimeError(
+            "SECRET_KEY debe configurarse con un valor seguro en producción (variable de entorno)."
+        )
+
 app.config['FRONTEND_URL'] = os.getenv("FRONTEND_URL", "http://localhost")
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
@@ -146,9 +155,5 @@ def fotos_usuarios(filename):
     # Usamos la ruta absoluta segura basada en donde está este archivo
     basedir = os.path.abspath(os.path.dirname(__file__))
     carpeta = os.path.join(basedir, 'static', 'fotos_usuarios')
-    
-    # Debug para estar seguros
-    print(f"🔍 Buscando: {filename}")
-    print(f"📂 En carpeta: {carpeta}")
     
     return send_from_directory(carpeta, filename)

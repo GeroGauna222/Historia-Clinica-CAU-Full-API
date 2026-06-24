@@ -42,9 +42,13 @@ async function bootstrap() {
     const userStore = useUserStore();
     try {
         await userStore.fetchUser();
-        console.log('✅ Usuario cargado:', userStore.nombre, '| Rol:', userStore.rol);
+        if (import.meta.env.DEV) {
+            console.log('✅ Usuario cargado | Rol:', userStore.rol);
+        }
     } catch (err) {
-        console.warn('⚠️ No se pudo cargar el usuario al iniciar:', err);
+        if (import.meta.env.DEV) {
+            console.warn('⚠️ No se pudo cargar el usuario al iniciar:', err);
+        }
     }
 
     // 🔥 Ahora que el store tiene el rol, montamos la app
