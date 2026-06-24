@@ -96,9 +96,11 @@ def run_migrations():
                 try:
                     cursor.execute(statement)
                 except Error as exc:
-                    # 1060 = columna duplicada, 1061 = nombre de indice/clave duplicado.
-                    # Toleramos estados ya aplicados para que las migraciones sean idempotentes.
-                    if getattr(exc, "errno", None) in (1060, 1061):
+                    # Errores de "ya existe" -> migracion ya aplicada (idempotencia para
+                    # migraciones aditivas): 1050 tabla, 1060 columna, 1061 indice/clave,
+                    # 1826 foreign key duplicada. Necesario al adoptar el tracking en una DB
+                    # cuyo esquema fue migrado a mano antes de existir schema_migrations.
+                    if getattr(exc, "errno", None) in (1050, 1060, 1061, 1826):
                         print(f"Objeto ya existe, continuando: {exc}")
                         continue
                     raise
