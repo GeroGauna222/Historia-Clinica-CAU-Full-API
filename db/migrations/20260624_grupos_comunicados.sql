@@ -1,11 +1,15 @@
 -- Reconcilia la DB con init.sql para las features de grupos, turnos grupales y
 -- comunicacion (commits "group communication" y "turnos teams"), que se agregaron
 -- solo a init.sql sin migracion. En DBs migradas estas tablas no existen y rompen el
--- dashboard (Table 'comunicados' doesn't exist). IF NOT EXISTS: las ya presentes se saltean.
+-- dashboard (Table 'comunicados' doesn't exist).
+--
+-- Se usa CREATE TABLE (sin IF NOT EXISTS) a proposito: si la tabla ya existe, MySQL
+-- devuelve error 1050 que migrate.py tolera (continue). IF NOT EXISTS devolveria un
+-- warning que el conector C deja sin consumir y rompe el siguiente execute (2014).
 -- Orden por dependencias de FK: grupos_profesionales -> (grupo_miembros, turnos_grupales,
 -- grupo_posteos); comunicados depende solo de usuarios.
 
-CREATE TABLE IF NOT EXISTS grupos_profesionales (
+CREATE TABLE grupos_profesionales (
     id INT AUTO_INCREMENT PRIMARY KEY,
     nombre VARCHAR(100) NOT NULL,
     descripcion TEXT,
@@ -16,7 +20,7 @@ CREATE TABLE IF NOT EXISTS grupos_profesionales (
   DEFAULT CHARSET=utf8mb4
   COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE IF NOT EXISTS grupo_miembros (
+CREATE TABLE grupo_miembros (
     id INT AUTO_INCREMENT PRIMARY KEY,
     grupo_id INT NOT NULL,
     usuario_id INT NOT NULL,
@@ -27,7 +31,7 @@ CREATE TABLE IF NOT EXISTS grupo_miembros (
   DEFAULT CHARSET=utf8mb4
   COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE IF NOT EXISTS turnos_grupales (
+CREATE TABLE turnos_grupales (
     id INT AUTO_INCREMENT PRIMARY KEY,
     grupo_id INT NOT NULL,
     paciente_id INT NOT NULL,
@@ -45,7 +49,7 @@ CREATE TABLE IF NOT EXISTS turnos_grupales (
   DEFAULT CHARSET=utf8mb4
   COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE IF NOT EXISTS comunicados (
+CREATE TABLE comunicados (
     id INT AUTO_INCREMENT PRIMARY KEY,
     titulo VARCHAR(180) NOT NULL,
     contenido TEXT NOT NULL,
@@ -58,7 +62,7 @@ CREATE TABLE IF NOT EXISTS comunicados (
   DEFAULT CHARSET=utf8mb4
   COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE IF NOT EXISTS grupo_posteos (
+CREATE TABLE grupo_posteos (
     id INT AUTO_INCREMENT PRIMARY KEY,
     grupo_id INT NOT NULL,
     autor_id INT NOT NULL,
