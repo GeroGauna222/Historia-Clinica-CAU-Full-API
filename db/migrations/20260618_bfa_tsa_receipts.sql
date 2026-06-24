@@ -9,8 +9,8 @@ ALTER TABLE historias
 ALTER TABLE evoluciones
     MODIFY tx_hash VARCHAR(512) DEFAULT NULL;
 
-ALTER TABLE recetas_electronicas
-    MODIFY tx_hash VARCHAR(512) DEFAULT NULL;
+-- Nota: recetas_electronicas NO se ancla en BFA (solo historias y evoluciones),
+-- y en DBs migradas la tabla no tiene columna tx_hash. No la tocamos.
 
 ALTER TABLE auditorias_blockchain
     MODIFY tx_hash VARCHAR(512) DEFAULT NULL,
