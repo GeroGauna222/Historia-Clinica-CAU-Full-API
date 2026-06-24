@@ -49,8 +49,10 @@ export function useSession() {
     }
 
     // Eventos globales
-    on('user:updated', (data) => {
-        console.log('🔔 user:updated recibido en useSession', data);
+    on('user:updated', () => {
+        if (import.meta.env.DEV) {
+            console.log('🔔 user:updated recibido en useSession');
+        }
     });
 
     return { user, loading, error, loadCurrentUser, clearUser };
