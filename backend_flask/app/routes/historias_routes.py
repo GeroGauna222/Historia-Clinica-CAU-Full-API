@@ -71,6 +71,12 @@ def actualizar_hash_evolucion(evolucion_id):
         if not evolucion:
             return None
 
+        # A signed evolution is immutable: BFA operations must reuse the exact
+        # payload hash that was accepted at signing time, never recalculate a
+        # different legacy hash over the same row.
+        if evolucion.get("estado_firma") == "firmada" and evolucion.get("hash_local"):
+            return evolucion["hash_local"]
+
         hash_local = generar_hash_evolucion(evolucion)
         cursor.execute(
             """

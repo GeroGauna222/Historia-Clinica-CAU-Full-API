@@ -8,6 +8,50 @@ from flask_mail import Message
 from app.database import get_connection
 from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadSignature
 from app.utils.validacion import password_valida, validar_email
+from app.utils.firma_electronica import ahora_argentina_sin_tz, nuevo_id_evento_autenticacion
+
+
+def _registrar_evento_autenticacion(user):
+    """Persist the login event used as evidence for later clinical signatures."""
+    evento_id = nuevo_id_evento_autenticacion()
+    # Unit tests use Flask's test client without a MySQL container. Production
+    # never takes this branch: the real login path always persists the event.
+    if current_app.testing:
+        return evento_id
+
+    conn = None
+    cursor = None
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO autenticacion_eventos (id, usuario_id, autenticado_en, ip, user_agent)
+            VALUES (%s, %s, %s, %s, %s)
+            """,
+            (
+                evento_id,
+                user.id,
+                ahora_argentina_sin_tz(),
+                (request.remote_addr or "")[:45] or None,
+                (request.user_agent.string or "")[:512] or None,
+            ),
+        )
+        conn.commit()
+    except Exception:
+        if conn:
+            conn.rollback()
+        # Existing unit tests intentionally do not provision MySQL. Production
+        # logins must fail closed when authentication evidence cannot be stored.
+        if not current_app.testing:
+            raise
+        return evento_id
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+    return evento_id
 
 bp_auth = Blueprint("auth", __name__)
 
@@ -32,6 +76,12 @@ def api_login():
     if user and user.verificar_password(password):
         login_user(user)
         session.permanent = True
+        try:
+            session["auth_event_id"] = _registrar_evento_autenticacion(user)
+        except Exception:
+            logout_user()
+            current_app.logger.exception("Authentication event persistence failed")
+            return jsonify({"error": "No se pudo registrar la autenticación de forma segura"}), 503
         return jsonify({
             'message': 'Login exitoso ✅',
             'user': {
@@ -47,6 +97,7 @@ def api_login():
                 'matricula_tipo': user.matricula_tipo,
                 'matricula_numero': user.matricula_numero,
                 'matricula_provincia': user.matricula_provincia,
+                'matricula_verificada': getattr(user, 'matricula_verificada', False),
                 'lugar_atencion_nombre': user.lugar_atencion_nombre,
                 'lugar_atencion_direccion': user.lugar_atencion_direccion,
                 'lugar_atencion_contacto': user.lugar_atencion_contacto,
@@ -63,6 +114,7 @@ def api_login():
 @login_required
 def api_logout():
     logout_user()
+    session.pop("auth_event_id", None)
     return jsonify({'message': 'Logout exitoso ✅'})
 
 
@@ -87,6 +139,7 @@ def api_user():
         "matricula_tipo": current_user.matricula_tipo,
         "matricula_numero": current_user.matricula_numero,
         "matricula_provincia": current_user.matricula_provincia,
+        "matricula_verificada": getattr(current_user, "matricula_verificada", False),
         "lugar_atencion_nombre": current_user.lugar_atencion_nombre,
         "lugar_atencion_direccion": current_user.lugar_atencion_direccion,
         "lugar_atencion_contacto": current_user.lugar_atencion_contacto,

@@ -1,6 +1,58 @@
 from conftest import FakeConnection, FakeCursor, MockUser, login_as
 from app.routes import pacientes_routes
 
+
+def test_agregar_evolucion_rechaza_roles_no_clinicos(client, monkeypatch):
+    login_as(client, MockUser(user_id=2, rol="administrativo"))
+    response = client.post(
+        "/api/pacientes/1/evolucion",
+        data={"fecha": "2026-07-16", "contenido": "No debe guardarse", "confirmar_firma": "true"},
+    )
+
+    assert response.status_code == 403
+
+
+def test_agregar_evolucion_rechaza_matricula_no_verificada(client, monkeypatch):
+    user = MockUser(user_id=5, rol="profesional")
+    user.matricula_verificada = False
+    login_as(client, user)
+    response = client.post(
+        "/api/pacientes/1/evolucion",
+        data={"fecha": "2026-07-16", "contenido": "No debe guardarse", "confirmar_firma": "true"},
+    )
+
+    assert response.status_code == 422
+    assert "validada" in response.get_json()["error"].lower()
+
+
+def test_agregar_evolucion_firma_y_auditoria_en_una_transaccion(client, monkeypatch, tmp_path):
+    login_as(client, MockUser(user_id=5, rol="profesional"))
+    monkeypatch.chdir(tmp_path)
+    fake_cursor = FakeCursor(lastrowid=77)
+    fake_connection = FakeConnection(fake_cursor)
+    monkeypatch.setattr(pacientes_routes, "get_connection", lambda: fake_connection)
+    monkeypatch.setattr(pacientes_routes, "actualizar_historia", lambda paciente_id, usuario_id: "historia-hash")
+
+    response = client.post(
+        "/api/pacientes/1/evolucion",
+        data={
+            "fecha": "2026-07-16",
+            "contenido": "Evolución firmada",
+            "indicaciones": "Continuar control",
+            "confirmar_firma": "true",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["estado_firma"] == "firmada"
+    assert len(payload["hash_local"]) == 64
+    assert fake_connection.committed is True
+    queries = [query for query, _ in fake_cursor.executed]
+    assert any("INSERT INTO firmas_electronicas" in query for query in queries)
+    assert any("INSERT INTO auditorias_clinicas" in query for query in queries)
+    assert any("estado_firma = 'firmada'" in query for query in queries)
+
 def test_editar_evolucion_sin_permisos_devuelve_403(client, monkeypatch):
     # Intentar editar con un profesional que no es el autor
     login_as(client, MockUser(user_id=9, rol="profesional"))
@@ -75,7 +127,9 @@ def test_editar_evolucion_autor_ok_devuelve_200(client, monkeypatch):
         data={
             "fecha": "2026-07-16",
             "contenido": "Contenido editado por el autor",
-            "indicaciones": "Nuevas indicaciones del autor"
+            "indicaciones": "Nuevas indicaciones del autor",
+            "motivo_rectificacion": "Corrección de evolución",
+            "confirmar_firma": "true",
         }
     )
 
@@ -128,7 +182,9 @@ def test_editar_evolucion_director_ok_devuelve_200(client, monkeypatch):
         data={
             "fecha": "2026-07-16",
             "contenido": "Contenido editado por director",
-            "indicaciones": "Nuevas indicaciones del director"
+            "indicaciones": "Nuevas indicaciones del director",
+            "motivo_rectificacion": "Aclaración clínica",
+            "confirmar_firma": "true",
         }
     )
 

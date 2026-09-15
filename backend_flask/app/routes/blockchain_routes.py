@@ -167,7 +167,7 @@ def registrar_evolucion_en_bfa(evolucion_id):
         conn.close()
         return jsonify({"error": "Evolucion no encontrada"}), 404
 
-    hash_local = generar_hash_evolucion(evolucion)
+    hash_local = evolucion.get("hash_local") or generar_hash_evolucion(evolucion)
 
     try:
         rd = registrar_hash_en_bfa(hash_local)
@@ -427,7 +427,7 @@ def verificar_evolucion_blockchain(evolucion_id):
         conn.close()
         return jsonify({"error": "La evolucion no tiene sellado registrado en BFA"}), 400
 
-    hash_local = generar_hash_evolucion(evolucion)
+    hash_local = evolucion.get("hash_local") or generar_hash_evolucion(evolucion)
 
     resultado, error_red = _verificar_en_tsa(hash_local, tx_hash)
     if error_red:

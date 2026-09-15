@@ -19,6 +19,10 @@ class Usuario(UserMixin):
         self.matricula_tipo = extra.get("matricula_tipo")
         self.matricula_numero = extra.get("matricula_numero")
         self.matricula_provincia = extra.get("matricula_provincia")
+        verificada = extra.get("matricula_verificada", False)
+        self.matricula_verificada = verificada is True or verificada in (1, "1", "true", "True")
+        self.matricula_verificada_en = extra.get("matricula_verificada_en")
+        self.matricula_verificada_por = extra.get("matricula_verificada_por")
         self.lugar_atencion_nombre = extra.get("lugar_atencion_nombre")
         self.lugar_atencion_direccion = extra.get("lugar_atencion_direccion")
         self.lugar_atencion_contacto = extra.get("lugar_atencion_contacto")
@@ -52,6 +56,9 @@ class Usuario(UserMixin):
                 matricula_tipo=data.get("matricula_tipo"),
                 matricula_numero=data.get("matricula_numero"),
                 matricula_provincia=data.get("matricula_provincia"),
+                matricula_verificada=data.get("matricula_verificada"),
+                matricula_verificada_en=data.get("matricula_verificada_en"),
+                matricula_verificada_por=data.get("matricula_verificada_por"),
                 lugar_atencion_nombre=data.get("lugar_atencion_nombre"),
                 lugar_atencion_direccion=data.get("lugar_atencion_direccion"),
                 lugar_atencion_contacto=data.get("lugar_atencion_contacto"),

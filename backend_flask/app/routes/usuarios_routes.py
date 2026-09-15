@@ -52,6 +52,7 @@ def _current_user_payload():
         "matricula_tipo": getattr(current_user, "matricula_tipo", None),
         "matricula_numero": getattr(current_user, "matricula_numero", None),
         "matricula_provincia": getattr(current_user, "matricula_provincia", None),
+        "matricula_verificada": getattr(current_user, "matricula_verificada", False),
         "lugar_atencion_nombre": getattr(current_user, "lugar_atencion_nombre", None),
         "lugar_atencion_direccion": getattr(current_user, "lugar_atencion_direccion", None),
         "lugar_atencion_contacto": getattr(current_user, "lugar_atencion_contacto", None),
@@ -144,7 +145,8 @@ def api_usuarios_listado():
         like = f"%{q}%"
         cursor.execute(f"""
             SELECT id, nombre, username, email, rol, especialidad, dni, matricula_tipo,
-                   matricula_numero, lugar_atencion_direccion, activo
+                   matricula_numero, matricula_provincia, matricula_verificada,
+                   lugar_atencion_direccion, activo
             FROM usuarios
             WHERE (nombre LIKE %s OR username LIKE %s OR email LIKE %s)
             {filtro_activo}
@@ -153,7 +155,8 @@ def api_usuarios_listado():
     else:
         cursor.execute(f"""
             SELECT id, nombre, username, email, rol, especialidad, dni, matricula_tipo,
-                   matricula_numero, lugar_atencion_direccion, activo
+                   matricula_numero, matricula_provincia, matricula_verificada,
+                   lugar_atencion_direccion, activo
             FROM usuarios
             WHERE 1=1 {filtro_activo}
             ORDER BY nombre
@@ -177,6 +180,7 @@ def api_usuarios_detalle(usuario_id):
     cursor.execute("""
         SELECT id, nombre, username, email, rol, especialidad, dni, sexo, telefono,
                matricula_tipo, matricula_numero, matricula_provincia,
+               matricula_verificada, matricula_verificada_en, matricula_verificada_por,
                lugar_atencion_nombre, lugar_atencion_direccion, lugar_atencion_contacto,
                lugar_atencion_email
         FROM usuarios
@@ -248,6 +252,17 @@ def api_usuarios_editar(usuario_id):
         if field in data:
             sets.append(f"{field}=%s")
             params.append(value)
+
+    # Changing any registration datum invalidates CAU's previous validation.
+    # Re-verification is intentionally performed outside the self-service edit
+    # endpoint, by the CAU process agreed with the institution.
+    if any(field in data for field in ("matricula_tipo", "matricula_numero", "matricula_provincia")):
+        sets.extend([
+            "matricula_verificada=%s",
+            "matricula_verificada_en=%s",
+            "matricula_verificada_por=%s",
+        ])
+        params.extend([0, None, None])
 
     if password:
         if not password_valida(password):

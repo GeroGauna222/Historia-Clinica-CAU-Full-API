@@ -19,6 +19,7 @@ export const useUserStore = defineStore('user', {
         matricula_tipo: '',
         matricula_numero: '',
         matricula_provincia: '',
+        matricula_verificada: false,
         lugar_atencion_nombre: '',
         lugar_atencion_direccion: '',
         lugar_atencion_contacto: '',
@@ -43,6 +44,8 @@ export const useUserStore = defineStore('user', {
             this.matricula_tipo = data.matricula_tipo ?? '';
             this.matricula_numero = data.matricula_numero ?? '';
             this.matricula_provincia = data.matricula_provincia ?? '';
+            const verificada = data.matricula_verificada;
+            this.matricula_verificada = verificada === true || verificada === 1 || verificada === '1' || verificada === 'true';
             this.lugar_atencion_nombre = data.lugar_atencion_nombre ?? '';
             this.lugar_atencion_direccion = data.lugar_atencion_direccion ?? '';
             this.lugar_atencion_contacto = data.lugar_atencion_contacto ?? '';

@@ -19,6 +19,10 @@ class MockUser(UserMixin):
         self.email = email
         self.duracion_turno = 30
         self.foto = None
+        self.matricula_verificada = rol in ("director", "profesional")
+        self.matricula_tipo = "MN" if self.matricula_verificada else None
+        self.matricula_numero = f"TEST-{user_id}" if self.matricula_verificada else None
+        self.matricula_provincia = "BA" if self.matricula_verificada else None
 
 
 class FakeCursor:
@@ -79,6 +83,7 @@ def login_as(client, user):
     with client.session_transaction() as session:
         session["_user_id"] = str(user.id)
         session["_fresh"] = True
+        session["auth_event_id"] = f"test-auth-event-{user.id}"
 
 
 @pytest.fixture
