@@ -11,7 +11,8 @@
 
 - In development, `nginx` is the entrypoint. In production, `edge_gateway` is the
   public entrypoint and forwards through the external `edge_transport_net` network.
-- Production must set `COMPOSE_FILE=docker-compose.yml:docker-compose.prod.yml`.
+- Production keeps an approved copy of `docker-compose.prod.yml` outside the Git
+  checkout and points `COMPOSE_FILE` to it so rollback remains operational.
 - Backend Flask container is internal and proxied by nginx under `/api/`.
 - Frontend build is produced inside Docker image (`frontend/Dockerfile`).
 - MySQL schema bootstrap is controlled by `db/init.sql`.

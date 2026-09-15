@@ -95,7 +95,7 @@ VITE_API_URL=/api
 FRONTEND_URL=https://cau-hc.com.ar
 CORS_ORIGINS=https://cau-hc.com.ar,https://www.cau-hc.com.ar
 NGINX_CONF_FILE=./nginx/default.conf
-COMPOSE_FILE=docker-compose.yml:docker-compose.prod.yml
+COMPOSE_FILE=docker-compose.yml:/var/backups/historia_cau/config/docker-compose.prod.yml
 
 BFA_TSA_URL=https://tsaapi.bfa.ar/api/tsa
 ```
@@ -111,8 +111,17 @@ docker compose --env-file .env config --quiet
 ```
 
 Si el comando devuelve un código distinto de cero, detener el despliegue.
+Instalar una copia estable del override aprobado fuera del checkout para que siga
+disponible incluso al volver a un commit anterior:
+
+```bash
+install -d -m 700 /var/backups/historia_cau/config
+install -m 600 docker-compose.prod.yml \
+  /var/backups/historia_cau/config/docker-compose.prod.yml
+```
+
 `COMPOSE_FILE` hace que todos los comandos del runbook combinen la definición base
-con `docker-compose.prod.yml`; no editar `docker-compose.yml` directamente en el VPS.
+con ese override estable; no editar `docker-compose.yml` directamente en el VPS.
 
 ## 4. Preparación de la versión
 
@@ -155,14 +164,14 @@ Desde la raíz del repositorio en producción:
   BACKUP_DIR="/var/backups/historia_cau/releases/$RELEASE_TS"
   mkdir -p "$BACKUP_DIR"
 
-  docker compose --env-file .env stop nginx
-  trap 'docker compose --env-file .env up -d nginx > /dev/null' EXIT
+  docker stop historia_nginx > /dev/null
+  trap 'docker start historia_nginx > /dev/null' EXIT
 
-  docker compose --env-file .env exec -T db sh -c \
+  docker exec historia_db sh -c \
     'exec mysqldump --single-transaction --routines --triggers -uroot -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"' \
     | gzip > "$BACKUP_DIR/database.sql.gz"
 
-  docker compose --env-file .env exec -T web \
+  docker exec historia_web \
     tar -czf - -C /app/uploads . > "$BACKUP_DIR/uploads.tar.gz"
 
   gzip -t "$BACKUP_DIR/database.sql.gz"
@@ -170,7 +179,7 @@ Desde la raíz del repositorio en producción:
   test -s "$BACKUP_DIR/database.sql.gz"
   test -s "$BACKUP_DIR/uploads.tar.gz"
 
-  docker compose --env-file .env up -d nginx > /dev/null
+  docker start historia_nginx > /dev/null
   trap - EXIT
   printf 'Backup verificado: %s\n' "$BACKUP_DIR"
 )
@@ -229,6 +238,8 @@ printf '%s\n' "$PREVIOUS_RELEASE" > /var/backups/historia_cau/previous-release.t
 git checkout main
 git merge --ff-only "$RELEASE_COMMIT"
 test "$(git rev-parse HEAD)" = "$RELEASE_COMMIT"
+install -m 600 docker-compose.prod.yml \
+  /var/backups/historia_cau/config/docker-compose.prod.yml
 ```
 
 Si el árbol no está limpio, el commit no existe o el avance no es fast-forward,
