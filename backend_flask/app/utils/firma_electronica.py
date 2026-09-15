@@ -40,7 +40,7 @@ def ahora_argentina_sin_tz():
 
 
 def validar_profesional_firmante(user=None):
-    """Validate role, registration data and CAU's explicit verification flag."""
+    """Validate that the signer has a clinical role and registration data."""
     user = user or current_user
     if getattr(user, "rol", None) not in ("director", "profesional"):
         raise FirmaElectronicaError(
@@ -56,13 +56,6 @@ def validar_profesional_firmante(user=None):
     if missing:
         raise FirmaElectronicaError(
             "La cuenta debe tener matrícula profesional cargada antes de firmar una evolución.",
-            422,
-        )
-
-    verificada = getattr(user, "matricula_verificada", False)
-    if not (verificada is True or verificada in (1, "1", "true", "True")):
-        raise FirmaElectronicaError(
-            "La matrícula profesional todavía no fue validada por CAU.",
             422,
         )
 

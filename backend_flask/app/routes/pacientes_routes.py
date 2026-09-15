@@ -156,6 +156,60 @@ def _historia_archivo_contenido_valido(extension, contenido):
     return signatures.get(extension, False)
 
 
+class ArchivoClinicoInvalido(ValueError):
+    def __init__(self, message, status_code):
+        super().__init__(message)
+        self.message = message
+        self.status_code = status_code
+
+
+def _preparar_archivos_clinicos(archivos):
+    """Validate clinical uploads before they can reach storage or a transaction."""
+    prepared = []
+
+    for archivo in archivos:
+        if not archivo or not archivo.filename:
+            continue
+
+        nombre_original = archivo.filename.strip()
+        nombre_seguro = secure_filename(nombre_original)
+        extension = os.path.splitext(nombre_seguro)[1].lower()
+        mime_type = (archivo.mimetype or '').split(';', 1)[0].strip().lower()
+        expected_mime = HISTORIA_ARCHIVO_EXTENSION_MIMES.get(extension)
+
+        if not nombre_seguro or not expected_mime:
+            raise ArchivoClinicoInvalido(
+                f'Formato no permitido para {nombre_original}',
+                415,
+            )
+        if mime_type not in {expected_mime, 'application/octet-stream'}:
+            raise ArchivoClinicoInvalido(
+                f'El tipo MIME de {nombre_original} no coincide con su extensión',
+                415,
+            )
+
+        contenido = archivo.read()
+        if not contenido:
+            raise ArchivoClinicoInvalido(
+                f'El archivo {nombre_original} está vacío',
+                422,
+            )
+        if len(contenido) > HISTORIA_ARCHIVO_MAX_BYTES:
+            raise ArchivoClinicoInvalido(
+                f'{nombre_original} supera el límite de 10 MB',
+                413,
+            )
+        if not _historia_archivo_contenido_valido(extension, contenido):
+            raise ArchivoClinicoInvalido(
+                f'El contenido de {nombre_original} no coincide con su formato',
+                415,
+            )
+
+        prepared.append((nombre_original, nombre_seguro, expected_mime, contenido))
+
+    return prepared
+
+
 def _log_db_error(message, conn=None):
     # Operative context only: never log payloads, patient names, DNI, diagnosis, or clinical content.
     current_app.logger.exception(
@@ -457,6 +511,15 @@ def api_eliminar_paciente(id):
         if not cursor.fetchone():
             return jsonify({'error': 'Paciente no encontrado'}), 404
 
+        cursor.execute(
+            "SELECT id FROM historia_archivos WHERE paciente_id = %s LIMIT 1",
+            (id,),
+        )
+        if cursor.fetchone():
+            return jsonify({
+                'error': '⚠️ No se puede eliminar: el paciente tiene documentos adjuntos en su historia clínica'
+            }), 400
+
         try:
             cursor.execute("DELETE FROM pacientes WHERE id = %s", (id,))
             conn.commit()
@@ -468,7 +531,9 @@ def api_eliminar_paciente(id):
             # SHOW FULL PROCESSLIST + SHOW ENGINE INNODB STATUS).
             conn.rollback()
             _log_db_error("Patient delete integrity error", conn)
-            return jsonify({'error': '⚠️ No se puede eliminar: el paciente tiene historia clinica, turnos o recetas asociadas'}), 400
+            return jsonify({
+                'error': '⚠️ No se puede eliminar: el paciente tiene historia clínica, turnos, recetas o documentos adjuntos asociados'
+            }), 400
 
         return jsonify({'message': 'Paciente eliminado correctamente ✅'})
     except Exception:
@@ -585,6 +650,11 @@ def agregar_evolucion(id):
     if not fecha or not contenido or not contenido.strip():
         return jsonify({'error': 'Faltan campos obligatorios'}), 400
 
+    try:
+        archivos_preparados = _preparar_archivos_clinicos(archivos)
+    except ArchivoClinicoInvalido as exc:
+        return jsonify({'error': exc.message}), exc.status_code
+
     conn = get_connection()
     cursor = conn.cursor()
     upload_dir = None
@@ -601,16 +671,13 @@ def agregar_evolucion(id):
         upload_dir = _evolucion_archivos_root(evolucion_id)
         os.makedirs(upload_dir, exist_ok=True)
 
-        for archivo in archivos:
-            if archivo.filename:
-                filename = secure_filename(archivo.filename)
-                if not filename:
-                    continue
-                archivo.save(os.path.join(upload_dir, filename))
-                cursor.execute("""
-                    INSERT INTO evolucion_archivos (evolucion_id, filename)
-                    VALUES (%s, %s)
-                """, (evolucion_id, filename))
+        for _, filename, _, contenido_archivo in archivos_preparados:
+            with open(os.path.join(upload_dir, filename), 'wb') as destino:
+                destino.write(contenido_archivo)
+            cursor.execute("""
+                INSERT INTO evolucion_archivos (evolucion_id, filename)
+                VALUES (%s, %s)
+            """, (evolucion_id, filename))
 
         evolucion = {
             'id': evolucion_id,
@@ -743,9 +810,19 @@ def get_evoluciones(id):
 @login_required
 @requiere_rol('director', 'profesional', 'administrativo', 'area')
 def uploaded_file(evo_id, filename):
-    """Sirve los archivos adjuntos de evoluciones."""
+    """Serve evolution attachments as inert downloads, including legacy files."""
     folder = _evolucion_archivos_root(evo_id)
-    return send_from_directory(folder, filename)
+    response = send_from_directory(
+        folder,
+        filename,
+        as_attachment=True,
+        download_name=filename,
+        conditional=True,
+        max_age=0,
+    )
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['Content-Security-Policy'] = "sandbox; default-src 'none'"
+    return response
 
 
 @bp_pacientes.route('/api/pacientes/<int:paciente_id>/adjuntos', methods=['GET', 'POST'])
@@ -787,30 +864,12 @@ def api_adjuntos_historia(paciente_id):
             return jsonify({'error': 'Debe seleccionar al menos un archivo'}), 400
 
         root = _historia_archivos_root(paciente_id)
-        prepared = []
         respuesta = []
 
-        for archivo in archivos:
-            nombre_original = archivo.filename.strip()
-            nombre_seguro = secure_filename(nombre_original)
-            extension = os.path.splitext(nombre_seguro)[1].lower()
-            mime_type = (archivo.mimetype or '').lower()
-
-            if not nombre_seguro or extension not in {'.pdf', '.jpg', '.jpeg', '.png'}:
-                return jsonify({'error': f'Formato no permitido para {nombre_original}'}), 415
-            if mime_type not in HISTORIA_ARCHIVO_MIMES and mime_type != 'application/octet-stream':
-                return jsonify({'error': f'Tipo MIME no permitido para {nombre_original}'}), 415
-
-            contenido = archivo.read()
-            if not contenido:
-                return jsonify({'error': f'El archivo {nombre_original} está vacío'}), 422
-            if len(contenido) > HISTORIA_ARCHIVO_MAX_BYTES:
-                return jsonify({'error': f'{nombre_original} supera el límite de 10 MB'}), 413
-            if not _historia_archivo_contenido_valido(extension, contenido):
-                return jsonify({'error': f'El contenido de {nombre_original} no coincide con su formato'}), 415
-
-            mime_type = HISTORIA_ARCHIVO_EXTENSION_MIMES[extension] if mime_type == 'application/octet-stream' else mime_type
-            prepared.append((nombre_original, nombre_seguro, mime_type, contenido))
+        try:
+            prepared = _preparar_archivos_clinicos(archivos)
+        except ArchivoClinicoInvalido as exc:
+            return jsonify({'error': exc.message}), exc.status_code
 
         os.makedirs(root, exist_ok=True)
         for nombre_original, nombre_seguro, mime_type, contenido in prepared:
@@ -936,6 +995,11 @@ def api_editar_evolucion(paciente_id, evo_id):
     if not fecha or not contenido or not contenido.strip():
         return jsonify({'error': 'Faltan campos obligatorios'}), 400
 
+    try:
+        archivos_preparados = _preparar_archivos_clinicos(archivos)
+    except ArchivoClinicoInvalido as exc:
+        return jsonify({'error': exc.message}), exc.status_code
+
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
     upload_dir = None
@@ -964,8 +1028,20 @@ def api_editar_evolucion(paciente_id, evo_id):
         # 3. Determinar padre_id (si la actual ya tiene padre, heredamos el mismo padre)
         padre_id = evolucion_actual['padre_id'] if evolucion_actual['padre_id'] is not None else evolucion_actual['id']
 
+        # Serialize every rectification in the tree through its stable root row.
+        # Locking only the selected version would not coordinate callers editing
+        # different versions of the same clinical evolution.
+        cursor.execute(
+            "SELECT id FROM evoluciones WHERE id = %s FOR UPDATE",
+            (padre_id,),
+        )
+        cursor.fetchone()
+
         # 4. Obtener la version mas alta actual para el arbol
-        cursor.execute("SELECT MAX(version) AS max_v FROM evoluciones WHERE id = %s OR padre_id = %s", (padre_id, padre_id))
+        cursor.execute(
+            "SELECT MAX(version) AS max_v FROM evoluciones WHERE id = %s OR padre_id = %s FOR UPDATE",
+            (padre_id, padre_id),
+        )
         res_v = cursor.fetchone()
         max_version = res_v['max_v'] if res_v and res_v['max_v'] is not None else 1
         nueva_version = max_version + 1
@@ -1011,16 +1087,13 @@ def api_editar_evolucion(paciente_id, evo_id):
                 import shutil
                 shutil.copy2(ruta_origen, ruta_destino)
 
-        for archivo in archivos:
-            if archivo.filename:
-                filename = secure_filename(archivo.filename)
-                if not filename:
-                    continue
-                archivo.save(os.path.join(upload_dir, filename))
-                cursor.execute("""
-                    INSERT INTO evolucion_archivos (evolucion_id, filename)
-                    VALUES (%s, %s)
-                """, (nueva_evo_id, filename))
+        for _, filename, _, contenido_archivo in archivos_preparados:
+            with open(os.path.join(upload_dir, filename), 'wb') as destino:
+                destino.write(contenido_archivo)
+            cursor.execute("""
+                INSERT INTO evolucion_archivos (evolucion_id, filename)
+                VALUES (%s, %s)
+            """, (nueva_evo_id, filename))
 
         evolucion = {
             'id': nueva_evo_id,

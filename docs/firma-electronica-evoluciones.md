@@ -4,7 +4,7 @@ La evolución clínica se cierra mediante una firma electrónica vinculada a:
 
 - la sesión autenticada de Flask-Login;
 - el usuario, rol y matrícula profesional;
-- la validación explícita de la matrícula por CAU;
+- el tipo y número de matrícula cargados en la cuenta profesional;
 - una confirmación visible de “Firmar evolución”;
 - el contenido clínico exacto, versionado y protegido con SHA-256;
 - la fecha y hora de la actuación;
@@ -15,11 +15,14 @@ digital. La implementación es una firma electrónica; la institución conserva
 la responsabilidad de administrar las cuentas, sus sesiones y la validación de
 las matrículas.
 
-## Validación de matrículas
+## Matrículas profesionales
 
-La migración deja `usuarios.matricula_verificada = 0`. Luego de la comprobación
-institucional, CAU debe marcar la matrícula directamente en la base de datos,
-registrando quién y cuándo la validó:
+Todo usuario con rol `profesional` o `director`, tipo de matrícula y número de
+matrícula cargados puede registrar evoluciones. La verificación institucional
+es un dato de auditoría adicional y no bloquea la atención clínica.
+
+Cuando CAU realice esa comprobación puede registrarla directamente en la base de
+datos, indicando quién y cuándo la validó:
 
 ```sql
 UPDATE usuarios
@@ -32,8 +35,8 @@ WHERE id = <profesional_id>
   AND matricula_numero IS NOT NULL;
 ```
 
-Si se modifica el tipo, número o provincia de matrícula desde la administración
-del sistema, la validación se revoca automáticamente y debe repetirse.
+Si se modifica el tipo, número o provincia desde la administración, la marca de
+verificación se revoca y puede repetirse sin impedir nuevas evoluciones.
 
 ## Evoluciones existentes
 

@@ -209,6 +209,8 @@ const calendarOptions = reactive({
             tipo,
             paciente: info.event.extendedProps.paciente,
             dni: info.event.extendedProps.dni,
+            cobertura: info.event.extendedProps.cobertura,
+            nro_certificado: info.event.extendedProps.nro_certificado,
             profesional: info.event.extendedProps.profesional,
             description: info.event.extendedProps.description,
             observaciones: info.event.extendedProps.observaciones,
@@ -307,6 +309,8 @@ function crearEventoIndividual(t) {
             turnoId: t.id,
             paciente: t.paciente,
             dni: t.dni,
+            cobertura: t.cobertura,
+            nro_certificado: t.nro_certificado ?? t.nro_cobertura,
             profesional: t.profesional,
             description: t.description || '',
             observaciones: t.observaciones,
@@ -344,6 +348,8 @@ function crearEventoGrupal(t) {
             turnoId: t.id,
             paciente: t.paciente,
             dni: t.dni,
+            cobertura: t.cobertura,
+            nro_certificado: t.nro_certificado ?? t.nro_cobertura,
             profesional: `Grupo: ${t.grupo_nombre || grupo.value?.nombre || ''}`,
             description: t.description || '',
             observaciones: t.observaciones,
@@ -715,7 +721,11 @@ onMounted(async () => {
                     </div>
                     <div>
                         <p class="font-semibold text-[#134E4A] dark:text-slate-200">{{ turnoSeleccionado.paciente }}</p>
-                        <p class="text-xs text-slate-400">DNI: {{ turnoSeleccionado.dni }}</p>
+                        <div class="flex flex-wrap items-center gap-x-2 text-xs text-slate-400">
+                            <span>DNI: {{ turnoSeleccionado.dni || '-' }}</span>
+                            <span v-if="turnoSeleccionado.cobertura">· Cobertura: {{ turnoSeleccionado.cobertura }}</span>
+                            <span v-if="turnoSeleccionado.nro_certificado">· Nº Cobertura: {{ turnoSeleccionado.nro_certificado }}</span>
+                        </div>
                     </div>
                 </div>
                 <div class="space-y-2 text-sm">

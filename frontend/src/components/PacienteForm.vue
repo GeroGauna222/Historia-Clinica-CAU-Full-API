@@ -237,7 +237,12 @@ const registrar = async () => {
                 <!-- Cobertura -->
                 <div>
                     <label class="block mb-1">Cobertura</label>
-                    <input v-model="paciente.cobertura" type="text" class="p-inputtext p-component w-full h-12" />
+                    <input v-model="paciente.cobertura" type="text" class="p-inputtext p-component w-full h-12" placeholder="Ej: OSDE, IOMA, PAMI, Particular" />
+                </div>
+                <!-- Nº de Cobertura -->
+                <div>
+                    <label class="block mb-1">Nº de Cobertura</label>
+                    <input v-model="paciente.nro_certificado" type="text" class="p-inputtext p-component w-full h-12" placeholder="N° de afiliado / credencial" />
                 </div>
                 <!-- Certificado discapacidad -->
                 <div>
@@ -247,11 +252,6 @@ const registrar = async () => {
                         <option value="Si">Si</option>
                         <option value="No">No</option>
                     </select>
-                </div>
-                <!-- Nº Certificado -->
-                <div>
-                    <label class="block mb-1">Nº Certificado</label>
-                    <input v-model="paciente.nro_certificado" type="text" class="p-inputtext p-component w-full h-12" />
                 </div>
                 <!-- Derivado por -->
                 <div>

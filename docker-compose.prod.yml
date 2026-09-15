@@ -1,0 +1,16 @@
+services:
+  nginx:
+    ports: !override
+      - "127.0.0.1:18080:80"
+      - "127.0.0.1:18443:443"
+    networks:
+      historia_net:
+      edge_transport:
+        ipv4_address: 172.30.0.10
+        aliases:
+          - cau-edge
+
+networks:
+  edge_transport:
+    external: true
+    name: edge_transport_net

@@ -1,6 +1,6 @@
 -- Firma electrónica y trazabilidad de actuaciones clínicas.
--- Las matrículas existentes quedan pendientes de validación explícita por CAU
--- (matricula_verificada = 0) para evitar firmar con datos no comprobados.
+-- La verificación institucional se conserva como dato de auditoría. Firmar una
+-- evolución requiere rol clínico y tipo/número de matrícula cargados.
 
 ALTER TABLE usuarios
     ADD COLUMN matricula_verificada TINYINT(1) NOT NULL DEFAULT 0 AFTER matricula_provincia,

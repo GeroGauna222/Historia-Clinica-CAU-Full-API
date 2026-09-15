@@ -72,9 +72,13 @@ def test_eliminar_paciente_con_evoluciones_devuelve_400_no_500_y_hace_rollback(c
     # ON DELETE CASCADE). Sin manejo de la excepcion, la conexion queda abierta
     # con la transaccion sin rollback -> conexion "colgada" en MySQL indefinidamente.
     fake_cursor = FakeCursor(
-        fetchone_results=[{"id": 2}],  # SELECT id ... -> paciente existe
+        fetchone_results=[
+            {"id": 2},  # SELECT id ... -> paciente existe
+            None,  # no tiene documentos generales adjuntos
+        ],
         execute_side_effects=[
             None,  # SELECT id FROM pacientes
+            None,  # SELECT historia_archivos
             IntegrityError("Cannot delete or update a parent row: a foreign key constraint fails"),  # DELETE
         ],
     )
@@ -111,6 +115,20 @@ def test_crear_paciente_error_db_generico_hace_rollback_y_cierra_recursos(client
     assert fake_connection.rolled_back is True, "debe hacer rollback ante errores DB no IntegrityError"
     assert fake_cursor.closed is True
     assert fake_connection.closed is True, "la conexion debe cerrarse siempre, incluso con error"
+
+
+def test_eliminar_paciente_con_documentos_adjuntos_no_borra_paciente(client, monkeypatch):
+    fake_cursor = FakeCursor(fetchone_results=[{"id": 2}, {"id": 91}])
+    fake_connection = FakeConnection(fake_cursor)
+    monkeypatch.setattr(pacientes_routes, "get_connection", lambda: fake_connection)
+    login_as(client, MockUser(1, "director"))
+
+    response = client.delete("/api/pacientes/2")
+
+    assert response.status_code == 400
+    assert "documentos adjuntos" in response.get_json()["error"].lower()
+    assert all("DELETE FROM pacientes" not in query for query, _ in fake_cursor.executed)
+    assert fake_connection.committed is False
 
 
 def test_crear_paciente_error_generico_en_precheck_hace_rollback_cierra_y_propaga(client, monkeypatch):

@@ -145,7 +145,8 @@ CREATE TABLE evoluciones (
     FOREIGN KEY (paciente_id) REFERENCES pacientes(id),
     FOREIGN KEY (usuario_id) REFERENCES usuarios(id),
     FOREIGN KEY (padre_id) REFERENCES evoluciones(id) ON DELETE CASCADE,
-    INDEX idx_evoluciones_padre_activo (padre_id, activo)
+    INDEX idx_evoluciones_padre_activo (padre_id, activo),
+    UNIQUE KEY uq_evoluciones_padre_version (padre_id, version)
 ) ENGINE=InnoDB
   DEFAULT CHARSET=utf8mb4
   COLLATE=utf8mb4_unicode_ci;
@@ -178,7 +179,7 @@ CREATE TABLE historia_archivos (
     tamanio_bytes BIGINT UNSIGNED NOT NULL,
     hash_sha256 CHAR(64) NOT NULL,
     cargado_en DATETIME(6) NOT NULL,
-    FOREIGN KEY (paciente_id) REFERENCES pacientes(id) ON DELETE CASCADE,
+    FOREIGN KEY (paciente_id) REFERENCES pacientes(id) ON DELETE RESTRICT,
     FOREIGN KEY (usuario_id) REFERENCES usuarios(id),
     INDEX idx_historia_archivos_paciente_fecha (paciente_id, cargado_en),
     INDEX idx_historia_archivos_hash (hash_sha256)

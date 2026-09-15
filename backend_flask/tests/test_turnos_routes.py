@@ -184,6 +184,42 @@ def test_crear_turno_grupal_tanda_rechaza_cantidad_invalida(client, monkeypatch)
     assert "cantidad" in response.get_json()["error"].lower()
 
 
+def test_listar_turnos_grupales_incluye_datos_de_cobertura(client, monkeypatch):
+    login_as(client, MockUser(user_id=2, rol="administrativo"))
+
+    fake_cursor = FakeCursor(fetchall_results=[[{
+        "id": 12,
+        "grupo_id": 4,
+        "grupo_nombre": "Rehabilitación",
+        "color": "#00936B",
+        "es_rehabilitacion": 1,
+        "paciente_id": 9,
+        "paciente": "Ana Pérez",
+        "dni": "12345678",
+        "cobertura": "IOMA",
+        "nro_certificado": "AF-9087",
+        "fecha_inicio": datetime(2026, 9, 16, 10, 0),
+        "fecha_fin": datetime(2026, 9, 16, 10, 30),
+        "motivo": "Rehabilitación",
+        "creado_por": 2,
+        "observaciones": None,
+        "ausencia": None,
+        "estado_asistencia": "programado",
+        "creado_por_nombre": "Administración",
+        "creado_en": datetime(2026, 9, 15, 9, 0),
+    }]])
+    fake_connection = FakeConnection(fake_cursor)
+    monkeypatch.setattr(turnos_routes, "get_connection", lambda: fake_connection)
+
+    response = client.get("/api/turnos/grupales")
+
+    assert response.status_code == 200
+    turno = response.get_json()[0]
+    assert turno["cobertura"] == "IOMA"
+    assert turno["nro_certificado"] == "AF-9087"
+    assert turno["nro_cobertura"] == "AF-9087"
+
+
 def test_generar_fechas_tanda_quincenal():
     from app.routes.turnos_routes import _generar_fechas_tanda
 
@@ -640,5 +676,4 @@ def test_actualizar_asistencia_presente_y_presentes_hoy(client, monkeypatch):
     assert presentes[0]["id"] == 15
     assert presentes[0]["estado_asistencia"] == "presente"
     assert presentes[0]["paciente"] == "Carlos Gomez"
-
 

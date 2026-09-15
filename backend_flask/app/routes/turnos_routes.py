@@ -382,7 +382,7 @@ def api_turnos():
             cursor.execute(
                 """
                 SELECT t.id, t.paciente_id, t.fecha_inicio, t.fecha_fin, t.motivo, t.observaciones, t.ausencia, t.estado_asistencia,
-                       TRIM(CONCAT(COALESCE(p.nombre, ''), ' ', COALESCE(p.apellido, ''))) AS paciente, p.dni, u.nombre AS profesional
+                       TRIM(CONCAT(COALESCE(p.nombre, ''), ' ', COALESCE(p.apellido, ''))) AS paciente, p.dni, p.cobertura, p.nro_certificado, u.nombre AS profesional
                 FROM turnos t
                 JOIN pacientes p ON t.paciente_id = p.id
                 JOIN usuarios u ON t.usuario_id = u.id
@@ -395,7 +395,7 @@ def api_turnos():
             cursor.execute(
                 """
                 SELECT t.id, t.paciente_id, t.fecha_inicio, t.fecha_fin, t.motivo, t.observaciones, t.ausencia, t.estado_asistencia,
-                       TRIM(CONCAT(COALESCE(p.nombre, ''), ' ', COALESCE(p.apellido, ''))) AS paciente, p.dni, u.nombre AS profesional
+                       TRIM(CONCAT(COALESCE(p.nombre, ''), ' ', COALESCE(p.apellido, ''))) AS paciente, p.dni, p.cobertura, p.nro_certificado, u.nombre AS profesional
                 FROM turnos t
                 JOIN pacientes p ON t.paciente_id = p.id
                 JOIN usuarios u ON t.usuario_id = u.id
@@ -412,6 +412,9 @@ def api_turnos():
                 "id": t["id"],
                 "paciente": t["paciente"],
                 "dni": t["dni"],
+                "cobertura": t.get("cobertura"),
+                "nro_certificado": t.get("nro_certificado"),
+                "nro_cobertura": t.get("nro_certificado"),
                 "start": t["fecha_inicio"].replace(tzinfo=TZ_ARG).isoformat(),
                 "end": t["fecha_fin"].replace(tzinfo=TZ_ARG).isoformat(),
                 "description": t["motivo"],
@@ -739,6 +742,8 @@ def turnos_profesional(usuario_id):
             t.estado_asistencia,
             TRIM(CONCAT(COALESCE(p.nombre, ''), ' ', COALESCE(p.apellido, ''))) AS paciente,
             p.dni,
+            p.cobertura,
+            p.nro_certificado,
             u.nombre AS profesional,
             '#007AFF' AS color
         FROM turnos t
@@ -768,6 +773,8 @@ def turnos_profesional(usuario_id):
                 t.estado_asistencia,
                 TRIM(CONCAT(COALESCE(p.nombre, ''), ' ', COALESCE(p.apellido, ''))) AS paciente,
                 p.dni,
+                p.cobertura,
+                p.nro_certificado,
                 u.nombre AS profesional,
                 gp.color
             FROM turnos t
@@ -792,6 +799,9 @@ def turnos_profesional(usuario_id):
             "end": t["fecha_fin"].replace(tzinfo=TZ_ARG).isoformat(),
             "paciente": t["paciente"],
             "dni": t["dni"],
+            "cobertura": t.get("cobertura"),
+            "nro_certificado": t.get("nro_certificado"),
+            "nro_cobertura": t.get("nro_certificado"),
             "profesional": t["profesional"],
             "description": t["motivo"],
             "ausencia": t["ausencia"],
@@ -835,6 +845,8 @@ def turnos_profesional_completo():
                 t.fecha_fin AS end,
                 TRIM(CONCAT(COALESCE(p.nombre, ''), ' ', COALESCE(p.apellido, ''))) AS paciente,
                 p.dni,
+                p.cobertura,
+                p.nro_certificado,
                 u.nombre AS profesional,
                 t.motivo AS description,
                 t.observaciones,
@@ -874,6 +886,8 @@ def turnos_profesional_completo():
             t.fecha_fin AS end,
             TRIM(CONCAT(COALESCE(p.nombre, ''), ' ', COALESCE(p.apellido, ''))) AS paciente,
             p.dni,
+            p.cobertura,
+            p.nro_certificado,
             u.nombre AS profesional,
             t.motivo AS description,
             t.observaciones,
@@ -906,6 +920,8 @@ def turnos_profesional_completo():
             tg.fecha_fin AS end,
             TRIM(CONCAT(COALESCE(p.nombre, ''), ' ', COALESCE(p.apellido, ''))) AS paciente,
             p.dni,
+            p.cobertura,
+            p.nro_certificado,
             CONCAT('Grupo: ', gp.nombre) AS profesional,
             tg.motivo AS description,
             tg.observaciones,
@@ -972,6 +988,8 @@ def turnos_por_grupo(grupo_id):
             t.creado_en,
             TRIM(CONCAT(COALESCE(p.nombre, ''), ' ', COALESCE(p.apellido, ''))) AS paciente,
             p.dni,
+            p.cobertura,
+            p.nro_certificado,
             u.nombre AS profesional,
             gp.color
         FROM grupo_miembros gm
@@ -995,6 +1013,9 @@ def turnos_por_grupo(grupo_id):
                 "id": t["id"],
                 "paciente": t["paciente"],
                 "dni": t["dni"],
+                "cobertura": t.get("cobertura"),
+                "nro_certificado": t.get("nro_certificado"),
+                "nro_cobertura": t.get("nro_certificado"),
                 "profesional": t["profesional"],
                 "description": t["description"],
                 "observaciones": t["observaciones"],
@@ -1040,6 +1061,8 @@ def listar_turnos_grupales():
             tg.paciente_id,
             TRIM(CONCAT(COALESCE(p.nombre, ''), ' ', COALESCE(p.apellido, ''))) AS paciente,
             p.dni,
+            p.cobertura,
+            p.nro_certificado,
             tg.fecha_inicio,
             tg.fecha_fin,
             tg.motivo,
@@ -1076,6 +1099,9 @@ def listar_turnos_grupales():
                 "paciente_id": row["paciente_id"],
                 "paciente": row["paciente"],
                 "dni": row["dni"],
+                "cobertura": row.get("cobertura"),
+                "nro_certificado": row.get("nro_certificado"),
+                "nro_cobertura": row.get("nro_certificado"),
                 "start": _to_iso_arg(row["fecha_inicio"]),
                 "end": _to_iso_arg(row["fecha_fin"]),
                 "description": row["motivo"],
@@ -1397,6 +1423,8 @@ def api_turnos_presentes_hoy():
                     t.usuario_id,
                     TRIM(CONCAT(COALESCE(p.nombre, ''), ' ', COALESCE(p.apellido, ''))) AS paciente,
                     p.dni,
+                    p.cobertura,
+                    p.nro_certificado,
                     u.nombre AS profesional
                 FROM turnos t
                 JOIN pacientes p ON t.paciente_id = p.id
@@ -1423,6 +1451,8 @@ def api_turnos_presentes_hoy():
                     t.usuario_id,
                     TRIM(CONCAT(COALESCE(p.nombre, ''), ' ', COALESCE(p.apellido, ''))) AS paciente,
                     p.dni,
+                    p.cobertura,
+                    p.nro_certificado,
                     u.nombre AS profesional
                 FROM turnos t
                 JOIN pacientes p ON t.paciente_id = p.id

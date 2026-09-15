@@ -56,7 +56,7 @@ const selectedEvoParaHistorial = ref(null);
 // Control de qué año está abierto
 const accordionAbierto = ref({});
 
-const canEvolve = computed(() => ['director', 'profesional'].includes(userStore.rol) && Boolean(userStore.matricula_verificada) && Boolean(userStore.matricula_tipo) && Boolean(userStore.matricula_numero));
+const canEvolve = computed(() => ['director', 'profesional'].includes(userStore.rol) && Boolean(userStore.matricula_tipo) && Boolean(userStore.matricula_numero));
 
 /**
  * Agrupa evoluciones por año
@@ -395,7 +395,7 @@ const abrirFormEvolucion = async () => {
         toast.add({
             severity: 'warn',
             summary: 'Firma no habilitada',
-            detail: 'Sólo profesionales con matrícula validada por CAU pueden evolucionar.',
+            detail: 'Sólo profesionales con tipo y número de matrícula cargados pueden evolucionar.',
             life: 4000
         });
         return;
@@ -528,8 +528,11 @@ onMounted(() => {
         <div v-if="paciente && !loading" class="mb-6 border dark:border-slate-700 p-4 rounded-2xl bg-white dark:bg-slate-900 shadow-sm">
             <div class="grid md:grid-cols-2 gap-2 text-gray-700 dark:text-gray-200 text-sm">
                 <p><strong>DNI:</strong> {{ paciente.dni }}</p>
-                <p><strong>Cobertura:</strong> {{ paciente?.cobertura || '-' }}</p>
+                <p>
+                    <strong>Cobertura:</strong> {{ paciente?.cobertura || '-' }} <span v-if="paciente?.nro_certificado" class="text-xs text-gray-500 dark:text-gray-400">({{ paciente.nro_certificado }})</span>
+                </p>
                 <p><strong>Nº HC:</strong> {{ paciente.nro_hc }}</p>
+                <p><strong>Nº de Cobertura:</strong> {{ paciente?.nro_certificado || '-' }}</p>
                 <p><strong>Fecha de nacimiento:</strong> {{ paciente.fecha_nacimiento || '-' }}</p>
             </div>
         </div>
@@ -594,7 +597,7 @@ onMounted(() => {
             </div>
 
             <div v-if="!canEvolve && ['director', 'profesional'].includes(userStore.rol)" class="mb-4 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-200">
-                Para evolucionar necesitás una matrícula cargada y validada por CAU.
+                Para evolucionar necesitás tener el tipo y número de matrícula cargados.
             </div>
 
             <!-- Si no hay evoluciones -->
@@ -687,7 +690,7 @@ onMounted(() => {
                 :auto="false"
                 :showUpload="false"
                 :showCancel="false"
-                accept=".pdf,image/*"
+                accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
                 class="mb-2"
                 :previewWidth="0"
                 :showPreview="false"

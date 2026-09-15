@@ -324,6 +324,8 @@ const calendarOptions = reactive({
             editable: Boolean(e.extendedProps.editable),
             paciente: e.extendedProps.paciente,
             dni: e.extendedProps.dni,
+            cobertura: e.extendedProps.cobertura,
+            nro_certificado: e.extendedProps.nro_certificado,
             profesional: e.extendedProps.profesional,
             description: e.extendedProps.description,
             observaciones: e.extendedProps.observaciones,
@@ -506,6 +508,8 @@ function adaptarEventoTurno(t) {
             turnoId: t.turnoId || t.id,
             paciente: t.paciente,
             dni: t.dni,
+            cobertura: t.cobertura,
+            nro_certificado: t.nro_certificado ?? t.nro_cobertura,
             profesional: t.profesional,
             description: t.description,
             observaciones: t.observaciones,
@@ -955,7 +959,11 @@ onUnmounted(() => {
                             </div>
                             <div>
                                 <p class="font-semibold text-[#134E4A] dark:text-slate-200">{{ turnoSeleccionado.paciente }}</p>
-                                <p class="text-xs text-slate-400">DNI: {{ turnoSeleccionado.dni }}</p>
+                                <div class="flex flex-wrap items-center gap-x-2 text-xs text-slate-400">
+                                    <span>DNI: {{ turnoSeleccionado.dni || '-' }}</span>
+                                    <span v-if="turnoSeleccionado.cobertura">· Cobertura: {{ turnoSeleccionado.cobertura }}</span>
+                                    <span v-if="turnoSeleccionado.nro_certificado">· Nº Cobertura: {{ turnoSeleccionado.nro_certificado }}</span>
+                                </div>
                             </div>
                         </div>
                         <p class="flex items-center gap-2">

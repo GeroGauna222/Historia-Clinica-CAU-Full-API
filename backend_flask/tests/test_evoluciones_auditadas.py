@@ -1,3 +1,5 @@
+from io import BytesIO
+
 from conftest import FakeConnection, FakeCursor, MockUser, login_as
 from app.routes import pacientes_routes
 
@@ -12,17 +14,38 @@ def test_agregar_evolucion_rechaza_roles_no_clinicos(client, monkeypatch):
     assert response.status_code == 403
 
 
-def test_agregar_evolucion_rechaza_matricula_no_verificada(client, monkeypatch):
+def test_agregar_evolucion_permite_matricula_cargada_aunque_no_este_verificada(client, monkeypatch, tmp_path):
     user = MockUser(user_id=5, rol="profesional")
     user.matricula_verificada = False
     login_as(client, user)
+    monkeypatch.chdir(tmp_path)
+    fake_cursor = FakeCursor(lastrowid=77)
+    fake_connection = FakeConnection(fake_cursor)
+    monkeypatch.setattr(pacientes_routes, "get_connection", lambda: fake_connection)
+    monkeypatch.setattr(pacientes_routes, "actualizar_historia", lambda paciente_id, usuario_id: "historia-hash")
+
+    response = client.post(
+        "/api/pacientes/1/evolucion",
+        data={"fecha": "2026-07-16", "contenido": "Debe guardarse", "confirmar_firma": "true"},
+    )
+
+    assert response.status_code == 200
+    assert response.get_json()["estado_firma"] == "firmada"
+
+
+def test_agregar_evolucion_rechaza_profesional_sin_matricula(client):
+    user = MockUser(user_id=5, rol="profesional")
+    user.matricula_tipo = None
+    user.matricula_numero = None
+    login_as(client, user)
+
     response = client.post(
         "/api/pacientes/1/evolucion",
         data={"fecha": "2026-07-16", "contenido": "No debe guardarse", "confirmar_firma": "true"},
     )
 
     assert response.status_code == 422
-    assert "validada" in response.get_json()["error"].lower()
+    assert "matrícula" in response.get_json()["error"].lower()
 
 
 def test_agregar_evolucion_firma_y_auditoria_en_una_transaccion(client, monkeypatch, tmp_path):
@@ -52,6 +75,136 @@ def test_agregar_evolucion_firma_y_auditoria_en_una_transaccion(client, monkeypa
     assert any("INSERT INTO firmas_electronicas" in query for query in queries)
     assert any("INSERT INTO auditorias_clinicas" in query for query in queries)
     assert any("estado_firma = 'firmada'" in query for query in queries)
+
+
+def test_agregar_evolucion_rechaza_html_antes_de_abrir_transaccion(client, monkeypatch):
+    login_as(client, MockUser(user_id=5, rol="profesional"))
+
+    def fail_if_database_is_opened():
+        raise AssertionError("an invalid attachment must be rejected before opening a transaction")
+
+    monkeypatch.setattr(pacientes_routes, "get_connection", fail_if_database_is_opened)
+
+    response = client.post(
+        "/api/pacientes/1/evolucion",
+        data={
+            "fecha": "2026-07-16",
+            "contenido": "Evolucion con adjunto inseguro",
+            "confirmar_firma": "true",
+            "archivos": (BytesIO(b"<script>alert(document.cookie)</script>"), "informe.html"),
+        },
+        content_type="multipart/form-data",
+    )
+
+    assert response.status_code == 415
+    assert "formato no permitido" in response.get_json()["error"].lower()
+
+
+def test_agregar_evolucion_rechaza_html_disfrazado_de_pdf(client, monkeypatch):
+    login_as(client, MockUser(user_id=5, rol="profesional"))
+
+    def fail_if_database_is_opened():
+        raise AssertionError("an invalid attachment must be rejected before opening a transaction")
+
+    monkeypatch.setattr(pacientes_routes, "get_connection", fail_if_database_is_opened)
+
+    response = client.post(
+        "/api/pacientes/1/evolucion",
+        data={
+            "fecha": "2026-07-16",
+            "contenido": "Evolucion con adjunto inseguro",
+            "confirmar_firma": "true",
+            "archivos": (BytesIO(b"<script>alert(1)</script>"), "informe.pdf", "application/pdf"),
+        },
+        content_type="multipart/form-data",
+    )
+
+    assert response.status_code == 415
+    assert "no coincide con su formato" in response.get_json()["error"].lower()
+
+
+def test_agregar_evolucion_rechaza_mime_incompatible_con_extension(client, monkeypatch):
+    login_as(client, MockUser(user_id=5, rol="profesional"))
+
+    def fail_if_database_is_opened():
+        raise AssertionError("an invalid attachment must be rejected before opening a transaction")
+
+    monkeypatch.setattr(pacientes_routes, "get_connection", fail_if_database_is_opened)
+
+    response = client.post(
+        "/api/pacientes/1/evolucion",
+        data={
+            "fecha": "2026-07-16",
+            "contenido": "Evolucion con adjunto inconsistente",
+            "confirmar_firma": "true",
+            "archivos": (BytesIO(b"%PDF-1.7\ncontenido\n%%EOF"), "informe.pdf", "text/html"),
+        },
+        content_type="multipart/form-data",
+    )
+
+    assert response.status_code == 415
+    assert "tipo mime" in response.get_json()["error"].lower()
+
+
+def test_agregar_evolucion_acepta_pdf_valido(client, monkeypatch, tmp_path):
+    login_as(client, MockUser(user_id=5, rol="profesional"))
+    monkeypatch.setitem(client.application.config, "UPLOAD_FOLDER", str(tmp_path / "uploads"))
+    fake_cursor = FakeCursor(lastrowid=77)
+    fake_connection = FakeConnection(fake_cursor)
+    monkeypatch.setattr(pacientes_routes, "get_connection", lambda: fake_connection)
+    monkeypatch.setattr(pacientes_routes, "actualizar_historia", lambda paciente_id, usuario_id: "historia-hash")
+
+    response = client.post(
+        "/api/pacientes/1/evolucion",
+        data={
+            "fecha": "2026-07-16",
+            "contenido": "Evolucion con PDF valido",
+            "confirmar_firma": "true",
+            "archivos": (BytesIO(b"%PDF-1.7\ncontenido\n%%EOF"), "informe.pdf", "application/pdf"),
+        },
+        content_type="multipart/form-data",
+    )
+
+    assert response.status_code == 200
+    assert (tmp_path / "uploads" / "evoluciones" / "77" / "informe.pdf").read_bytes().startswith(b"%PDF-")
+
+
+def test_rectificacion_rechaza_svg_antes_de_abrir_transaccion(client, monkeypatch):
+    login_as(client, MockUser(user_id=5, rol="profesional"))
+
+    def fail_if_database_is_opened():
+        raise AssertionError("an invalid attachment must be rejected before opening a transaction")
+
+    monkeypatch.setattr(pacientes_routes, "get_connection", fail_if_database_is_opened)
+
+    response = client.put(
+        "/api/pacientes/1/evolucion/50",
+        data={
+            "fecha": "2026-07-16",
+            "contenido": "Rectificacion",
+            "motivo_rectificacion": "Correccion clinica",
+            "archivos": (BytesIO(b"<svg onload='alert(1)'/>"), "placa.svg", "image/svg+xml"),
+        },
+        content_type="multipart/form-data",
+    )
+
+    assert response.status_code == 415
+    assert "formato no permitido" in response.get_json()["error"].lower()
+
+
+def test_descarga_adjunto_legacy_fuerza_descarga_y_bloquea_sniffing(client, monkeypatch, tmp_path):
+    login_as(client, MockUser(user_id=2, rol="administrativo"))
+    monkeypatch.setitem(client.application.config, "UPLOAD_FOLDER", str(tmp_path / "uploads"))
+    upload_dir = tmp_path / "uploads" / "evoluciones" / "77"
+    upload_dir.mkdir(parents=True)
+    (upload_dir / "legacy.html").write_text("<script>alert(1)</script>", encoding="utf-8")
+
+    response = client.get("/api/uploads/evoluciones/77/legacy.html")
+
+    assert response.status_code == 200
+    assert response.headers["Content-Disposition"].startswith("attachment;")
+    assert response.headers["X-Content-Type-Options"] == "nosniff"
+    assert "sandbox" in response.headers["Content-Security-Policy"]
 
 def test_editar_evolucion_sin_permisos_devuelve_403(client, monkeypatch):
     # Intentar editar con un profesional que no es el autor
@@ -106,11 +259,12 @@ def test_editar_evolucion_autor_ok_devuelve_200(client, monkeypatch):
 
     # fetchone_results:
     # 1. SELECT de la evolucion actual
-    # 2. SELECT MAX(version)
-    # 3. SELECT filename de archivos adjuntos viejos
+    # 2. SELECT de la raiz bloqueada
+    # 3. SELECT MAX(version)
     fake_cursor = FakeCursor(
         fetchone_results=[
             evo_original,
+            {'id': 50},
             {'max_v': 1}
         ],
         fetchall_results=[[]] # No hay archivos adjuntos anteriores
@@ -146,6 +300,11 @@ def test_editar_evolucion_autor_ok_devuelve_200(client, monkeypatch):
     assert insert_query is not None
     assert update_query is not None
 
+    lock_index = next(i for i, query in enumerate(queries) if "FOR UPDATE" in query)
+    max_version_index = next(i for i, query in enumerate(queries) if "MAX(version)" in query)
+    assert lock_index < max_version_index
+    assert "FOR UPDATE" in queries[max_version_index]
+
 
 def test_editar_evolucion_director_ok_devuelve_200(client, monkeypatch):
     # Loguearse como Director (user_id=10, rol=director)
@@ -166,6 +325,7 @@ def test_editar_evolucion_director_ok_devuelve_200(client, monkeypatch):
     fake_cursor = FakeCursor(
         fetchone_results=[
             evo_original,
+            {'id': 50},
             {'max_v': 1}
         ],
         fetchall_results=[[]]

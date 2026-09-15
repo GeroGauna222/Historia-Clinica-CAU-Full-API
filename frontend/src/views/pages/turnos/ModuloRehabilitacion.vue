@@ -199,6 +199,8 @@ const calendarOptions = reactive({
             grupo_nombre: info.event.extendedProps.grupo_nombre,
             paciente: info.event.extendedProps.paciente,
             dni: info.event.extendedProps.dni,
+            cobertura: info.event.extendedProps.cobertura,
+            nro_certificado: info.event.extendedProps.nro_certificado,
             paciente_id: info.event.extendedProps.paciente_id,
             description: info.event.extendedProps.description,
             observaciones: info.event.extendedProps.observaciones,
@@ -279,6 +281,8 @@ function mapEvento(t) {
             color,
             paciente: t.paciente,
             dni: t.dni,
+            cobertura: t.cobertura,
+            nro_certificado: t.nro_certificado ?? t.nro_cobertura,
             description: t.description,
             observaciones: t.observaciones,
             ausencia: t.ausencia,
@@ -608,7 +612,11 @@ onMounted(async () => {
                     </div>
                     <div>
                         <p class="font-semibold text-[#134E4A] dark:text-slate-200">{{ seleccionado.paciente }}</p>
-                        <p class="text-xs text-slate-400">DNI: {{ seleccionado.dni }}</p>
+                        <div class="flex flex-wrap items-center gap-x-2 text-xs text-slate-400">
+                            <span>DNI: {{ seleccionado.dni || '-' }}</span>
+                            <span v-if="seleccionado.cobertura">· Cobertura: {{ seleccionado.cobertura }}</span>
+                            <span v-if="seleccionado.nro_certificado">· Nº Cobertura: {{ seleccionado.nro_certificado }}</span>
+                        </div>
                     </div>
                 </div>
                 <div class="space-y-2 text-sm">
