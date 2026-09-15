@@ -12,6 +12,10 @@ SET time_zone = '-3:00';
 --  ELIMINAR TABLAS (solo para entorno de desarrollo)
 -- ==============================================
 DROP TABLE IF EXISTS auditorias_blockchain;
+DROP TABLE IF EXISTS auditorias_clinicas;
+DROP TABLE IF EXISTS firmas_electronicas;
+DROP TABLE IF EXISTS autenticacion_eventos;
+DROP TABLE IF EXISTS historia_archivos;
 DROP TABLE IF EXISTS recetas_electronicas;
 DROP TABLE IF EXISTS evolucion_archivos;
 DROP TABLE IF EXISTS turnos;
@@ -44,6 +48,9 @@ CREATE TABLE usuarios (
     matricula_tipo ENUM('MN', 'MP', 'OP') DEFAULT NULL,
     matricula_numero VARCHAR(50) DEFAULT NULL,
     matricula_provincia VARCHAR(100) DEFAULT NULL,
+    matricula_verificada TINYINT(1) NOT NULL DEFAULT 0,
+    matricula_verificada_en DATETIME(6) DEFAULT NULL,
+    matricula_verificada_por INT DEFAULT NULL,
     lugar_atencion_nombre VARCHAR(150) DEFAULT NULL,
     lugar_atencion_direccion VARCHAR(255) DEFAULT NULL,
     lugar_atencion_contacto VARCHAR(150) DEFAULT NULL,
@@ -129,6 +136,9 @@ CREATE TABLE evoluciones (
     tx_hash VARCHAR(512) DEFAULT NULL,
     fecha_anclaje_bfa DATETIME DEFAULT NULL,
     estado_bfa VARCHAR(20) NOT NULL DEFAULT 'pendiente',
+    estado_firma ENUM('pendiente', 'firmada') NOT NULL DEFAULT 'pendiente',
+    firmado_en DATETIME(6) DEFAULT NULL,
+    motivo_rectificacion TEXT DEFAULT NULL,
     padre_id INT NULL,
     version INT NOT NULL DEFAULT 1,
     activo TINYINT(1) NOT NULL DEFAULT 1,
@@ -150,6 +160,90 @@ CREATE TABLE evolucion_archivos (
     filepath TEXT,
     creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (evolucion_id) REFERENCES evoluciones(id)
+) ENGINE=InnoDB
+  DEFAULT CHARSET=utf8mb4
+  COLLATE=utf8mb4_unicode_ci;
+
+-- ==============================================
+-- DOCUMENTOS GENERALES ADJUNTOS A LA HISTORIA
+-- ==============================================
+CREATE TABLE historia_archivos (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    paciente_id INT NOT NULL,
+    usuario_id INT NOT NULL,
+    nombre_original VARCHAR(255) NOT NULL,
+    nombre_almacenado VARCHAR(255) NOT NULL,
+    ruta_relativa VARCHAR(512) NOT NULL,
+    mime_type VARCHAR(120) NOT NULL,
+    tamanio_bytes BIGINT UNSIGNED NOT NULL,
+    hash_sha256 CHAR(64) NOT NULL,
+    cargado_en DATETIME(6) NOT NULL,
+    FOREIGN KEY (paciente_id) REFERENCES pacientes(id) ON DELETE CASCADE,
+    FOREIGN KEY (usuario_id) REFERENCES usuarios(id),
+    INDEX idx_historia_archivos_paciente_fecha (paciente_id, cargado_en),
+    INDEX idx_historia_archivos_hash (hash_sha256)
+) ENGINE=InnoDB
+  DEFAULT CHARSET=utf8mb4
+  COLLATE=utf8mb4_unicode_ci;
+
+-- ==============================================
+-- SESIONES DE AUTENTICACIÓN CON EVIDENCIA
+-- ==============================================
+CREATE TABLE autenticacion_eventos (
+    id CHAR(36) PRIMARY KEY,
+    usuario_id INT NOT NULL,
+    autenticado_en DATETIME(6) NOT NULL,
+    ip VARCHAR(45) DEFAULT NULL,
+    user_agent VARCHAR(512) DEFAULT NULL,
+    FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE,
+    INDEX idx_autenticacion_usuario_fecha (usuario_id, autenticado_en)
+) ENGINE=InnoDB
+  DEFAULT CHARSET=utf8mb4
+  COLLATE=utf8mb4_unicode_ci;
+
+-- ==============================================
+-- FIRMAS ELECTRÓNICAS DE EVOLUCIONES
+-- ==============================================
+CREATE TABLE firmas_electronicas (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    evolucion_id INT NOT NULL UNIQUE,
+    usuario_id INT NOT NULL,
+    autenticacion_evento_id CHAR(36) NOT NULL,
+    rol VARCHAR(30) NOT NULL,
+    matricula_tipo VARCHAR(10) NOT NULL,
+    matricula_numero VARCHAR(50) NOT NULL,
+    matricula_provincia VARCHAR(100) DEFAULT NULL,
+    tipo VARCHAR(30) NOT NULL DEFAULT 'electronica',
+    algoritmo VARCHAR(30) NOT NULL DEFAULT 'SHA-256',
+    payload_version VARCHAR(20) NOT NULL DEFAULT 'evolucion-v1',
+    payload_hash CHAR(64) NOT NULL,
+    firmado_en DATETIME(6) NOT NULL,
+    ip VARCHAR(45) DEFAULT NULL,
+    user_agent VARCHAR(512) DEFAULT NULL,
+    FOREIGN KEY (evolucion_id) REFERENCES evoluciones(id),
+    FOREIGN KEY (usuario_id) REFERENCES usuarios(id),
+    FOREIGN KEY (autenticacion_evento_id) REFERENCES autenticacion_eventos(id),
+    INDEX idx_firmas_usuario_fecha (usuario_id, firmado_en),
+    INDEX idx_firmas_hash (payload_hash)
+) ENGINE=InnoDB
+  DEFAULT CHARSET=utf8mb4
+  COLLATE=utf8mb4_unicode_ci;
+
+-- ==============================================
+-- AUDITORÍA CLÍNICA DE ACTOS SOBRE EVOLUCIONES
+-- ==============================================
+CREATE TABLE auditorias_clinicas (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    evolucion_id INT NOT NULL,
+    usuario_id INT NOT NULL,
+    accion ENUM('firma', 'rectificacion') NOT NULL,
+    version INT NOT NULL,
+    detalle_json JSON DEFAULT NULL,
+    creado_en DATETIME(6) NOT NULL,
+    FOREIGN KEY (evolucion_id) REFERENCES evoluciones(id),
+    FOREIGN KEY (usuario_id) REFERENCES usuarios(id),
+    INDEX idx_auditoria_clinica_evolucion (evolucion_id, creado_en),
+    INDEX idx_auditoria_clinica_usuario (usuario_id, creado_en)
 ) ENGINE=InnoDB
   DEFAULT CHARSET=utf8mb4
   COLLATE=utf8mb4_unicode_ci;
@@ -202,6 +296,7 @@ CREATE TABLE turnos (
     notificado BOOLEAN DEFAULT FALSE,
     observaciones TEXT DEFAULT NULL,
     ausencia ENUM('con_aviso', 'sin_aviso') DEFAULT NULL,
+    estado_asistencia ENUM('programado', 'presente', 'con_aviso', 'sin_aviso') NOT NULL DEFAULT 'programado',
     creado_por INT NULL,
     creado_en TIMESTAMP NULL DEFAULT NULL,
     FOREIGN KEY (paciente_id) REFERENCES pacientes(id),
@@ -267,6 +362,7 @@ CREATE TABLE turnos_grupales (
     creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     observaciones TEXT DEFAULT NULL,
     ausencia ENUM('con_aviso', 'sin_aviso') DEFAULT NULL,
+    estado_asistencia ENUM('programado', 'presente', 'con_aviso', 'sin_aviso') NOT NULL DEFAULT 'programado',
     FOREIGN KEY (grupo_id) REFERENCES grupos_profesionales(id) ON DELETE CASCADE,
     FOREIGN KEY (paciente_id) REFERENCES pacientes(id),
     FOREIGN KEY (creado_por) REFERENCES usuarios(id),

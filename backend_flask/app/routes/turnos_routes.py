@@ -381,8 +381,8 @@ def api_turnos():
         if current_user.rol in ["profesional", "area"]:
             cursor.execute(
                 """
-                SELECT t.id, t.paciente_id, t.fecha_inicio, t.fecha_fin, t.motivo, t.observaciones, t.ausencia,
-                       p.nombre, p.dni, u.nombre AS profesional
+                SELECT t.id, t.paciente_id, t.fecha_inicio, t.fecha_fin, t.motivo, t.observaciones, t.ausencia, t.estado_asistencia,
+                       TRIM(CONCAT(COALESCE(p.nombre, ''), ' ', COALESCE(p.apellido, ''))) AS paciente, p.dni, u.nombre AS profesional
                 FROM turnos t
                 JOIN pacientes p ON t.paciente_id = p.id
                 JOIN usuarios u ON t.usuario_id = u.id
@@ -394,8 +394,8 @@ def api_turnos():
         else:
             cursor.execute(
                 """
-                SELECT t.id, t.paciente_id, t.fecha_inicio, t.fecha_fin, t.motivo, t.observaciones, t.ausencia,
-                       p.nombre, p.dni, u.nombre AS profesional
+                SELECT t.id, t.paciente_id, t.fecha_inicio, t.fecha_fin, t.motivo, t.observaciones, t.ausencia, t.estado_asistencia,
+                       TRIM(CONCAT(COALESCE(p.nombre, ''), ' ', COALESCE(p.apellido, ''))) AS paciente, p.dni, u.nombre AS profesional
                 FROM turnos t
                 JOIN pacientes p ON t.paciente_id = p.id
                 JOIN usuarios u ON t.usuario_id = u.id
@@ -410,13 +410,14 @@ def api_turnos():
         eventos = [
             {
                 "id": t["id"],
-                "paciente": t["nombre"],
+                "paciente": t["paciente"],
                 "dni": t["dni"],
                 "start": t["fecha_inicio"].replace(tzinfo=TZ_ARG).isoformat(),
                 "end": t["fecha_fin"].replace(tzinfo=TZ_ARG).isoformat(),
                 "description": t["motivo"],
                 "observaciones": t["observaciones"],
                 "ausencia": t["ausencia"],
+                "estado_asistencia": t.get("estado_asistencia") or "programado",
                 "paciente_id": t["paciente_id"],
                 "profesional": t["profesional"],
             }
@@ -735,7 +736,8 @@ def turnos_profesional(usuario_id):
             t.fecha_fin,
             t.motivo,
             t.ausencia,
-            p.nombre AS paciente,
+            t.estado_asistencia,
+            TRIM(CONCAT(COALESCE(p.nombre, ''), ' ', COALESCE(p.apellido, ''))) AS paciente,
             p.dni,
             u.nombre AS profesional,
             '#007AFF' AS color
@@ -763,7 +765,8 @@ def turnos_profesional(usuario_id):
                 t.fecha_fin,
                 t.motivo,
                 t.ausencia,
-                p.nombre AS paciente,
+                t.estado_asistencia,
+                TRIM(CONCAT(COALESCE(p.nombre, ''), ' ', COALESCE(p.apellido, ''))) AS paciente,
                 p.dni,
                 u.nombre AS profesional,
                 gp.color
@@ -792,6 +795,7 @@ def turnos_profesional(usuario_id):
             "profesional": t["profesional"],
             "description": t["motivo"],
             "ausencia": t["ausencia"],
+            "estado_asistencia": t.get("estado_asistencia") or "programado",
             "paciente_id": t["paciente_id"],
             "backgroundColor": t["color"],
             "borderColor": t["color"],
@@ -829,12 +833,13 @@ def turnos_profesional_completo():
                 t.paciente_id AS paciente_id,
                 t.fecha_inicio AS start,
                 t.fecha_fin AS end,
-                p.nombre AS paciente,
+                TRIM(CONCAT(COALESCE(p.nombre, ''), ' ', COALESCE(p.apellido, ''))) AS paciente,
                 p.dni,
                 u.nombre AS profesional,
                 t.motivo AS description,
                 t.observaciones,
                 t.ausencia,
+                t.estado_asistencia,
                 uc.nombre AS creado_por_nombre,
                 t.creado_en,
                 '#1976D2' AS color,
@@ -867,12 +872,13 @@ def turnos_profesional_completo():
             t.paciente_id AS paciente_id,
             t.fecha_inicio AS start,
             t.fecha_fin AS end,
-            p.nombre AS paciente,
+            TRIM(CONCAT(COALESCE(p.nombre, ''), ' ', COALESCE(p.apellido, ''))) AS paciente,
             p.dni,
             u.nombre AS profesional,
             t.motivo AS description,
             t.observaciones,
             t.ausencia,
+            t.estado_asistencia,
             uc.nombre AS creado_por_nombre,
             t.creado_en,
             '#1976D2' AS color,
@@ -898,12 +904,13 @@ def turnos_profesional_completo():
             tg.paciente_id AS paciente_id,
             tg.fecha_inicio AS start,
             tg.fecha_fin AS end,
-            p.nombre AS paciente,
+            TRIM(CONCAT(COALESCE(p.nombre, ''), ' ', COALESCE(p.apellido, ''))) AS paciente,
             p.dni,
             CONCAT('Grupo: ', gp.nombre) AS profesional,
             tg.motivo AS description,
             tg.observaciones,
             tg.ausencia,
+            tg.estado_asistencia,
             ucg.nombre AS creado_por_nombre,
             tg.creado_en,
             gp.color AS color,
@@ -960,9 +967,10 @@ def turnos_por_grupo(grupo_id):
             t.motivo AS description,
             t.observaciones,
             t.ausencia,
+            t.estado_asistencia,
             uc.nombre AS creado_por_nombre,
             t.creado_en,
-            p.nombre AS paciente,
+            TRIM(CONCAT(COALESCE(p.nombre, ''), ' ', COALESCE(p.apellido, ''))) AS paciente,
             p.dni,
             u.nombre AS profesional,
             gp.color
@@ -991,6 +999,7 @@ def turnos_por_grupo(grupo_id):
                 "description": t["description"],
                 "observaciones": t["observaciones"],
                 "ausencia": t["ausencia"],
+                "estado_asistencia": t.get("estado_asistencia") or "programado",
                 "creado_por_nombre": t["creado_por_nombre"],
                 "creado_en": _to_iso_arg(t["creado_en"]),
                 "paciente_id": t["paciente_id"],
@@ -1029,7 +1038,7 @@ def listar_turnos_grupales():
             gp.color,
             gp.es_rehabilitacion,
             tg.paciente_id,
-            p.nombre AS paciente,
+            TRIM(CONCAT(COALESCE(p.nombre, ''), ' ', COALESCE(p.apellido, ''))) AS paciente,
             p.dni,
             tg.fecha_inicio,
             tg.fecha_fin,
@@ -1037,6 +1046,7 @@ def listar_turnos_grupales():
             tg.creado_por,
             tg.observaciones,
             tg.ausencia,
+            tg.estado_asistencia,
             ucg.nombre AS creado_por_nombre,
             tg.creado_en
         FROM turnos_grupales tg
@@ -1071,6 +1081,7 @@ def listar_turnos_grupales():
                 "description": row["motivo"],
                 "observaciones": row["observaciones"],
                 "ausencia": row["ausencia"],
+                "estado_asistencia": row.get("estado_asistencia") or "programado",
                 "creado_por_nombre": row["creado_por_nombre"],
                 "creado_en": _to_iso_arg(row["creado_en"]),
                 "tipo": "grupal",
@@ -1266,15 +1277,39 @@ def eliminar_turno_grupal(turno_grupal_id):
         conn.close()
 
 
+def _resolver_asistencia(data):
+    if "estado_asistencia" in data:
+        estado = data.get("estado_asistencia")
+        if estado not in ["programado", "presente", "con_aviso", "sin_aviso"]:
+            return None, None, "estado_asistencia debe ser 'programado', 'presente', 'con_aviso' o 'sin_aviso'"
+        ausencia = estado if estado in ["con_aviso", "sin_aviso"] else None
+        return estado, ausencia, None
+
+    if "ausencia" in data:
+        aus = data.get("ausencia")
+        if aus not in [None, "con_aviso", "sin_aviso", "presente", "programado"]:
+            return None, None, "ausencia debe ser 'con_aviso', 'sin_aviso', 'presente', 'programado' o null"
+        if aus == "con_aviso":
+            return "con_aviso", "con_aviso", None
+        elif aus == "sin_aviso":
+            return "sin_aviso", "sin_aviso", None
+        elif aus == "programado":
+            return "programado", None, None
+        else:
+            return "presente", None, None
+
+    return None, None, "Falta 'estado_asistencia' o 'ausencia' en el cuerpo de la solicitud"
+
+
 @bp_turnos.route("/api/turnos/<int:id>/ausencia", methods=["PATCH"])
+@bp_turnos.route("/api/turnos/<int:id>/asistencia", methods=["PATCH"])
 @login_required
 @requiere_rol(*ROLES_TURNOS)
 def api_actualizar_ausencia_turno(id):
     data = request.get_json(silent=True) or {}
-    ausencia = data.get("ausencia")
-
-    if ausencia not in [None, "con_aviso", "sin_aviso"]:
-        return jsonify({"error": "ausencia debe ser 'con_aviso', 'sin_aviso' o null"}), 400
+    estado_asistencia, ausencia, error_msg = _resolver_asistencia(data)
+    if error_msg:
+        return jsonify({"error": error_msg}), 400
 
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
@@ -1288,11 +1323,15 @@ def api_actualizar_ausencia_turno(id):
             return jsonify({"error": "No autorizado"}), 403
 
         cursor.execute(
-            "UPDATE turnos SET ausencia = %s WHERE id = %s",
-            (ausencia, id)
+            "UPDATE turnos SET ausencia = %s, estado_asistencia = %s WHERE id = %s",
+            (ausencia, estado_asistencia, id)
         )
         conn.commit()
-        return jsonify({"mensaje": "Ausencia de turno actualizada correctamente"})
+        return jsonify({
+            "mensaje": "Asistencia de turno actualizada correctamente",
+            "estado_asistencia": estado_asistencia,
+            "ausencia": ausencia
+        })
     except Exception as e:
         conn.rollback()
         return jsonify({"error": str(e)}), 500
@@ -1302,14 +1341,14 @@ def api_actualizar_ausencia_turno(id):
 
 
 @bp_turnos.route("/api/turnos/grupales/<int:turno_grupal_id>/ausencia", methods=["PATCH"])
+@bp_turnos.route("/api/turnos/grupales/<int:turno_grupal_id>/asistencia", methods=["PATCH"])
 @login_required
 @requiere_rol(*ROLES_TURNOS_GRUPALES)
 def api_actualizar_ausencia_turno_grupal(turno_grupal_id):
     data = request.get_json(silent=True) or {}
-    ausencia = data.get("ausencia")
-
-    if ausencia not in [None, "con_aviso", "sin_aviso"]:
-        return jsonify({"error": "ausencia debe ser 'con_aviso', 'sin_aviso' o null"}), 400
+    estado_asistencia, ausencia, error_msg = _resolver_asistencia(data)
+    if error_msg:
+        return jsonify({"error": error_msg}), 400
 
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
@@ -1319,14 +1358,86 @@ def api_actualizar_ausencia_turno_grupal(turno_grupal_id):
             return jsonify({"error": "Turno grupal no encontrado"}), 404
 
         cursor.execute(
-            "UPDATE turnos_grupales SET ausencia = %s WHERE id = %s",
-            (ausencia, turno_grupal_id)
+            "UPDATE turnos_grupales SET ausencia = %s, estado_asistencia = %s WHERE id = %s",
+            (ausencia, estado_asistencia, turno_grupal_id)
         )
         conn.commit()
-        return jsonify({"mensaje": "Ausencia de turno grupal actualizada correctamente"})
+        return jsonify({
+            "mensaje": "Asistencia de turno grupal actualizada correctamente",
+            "estado_asistencia": estado_asistencia,
+            "ausencia": ausencia
+        })
     except Exception as e:
         conn.rollback()
         return jsonify({"error": str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+
+@bp_turnos.route("/api/turnos/presentes-hoy", methods=["GET"])
+@login_required
+@requiere_rol(*ROLES_TURNOS)
+def api_turnos_presentes_hoy():
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        if current_user.rol == "profesional":
+            cursor.execute(
+                """
+                SELECT
+                    t.id,
+                    t.paciente_id,
+                    t.fecha_inicio,
+                    t.fecha_fin,
+                    t.motivo,
+                    t.observaciones,
+                    t.estado_asistencia,
+                    t.ausencia,
+                    t.usuario_id,
+                    TRIM(CONCAT(COALESCE(p.nombre, ''), ' ', COALESCE(p.apellido, ''))) AS paciente,
+                    p.dni,
+                    u.nombre AS profesional
+                FROM turnos t
+                JOIN pacientes p ON t.paciente_id = p.id
+                JOIN usuarios u ON t.usuario_id = u.id
+                WHERE t.usuario_id = %s
+                  AND t.estado_asistencia = 'presente'
+                  AND DATE(t.fecha_inicio) = CURDATE()
+                ORDER BY t.fecha_inicio ASC
+                """,
+                (current_user.id,),
+            )
+        else:
+            cursor.execute(
+                """
+                SELECT
+                    t.id,
+                    t.paciente_id,
+                    t.fecha_inicio,
+                    t.fecha_fin,
+                    t.motivo,
+                    t.observaciones,
+                    t.estado_asistencia,
+                    t.ausencia,
+                    t.usuario_id,
+                    TRIM(CONCAT(COALESCE(p.nombre, ''), ' ', COALESCE(p.apellido, ''))) AS paciente,
+                    p.dni,
+                    u.nombre AS profesional
+                FROM turnos t
+                JOIN pacientes p ON t.paciente_id = p.id
+                JOIN usuarios u ON t.usuario_id = u.id
+                WHERE t.estado_asistencia = 'presente'
+                  AND DATE(t.fecha_inicio) = CURDATE()
+                ORDER BY t.fecha_inicio ASC
+                """
+            )
+        turnos = cursor.fetchall()
+        for t in turnos:
+            t["start"] = _to_iso_arg(t["fecha_inicio"])
+            t["end"] = _to_iso_arg(t["fecha_fin"])
+            t["turnoId"] = t["id"]
+        return jsonify(turnos)
     finally:
         cursor.close()
         conn.close()
@@ -1381,4 +1492,104 @@ def api_conteo_ausencias_paciente(paciente_id):
     finally:
         cursor.close()
         conn.close()
+
+
+@bp_turnos.route("/api/pacientes/<int:paciente_id>/turnos", methods=["GET"])
+@login_required
+@requiere_rol(*ROLES_TURNOS)
+def api_historial_turnos_paciente(paciente_id):
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("SELECT id FROM pacientes WHERE id = %s", (paciente_id,))
+        if not cursor.fetchone():
+            return jsonify({"error": "Paciente no encontrado"}), 404
+
+        # Query turnos individuales
+        cursor.execute(
+            """
+            SELECT
+                t.id,
+                'individual' AS tipo,
+                t.fecha_inicio AS start,
+                t.fecha_fin AS end,
+                t.motivo AS description,
+                t.observaciones,
+                t.ausencia,
+                t.estado_asistencia,
+                u.nombre AS profesional,
+                uc.nombre AS creado_por_nombre,
+                t.creado_en
+            FROM turnos t
+            JOIN usuarios u ON u.id = t.usuario_id
+            LEFT JOIN usuarios uc ON uc.id = t.creado_por
+            WHERE t.paciente_id = %s
+            """,
+            (paciente_id,),
+        )
+        individuales = cursor.fetchall()
+
+        # Query turnos grupales
+        cursor.execute(
+            """
+            SELECT
+                tg.id,
+                'grupal' AS tipo,
+                tg.fecha_inicio AS start,
+                tg.fecha_fin AS end,
+                tg.motivo AS description,
+                tg.observaciones,
+                tg.ausencia,
+                tg.estado_asistencia,
+                CONCAT('Grupo: ', gp.nombre) AS profesional,
+                ucg.nombre AS creado_por_nombre,
+                tg.creado_en
+            FROM turnos_grupales tg
+            JOIN grupos_profesionales gp ON gp.id = tg.grupo_id
+            LEFT JOIN usuarios ucg ON ucg.id = tg.creado_por
+            WHERE tg.paciente_id = %s
+            """,
+            (paciente_id,),
+        )
+        grupales = cursor.fetchall()
+
+        todos = []
+        for t in individuales:
+            todos.append({
+                "id": t["id"],
+                "turnoId": t["id"],
+                "tipo": "individual",
+                "start": _to_iso_arg(t["start"]),
+                "end": _to_iso_arg(t["end"]),
+                "description": t["description"],
+                "observaciones": t["observaciones"],
+                "ausencia": t["ausencia"],
+                "estado_asistencia": t.get("estado_asistencia") or "programado",
+                "profesional": t["profesional"],
+                "creado_por_nombre": t["creado_por_nombre"],
+                "creado_en": _to_iso_arg(t["creado_en"]),
+            })
+
+        for g in grupales:
+            todos.append({
+                "id": f"grupal-{g['id']}",
+                "turnoId": g["id"],
+                "tipo": "grupal",
+                "start": _to_iso_arg(g["start"]),
+                "end": _to_iso_arg(g["end"]),
+                "description": g["description"],
+                "observaciones": g["observaciones"],
+                "ausencia": g["ausencia"],
+                "estado_asistencia": g.get("estado_asistencia") or "programado",
+                "profesional": g["profesional"],
+                "creado_por_nombre": g["creado_por_nombre"],
+                "creado_en": _to_iso_arg(g["creado_en"]),
+            })
+
+        todos.sort(key=lambda x: x["start"] or "", reverse=True)
+        return jsonify(todos)
+    finally:
+        cursor.close()
+        conn.close()
+
 

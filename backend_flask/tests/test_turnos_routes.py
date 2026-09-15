@@ -330,7 +330,8 @@ def test_actualizar_ausencia_y_conteo_ausencias(client, monkeypatch):
     update_queries = [item for item in fake_cursor_patch.executed if "UPDATE turnos SET" in item[0]]
     assert len(update_queries) == 1
     assert "ausencia" in update_queries[0][0]
-    assert update_queries[0][1] == ("sin_aviso", 15)
+    assert "estado_asistencia" in update_queries[0][0]
+    assert update_queries[0][1] == ("sin_aviso", "sin_aviso", 15)
 
     # 2. Test PATCH /api/turnos/grupales/20/ausencia
     login_as(client, MockUser(user_id=7, rol="administrativo")) # Administrativo tiene rol para grupales
@@ -348,7 +349,8 @@ def test_actualizar_ausencia_y_conteo_ausencias(client, monkeypatch):
     update_queries_grup = [item for item in fake_cursor_patch_grup.executed if "UPDATE turnos_grupales SET" in item[0]]
     assert len(update_queries_grup) == 1
     assert "ausencia" in update_queries_grup[0][0]
-    assert update_queries_grup[0][1] == ("con_aviso", 20)
+    assert "estado_asistencia" in update_queries_grup[0][0]
+    assert update_queries_grup[0][1] == ("con_aviso", "con_aviso", 20)
 
     # 3. Test GET /api/pacientes/10/ausencias
     fake_cursor_count = FakeCursor(
@@ -528,3 +530,115 @@ def test_editar_turno_error_en_update_propaga_y_cierra_conexion(client, monkeypa
     assert fake_connection.rolled_back is True
     assert fake_cursor.closed is True
     assert fake_connection.closed is True, "la conexion debe cerrarse siempre, incluso con error"
+
+
+def test_historial_turnos_paciente_devuelve_lista_unificada(client, monkeypatch):
+    login_as(client, MockUser(user_id=1, rol="administrativo"))
+
+    now = datetime(2026, 8, 21, 10, 0, 0)
+    fake_cursor = FakeCursor(
+        fetchone_results=[{"id": 10}],  # paciente existe
+        fetchall_results=[
+            [
+                {
+                    "id": 1,
+                    "tipo": "individual",
+                    "start": now,
+                    "end": now,
+                    "description": "Control",
+                    "observaciones": "Ninguna",
+                    "ausencia": None,
+                    "profesional": "Dr. Perez",
+                    "creado_por_nombre": "Admin",
+                    "creado_en": now,
+                }
+            ],
+            [
+                {
+                    "id": 2,
+                    "tipo": "grupal",
+                    "start": now,
+                    "end": now,
+                    "description": "Rehab",
+                    "observaciones": "Grupo 1",
+                    "ausencia": "con_aviso",
+                    "profesional": "Grupo: Kinesiologia",
+                    "creado_por_nombre": "Admin",
+                    "creado_en": now,
+                }
+            ],
+        ],
+    )
+    fake_connection = FakeConnection(fake_cursor)
+    monkeypatch.setattr(turnos_routes, "get_connection", lambda: fake_connection)
+
+    response = client.get("/api/pacientes/10/turnos")
+
+    assert response.status_code == 200
+    data = response.get_json()
+    assert len(data) == 2
+    types = [t["tipo"] for t in data]
+    assert "individual" in types
+    assert "grupal" in types
+
+
+def test_actualizar_asistencia_presente_y_presentes_hoy(client, monkeypatch):
+    from app.routes import turnos_routes
+    import datetime
+
+    login_as(client, MockUser(user_id=7, rol="profesional"))
+
+    # 1. Test PATCH /api/turnos/15/asistencia con estado_asistencia = presente
+    fake_cursor_patch = FakeCursor(
+        fetchone_results=[{"usuario_id": 7}]
+    )
+    fake_conn_patch = FakeConnection(fake_cursor_patch)
+    monkeypatch.setattr(turnos_routes, "get_connection", lambda: fake_conn_patch)
+
+    response = client.patch(
+        "/api/turnos/15/asistencia",
+        json={"estado_asistencia": "presente"}
+    )
+    assert response.status_code == 200
+    res_data = response.get_json()
+    assert res_data["estado_asistencia"] == "presente"
+    assert res_data["ausencia"] is None
+
+    update_queries = [item for item in fake_cursor_patch.executed if "UPDATE turnos SET" in item[0]]
+    assert len(update_queries) == 1
+    assert update_queries[0][1] == (None, "presente", 15)
+
+    # 2. Test GET /api/turnos/presentes-hoy
+    now = datetime.datetime.now()
+    fake_cursor_presentes = FakeCursor(
+        fetchall_results=[
+            [
+                {
+                    "id": 15,
+                    "paciente_id": 10,
+                    "fecha_inicio": now,
+                    "fecha_fin": now,
+                    "motivo": "Control",
+                    "observaciones": "Paciente en sala",
+                    "estado_asistencia": "presente",
+                    "ausencia": None,
+                    "usuario_id": 7,
+                    "paciente": "Carlos Gomez",
+                    "dni": "12345678",
+                    "profesional": "Dr. Perez"
+                }
+            ]
+        ]
+    )
+    fake_conn_presentes = FakeConnection(fake_cursor_presentes)
+    monkeypatch.setattr(turnos_routes, "get_connection", lambda: fake_conn_presentes)
+
+    response = client.get("/api/turnos/presentes-hoy")
+    assert response.status_code == 200
+    presentes = response.get_json()
+    assert len(presentes) == 1
+    assert presentes[0]["id"] == 15
+    assert presentes[0]["estado_asistencia"] == "presente"
+    assert presentes[0]["paciente"] == "Carlos Gomez"
+
+
