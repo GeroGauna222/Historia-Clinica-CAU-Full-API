@@ -21,5 +21,8 @@ export default {
     },
     getAusencias(id) {
         return api.get(`/pacientes/${id}/ausencias`, { withCredentials: true });
+    },
+    getTurnos(id) {
+        return api.get(`/pacientes/${id}/turnos`, { withCredentials: true });
     }
 };

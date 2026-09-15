@@ -8,7 +8,7 @@ import historiaService from '@/service/historiaService';
 import api from '@/api/axios';
 import { useRouter } from 'vue-router';
 import DatePicker from 'primevue/datepicker';
-import { fechaBonitaClinica, fechaBonitaCompleta } from '@/utils/formatDate.js';
+import { fechaBonitaClinica, fechaBonitaDashboard } from '@/utils/formatDate.js';
 import { nextTick } from 'vue';
 import { computed } from 'vue';
 import Tag from 'primevue/tag';
@@ -26,6 +26,9 @@ const toast = useToast();
 const paciente = ref(null);
 const historias = ref([]);
 const evoluciones = ref([]);
+const historiaAdjuntos = ref([]);
+const adjuntosHistoriaSeleccionados = ref([]);
+const subiendoAdjuntosHistoria = ref(false);
 const loading = ref(true);
 const error = ref(null);
 
@@ -33,8 +36,12 @@ const showForm = ref(false);
 const fecha = ref(new Date().toISOString().split('T')[0]);
 const contenido = ref('');
 const indicaciones = ref('');
+const motivoRectificacion = ref('');
 const archivos = ref([]);
 const fileUploader = ref(null);
+const showFirmaDialog = ref(false);
+const confirmacionFirma = ref(false);
+const firmaEnviando = ref(false);
 
 // Variables para edicion
 const isEditing = ref(false);
@@ -48,6 +55,8 @@ const selectedEvoParaHistorial = ref(null);
 
 // Control de qué año está abierto
 const accordionAbierto = ref({});
+
+const canEvolve = computed(() => ['director', 'profesional'].includes(userStore.rol) && Boolean(userStore.matricula_verificada) && Boolean(userStore.matricula_tipo) && Boolean(userStore.matricula_numero));
 
 /**
  * Agrupa evoluciones por año
@@ -95,10 +104,94 @@ const fetchHistoria = async () => {
     }
 };
 
+const cargarAdjuntosHistoria = async () => {
+    try {
+        const { data } = await api.get(`/pacientes/${pacienteId}/adjuntos`, { withCredentials: true });
+        historiaAdjuntos.value = data;
+    } catch (err) {
+        console.error('Error cargando documentos de la historia:', err);
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: err?.response?.data?.error || 'No se pudieron cargar los documentos adjuntos.',
+            life: 4000
+        });
+    }
+};
+
+const onHistoriaFilesSelected = (event) => {
+    const formatosPermitidos = ['application/pdf', 'image/jpeg', 'image/png'];
+    const nuevos = Array.from(event.target.files || []);
+    const existentes = new Set(adjuntosHistoriaSeleccionados.value.map((archivo) => archivo.name.toLowerCase()));
+
+    nuevos.forEach((archivo) => {
+        if (existentes.has(archivo.name.toLowerCase())) return;
+        if (archivo.size > 10 * 1024 * 1024) {
+            toast.add({ severity: 'warn', summary: 'Archivo muy grande', detail: `${archivo.name} supera los 10 MB.`, life: 3000 });
+            return;
+        }
+        if (!formatosPermitidos.includes(archivo.type)) {
+            toast.add({ severity: 'error', summary: 'Formato no permitido', detail: `${archivo.name} no es PDF/JPG/PNG válido.`, life: 3000 });
+            return;
+        }
+        adjuntosHistoriaSeleccionados.value.push(archivo);
+    });
+    event.target.value = '';
+};
+
+const quitarAdjuntoHistoriaSeleccionado = (nombre) => {
+    adjuntosHistoriaSeleccionados.value = adjuntosHistoriaSeleccionados.value.filter((archivo) => archivo.name !== nombre);
+};
+
+const subirAdjuntosHistoria = async () => {
+    if (!adjuntosHistoriaSeleccionados.value.length) return;
+    subiendoAdjuntosHistoria.value = true;
+    try {
+        const formData = new FormData();
+        adjuntosHistoriaSeleccionados.value.forEach((archivo) => formData.append('archivos', archivo));
+        await api.post(`/pacientes/${pacienteId}/adjuntos`, formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+            withCredentials: true
+        });
+        adjuntosHistoriaSeleccionados.value = [];
+        await cargarAdjuntosHistoria();
+        toast.add({ severity: 'success', summary: 'Documento guardado', detail: 'El documento quedó incorporado a la historia.', life: 3000 });
+    } catch (err) {
+        console.error('Error subiendo documento de la historia:', err);
+        toast.add({ severity: 'error', summary: 'Error', detail: err?.response?.data?.error || 'No se pudo guardar el documento.', life: 4000 });
+    } finally {
+        subiendoAdjuntosHistoria.value = false;
+    }
+};
+
 /**
  * Guarda una nueva evolución
  */
-const guardarEvolucion = async () => {
+const guardarEvolucion = () => {
+    if (!fecha.value || !contenido.value.trim()) {
+        toast.add({
+            severity: 'warn',
+            summary: 'Datos incompletos',
+            detail: 'La fecha y el contenido de la evolución son obligatorios.',
+            life: 3000
+        });
+        return;
+    }
+    if (isEditing.value && !motivoRectificacion.value.trim()) {
+        toast.add({
+            severity: 'warn',
+            summary: 'Motivo requerido',
+            detail: 'Indica el motivo de la rectificación antes de firmar.',
+            life: 3000
+        });
+        return;
+    }
+    confirmacionFirma.value = false;
+    showFirmaDialog.value = true;
+};
+
+const enviarEvolucion = async () => {
+    firmaEnviando.value = true;
     try {
         let fechaNormalizada = fecha.value;
 
@@ -121,6 +214,10 @@ const guardarEvolucion = async () => {
         formData.append('fecha', fechaNormalizada);
         formData.append('contenido', contenido.value);
         formData.append('indicaciones', indicaciones.value);
+        formData.append('confirmar_firma', 'true');
+        if (isEditing.value) {
+            formData.append('motivo_rectificacion', motivoRectificacion.value.trim());
+        }
 
         archivos.value.forEach((a) => {
             formData.append('archivos', a.file);
@@ -134,7 +231,7 @@ const guardarEvolucion = async () => {
             toast.add({
                 severity: 'success',
                 summary: 'Éxito',
-                detail: 'Evolución modificada correctamente',
+                detail: 'Rectificación firmada correctamente',
                 life: 3000
             });
         } else {
@@ -145,7 +242,7 @@ const guardarEvolucion = async () => {
             toast.add({
                 severity: 'success',
                 summary: 'Éxito',
-                detail: 'Evolución guardada correctamente',
+                detail: 'Evolución firmada y guardada correctamente',
                 life: 3000
             });
         }
@@ -153,10 +250,12 @@ const guardarEvolucion = async () => {
         showForm.value = false;
         contenido.value = '';
         indicaciones.value = '';
+        motivoRectificacion.value = '';
         archivos.value = [];
         fileUploader.value?.clear();
         isEditing.value = false;
         editingEvoId.value = null;
+        showFirmaDialog.value = false;
 
         await fetchHistoria();
     } catch (err) {
@@ -167,6 +266,8 @@ const guardarEvolucion = async () => {
             detail: err?.response?.data?.error || 'Error al guardar evolución',
             life: 3000
         });
+    } finally {
+        firmaEnviando.value = false;
     }
 };
 
@@ -176,6 +277,7 @@ const iniciarEdicion = async (evo) => {
     fecha.value = new Date(evo.fecha);
     contenido.value = evo.contenido;
     indicaciones.value = evo.indicaciones || '';
+    motivoRectificacion.value = '';
     archivos.value = [];
     showForm.value = true;
 
@@ -189,6 +291,7 @@ const cancelarFormEvolucion = () => {
     showForm.value = false;
     contenido.value = '';
     indicaciones.value = '';
+    motivoRectificacion.value = '';
     archivos.value = [];
     fileUploader.value?.clear();
     isEditing.value = false;
@@ -288,6 +391,15 @@ const onFileRemove = (event) => {
 const formRef = ref(null);
 
 const abrirFormEvolucion = async () => {
+    if (!canEvolve.value) {
+        toast.add({
+            severity: 'warn',
+            summary: 'Firma no habilitada',
+            detail: 'Sólo profesionales con matrícula validada por CAU pueden evolucionar.',
+            life: 4000
+        });
+        return;
+    }
     showForm.value = true;
 
     await nextTick();
@@ -345,6 +457,28 @@ const verificarEvolucion = async (evoId) => {
     }
 };
 
+const verificarFirmaElectronica = async (evoId) => {
+    try {
+        const { data } = await api.get(`/pacientes/${pacienteId}/evolucion/${evoId}/firma`, {
+            withCredentials: true
+        });
+        toast.add({
+            severity: data.valida ? 'success' : 'warn',
+            summary: 'Firma electrónica',
+            detail: data.valida ? 'La huella coincide con el contenido firmado.' : 'No se pudo validar la huella de esta evolución.',
+            life: 4000
+        });
+    } catch (err) {
+        console.error('Error al verificar firma electrónica:', err);
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: err?.response?.data?.error || 'No se pudo verificar la firma electrónica.',
+            life: 4000
+        });
+    }
+};
+
 const verAuditoriasBlockchain = () => {
     // ✅ Usamos el id real de la historia consolidada más reciente
     const idHistoria = historias.value?.[0]?.id || null;
@@ -372,7 +506,10 @@ const verAuditoriasBlockchain = () => {
     }, 300);
 };
 
-onMounted(fetchHistoria);
+onMounted(() => {
+    fetchHistoria();
+    cargarAdjuntosHistoria();
+});
 </script>
 
 <template>
@@ -397,6 +534,49 @@ onMounted(fetchHistoria);
             </div>
         </div>
 
+        <!-- 📎 DOCUMENTOS GENERALES DE LA HISTORIA (no son evoluciones) -->
+        <section v-if="paciente && !loading" class="mb-6 border dark:border-slate-700 p-4 rounded-2xl bg-white dark:bg-slate-900 shadow-sm">
+            <div class="flex flex-wrap justify-between items-center gap-2 mb-3">
+                <h2 class="text-xl font-semibold text-gray-800 dark:text-gray-100 flex items-center"><i class="pi pi-paperclip mr-2 text-blue-500"></i> Documentos de la historia</h2>
+                <span class="text-xs text-gray-500 dark:text-gray-400">Estudios externos, antecedentes y consentimientos</span>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-3 mb-3">
+                <label class="inline-flex items-center gap-2 cursor-pointer rounded-lg border border-blue-300 px-3 py-2 text-sm text-blue-700 hover:bg-blue-50 dark:border-blue-700 dark:text-blue-300 dark:hover:bg-blue-950/30">
+                    <i class="pi pi-upload"></i>
+                    Seleccionar documentos
+                    <input type="file" multiple accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" class="hidden" @change="onHistoriaFilesSelected" />
+                </label>
+                <button
+                    type="button"
+                    class="rounded-lg bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    :disabled="!adjuntosHistoriaSeleccionados.length || subiendoAdjuntosHistoria"
+                    @click="subirAdjuntosHistoria"
+                >
+                    <i class="pi pi-save mr-1"></i> {{ subiendoAdjuntosHistoria ? 'Guardando…' : 'Incorporar a la historia' }}
+                </button>
+            </div>
+
+            <ul v-if="adjuntosHistoriaSeleccionados.length" class="mb-4 space-y-1 text-sm text-gray-600 dark:text-gray-300">
+                <li v-for="archivo in adjuntosHistoriaSeleccionados" :key="archivo.name" class="flex items-center gap-2">
+                    <i class="pi pi-file"></i>
+                    <span class="truncate">{{ archivo.name }}</span>
+                    <button type="button" class="ml-auto text-red-600 hover:text-red-800" @click="quitarAdjuntoHistoriaSeleccionado(archivo.name)">Quitar</button>
+                </li>
+            </ul>
+
+            <p v-if="!historiaAdjuntos.length" class="text-sm text-gray-500 dark:text-gray-400">No hay documentos generales adjuntos.</p>
+            <ul v-else class="space-y-2">
+                <li v-for="adjunto in historiaAdjuntos" :key="adjunto.id" class="flex flex-wrap items-center gap-2 rounded-lg border p-3 text-sm dark:border-slate-700">
+                    <i class="pi pi-file text-blue-500"></i>
+                    <a :href="adjunto.url" target="_blank" rel="noopener" class="font-medium text-blue-600 hover:underline dark:text-blue-300">{{ adjunto.nombre }}</a>
+                    <span class="text-xs text-gray-500 dark:text-gray-400">{{ fechaBonitaDashboard(adjunto.cargado_en) }} · {{ adjunto.cargado_por }}</span>
+                    <span class="ml-auto text-xs text-gray-500 dark:text-gray-400">SHA-256: {{ adjunto.hash_sha256 }}</span>
+                </li>
+            </ul>
+            <p class="mt-3 text-xs text-gray-500 dark:text-gray-400">Sólo PDF, JPG o PNG, hasta 10 MB. Los documentos quedan registrados sin reemplazo ni borrado.</p>
+        </section>
+
         <!-- 🧠 EVOLUCIONES -->
         <div v-if="!loading">
             <div class="flex flex-wrap justify-between items-center mt-6 mb-3 gap-2">
@@ -407,10 +587,14 @@ onMounted(fetchHistoria);
 
                     <button @click="verAuditoriasBlockchain" class="flex items-center bg-purple-600 text-white px-4 py-2 rounded-lg shadow-sm hover:bg-purple-700 transition text-sm"><i class="pi pi-list mr-2"></i> Ver Auditorías Blockchain</button>
 
-                    <button @click="abrirFormEvolucion" class="flex items-center bg-green-600 text-white px-4 py-2 rounded-lg shadow-sm hover:bg-green-700 transition text-sm">
+                    <button v-if="canEvolve" @click="abrirFormEvolucion" class="flex items-center bg-green-600 text-white px-4 py-2 rounded-lg shadow-sm hover:bg-green-700 transition text-sm">
                         <i class="pi pi-plus mr-2"></i> {{ showForm ? 'Cancelar' : 'Agregar Evolución' }}
                     </button>
                 </div>
+            </div>
+
+            <div v-if="!canEvolve && ['director', 'profesional'].includes(userStore.rol)" class="mb-4 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-200">
+                Para evolucionar necesitás una matrícula cargada y validada por CAU.
             </div>
 
             <!-- Si no hay evoluciones -->
@@ -438,7 +622,7 @@ onMounted(fetchHistoria);
 
                             <div class="flex flex-col items-end text-right text-gray-700 dark:text-gray-300">
                                 <span>{{ evo.nombre_usuario }} — {{ evo.especialidad_usuario || 'Director' }}</span>
-                                <span class="text-xs text-gray-400 dark:text-gray-500"> Registrado: {{ fechaBonitaCompleta(evo.creado_en) }} </span>
+                                <span v-if="evo.estado_firma === 'firmada'" class="text-xs text-green-600 dark:text-green-400"> Firma electrónica registrada </span>
                             </div>
                         </div>
 
@@ -451,13 +635,15 @@ onMounted(fetchHistoria);
 
                             <button @click="descargarEvolucionPDF(evo.id)" class="text-red-600 hover:text-red-800 text-sm flex items-center"><i class="pi pi-file-pdf mr-1"></i> Exportar PDF</button>
 
-                            <button v-if="userStore.rol === 'director' || evo.usuario_id === userStore.id" @click="iniciarEdicion(evo)" class="text-green-600 hover:text-green-800 text-sm flex items-center">
+                            <button v-if="canEvolve && (userStore.rol === 'director' || evo.usuario_id === userStore.id)" @click="iniciarEdicion(evo)" class="text-green-600 hover:text-green-800 text-sm flex items-center">
                                 <i class="pi pi-pencil mr-1"></i> Editar
                             </button>
 
                             <button v-if="!evo.tx_hash" @click="registrarEvolucionBfa(evo.id)" class="text-purple-600 hover:text-purple-800 text-sm flex items-center"><i class="pi pi-link mr-1"></i> Anclar BFA</button>
 
                             <button @click="verificarEvolucion(evo.id)" class="text-purple-600 hover:text-blue-800 text-sm flex items-center"><i class="pi pi-shield mr-1"></i> Verificar Integridad</button>
+
+                            <button v-if="evo.estado_firma === 'firmada'" @click="verificarFirmaElectronica(evo.id)" class="text-teal-600 hover:text-teal-800 text-sm flex items-center"><i class="pi pi-check-circle mr-1"></i> Verificar firma</button>
                         </div>
                     </div>
                 </div>
@@ -465,8 +651,8 @@ onMounted(fetchHistoria);
         </div>
 
         <!-- 📝 FORMULARIO NUEVA EVOLUCIÓN -->
-        <div v-if="showForm" ref="formRef" class="mt-6 border dark:border-slate-700 p-4 rounded-2xl bg-white dark:bg-slate-900 shadow-sm animate-fade-in">
-            <h3 class="text-lg font-semibold text-gray-700 dark:text-gray-200 mb-4">{{ isEditing ? 'Editar evolución clínica' : 'Registrar nueva evolución' }}</h3>
+        <div v-if="showForm && canEvolve" ref="formRef" class="mt-6 border dark:border-slate-700 p-4 rounded-2xl bg-white dark:bg-slate-900 shadow-sm animate-fade-in">
+            <h3 class="text-lg font-semibold text-gray-700 dark:text-gray-200 mb-4">{{ isEditing ? 'Rectificar evolución clínica' : 'Registrar nueva evolución' }}</h3>
 
             <label for="fecha" class="block font-medium mb-2 text-gray-700 dark:text-gray-200">Fecha</label>
 
@@ -477,6 +663,17 @@ onMounted(fetchHistoria);
 
             <label for="indicaciones" class="block font-medium mb-2 text-gray-700 dark:text-gray-200">Indicaciones</label>
             <textarea v-model="indicaciones" rows="3" class="p-2 border dark:border-slate-600 rounded w-full mb-4 bg-white dark:bg-slate-800 text-gray-800 dark:text-gray-100" placeholder="Escribí las indicaciones médicas (opcional)..."></textarea>
+
+            <template v-if="isEditing">
+                <label for="motivoRectificacion" class="block font-medium mb-2 text-gray-700 dark:text-gray-200">Motivo de la rectificación</label>
+                <textarea
+                    id="motivoRectificacion"
+                    v-model="motivoRectificacion"
+                    rows="2"
+                    class="p-2 border dark:border-slate-600 rounded w-full mb-4 bg-white dark:bg-slate-800 text-gray-800 dark:text-gray-100"
+                    placeholder="Explicá por qué se rectifica esta evolución..."
+                ></textarea>
+            </template>
 
             <label class="block font-medium mb-2 text-gray-700 dark:text-gray-200">Archivos adjuntos (nuevos)</label>
 
@@ -518,10 +715,29 @@ onMounted(fetchHistoria);
                 </li>
             </ul>
             <div class="mt-4 flex gap-2">
-                <Button :label="isEditing ? 'Guardar Cambios' : 'Guardar Evolución'" icon="pi pi-save" @click="guardarEvolucion" />
+                <Button :label="isEditing ? 'Revisar y firmar rectificación' : 'Revisar y firmar evolución'" icon="pi pi-pencil" @click="guardarEvolucion" />
                 <Button label="Cancelar" icon="pi pi-times" severity="secondary" @click="cancelarFormEvolucion" />
             </div>
         </div>
+
+        <!-- 🔏 CONFIRMACIÓN EXPLÍCITA DE FIRMA ELECTRÓNICA -->
+        <Dialog v-model:visible="showFirmaDialog" header="Confirmar firma electrónica" :modal="true" :closable="!firmaEnviando" :closeOnEscape="!firmaEnviando" :style="{ width: 'min(34rem, 92vw)' }">
+            <div class="space-y-4 text-sm text-gray-700 dark:text-gray-200">
+                <p>Al confirmar, esta evolución quedará cerrada, vinculada a tu cuenta profesional y no podrá sobrescribirse.</p>
+                <div class="rounded-lg border border-blue-200 bg-blue-50 p-3 dark:border-blue-800 dark:bg-blue-950/30">
+                    <p><strong>Profesional:</strong> {{ userStore.nombre }}</p>
+                    <p><strong>Matrícula:</strong> {{ userStore.matricula_tipo }} {{ userStore.matricula_numero }}{{ userStore.matricula_provincia ? ` (${userStore.matricula_provincia})` : '' }}</p>
+                </div>
+                <label class="flex items-start gap-2 cursor-pointer">
+                    <input v-model="confirmacionFirma" type="checkbox" class="mt-1" />
+                    <span>Confirmo que revisé el contenido y deseo firmar electrónicamente esta {{ isEditing ? 'rectificación' : 'evolución' }}.</span>
+                </label>
+            </div>
+            <template #footer>
+                <Button label="Cancelar" severity="secondary" :disabled="firmaEnviando" @click="showFirmaDialog = false" />
+                <Button :label="firmaEnviando ? 'Firmando…' : 'Firmar evolución'" icon="pi pi-check" :loading="firmaEnviando" :disabled="!confirmacionFirma || firmaEnviando" @click="enviarEvolucion" />
+            </template>
+        </Dialog>
 
         <!-- 📜 DIALOG: HISTORIAL DE EDICIONES -->
         <Dialog v-model:visible="showHistorialDialog" header="Historial de Cambios" :modal="true" :breakpoints="{ '960px': '75vw', '640px': '90vw' }" :style="{ width: '50vw' }">
@@ -542,11 +758,15 @@ onMounted(fetchHistoria);
                             <div class="flex justify-between items-center mb-2 flex-wrap gap-1">
                                 <span class="font-bold text-sm text-gray-800 dark:text-gray-200"> Versión {{ v.version }} <Tag v-if="v.activo" value="Activa (Vigente)" severity="success" class="text-[10px] py-0 px-1 ml-1" /> </span>
                                 <span class="text-xs text-gray-500 dark:text-gray-400">
-                                    {{ fechaBonitaCompleta(v.creado_en) }}
+                                    {{ fechaBonitaClinica(v.fecha || v.creado_en) }}
                                 </span>
                             </div>
 
                             <p class="text-xs text-gray-400 dark:text-gray-500 mb-2 font-medium">Por: {{ v.nombre_usuario }} ({{ v.especialidad_usuario }})</p>
+
+                            <p v-if="v.motivo_rectificacion" class="text-xs text-amber-700 dark:text-amber-300 mb-2"><strong>Motivo de rectificación:</strong> {{ v.motivo_rectificacion }}</p>
+
+                            <p v-if="v.estado_firma === 'firmada'" class="text-xs text-green-700 dark:text-green-300 mb-2">Firma electrónica registrada</p>
 
                             <p class="text-gray-700 dark:text-gray-300 text-sm whitespace-pre-wrap mb-2 bg-white dark:bg-slate-900 p-2 rounded border dark:border-slate-800">{{ v.contenido }}</p>
 

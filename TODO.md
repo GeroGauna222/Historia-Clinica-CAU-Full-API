@@ -330,3 +330,7 @@ Fecha de auditoria: 2026-04-13
 
 - [x] Agregar seccion de Posteos de Grupo en cada grupo, donde los integrantes del Equipo pueden postear comunicados para que el grupo lea
   - Estado: creada vista por grupo + servicios + endpoints `/api/grupos/<grupo_id>/posteos`.
+
+- [ ] Comunicacion inter-grupos (puedo postear en los posteos de un grupo, ese posteo lo puedo ver yo y la gente del grupo, no otros)
+
+- [ ] Respuesta a posteo (Marcar Leído / Ok)

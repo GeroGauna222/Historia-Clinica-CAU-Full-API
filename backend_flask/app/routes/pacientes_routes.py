@@ -14,9 +14,22 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.lib.enums import TA_CENTER, TA_RIGHT
 from datetime import datetime, timezone, timedelta
 from app.routes.historias_routes import actualizar_hash_evolucion, actualizar_historia
+from app.utils.firma_electronica import (
+    FirmaElectronicaError,
+    hash_payload,
+    payload_evolucion_firmable,
+    registrar_firma_y_auditoria,
+    require_confirmation,
+    auth_event_id,
+    ahora_argentina_sin_tz,
+    validar_profesional_firmante,
+)
+import hashlib
 import os
+import uuid
 from reportlab.lib.colors import Color
 from reportlab.lib import colors
+from xml.sax.saxutils import escape
 
 # Registrar fuente compatible con UTF-8 (caracteres acentuados, español)
 pdfmetrics.registerFont(UnicodeCIDFont('HeiseiMin-W3'))
@@ -49,6 +62,98 @@ def _request_id():
 
 def _mysql_connection_id(conn):
     return getattr(conn, "connection_id", None)
+
+
+def _format_pdf_datetime(value):
+    if not value:
+        return None
+    if hasattr(value, "strftime"):
+        return value.strftime("%d/%m/%Y %H:%M:%S")
+    return str(value)
+
+
+def _format_pdf_date(value):
+    if not value:
+        return None
+    if hasattr(value, "strftime"):
+        return value.strftime("%d/%m/%Y")
+    raw = str(value)[:10]
+    try:
+        year, month, day = raw.split("-")
+        return f"{day}/{month}/{year}"
+    except ValueError:
+        return raw
+
+
+def _pdf_multiline(value):
+    return escape(str(value)).replace("\n", "<br/>")
+
+
+def _pdf_value_present(value):
+    return value is not None and str(value).strip() != ""
+
+
+HISTORIA_ARCHIVO_MAX_BYTES = 10 * 1024 * 1024
+HISTORIA_ARCHIVO_MIMES = {
+    "application/pdf",
+    "image/jpeg",
+    "image/png",
+}
+HISTORIA_ARCHIVO_EXTENSION_MIMES = {
+    '.pdf': 'application/pdf',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.png': 'image/png',
+}
+
+
+def _historia_archivos_root(paciente_id):
+    return os.path.join(_uploads_root(), "pacientes", str(paciente_id))
+
+
+def _uploads_root():
+    configured = current_app.config.get("UPLOAD_FOLDER")
+    # Existing tests intentionally isolate uploads in their temporary cwd;
+    # production uses the configured Docker volume (/app/uploads).
+    if current_app.testing and (not configured or configured == "/app/uploads"):
+        return os.path.join(os.getcwd(), "uploads")
+    return configured or os.path.join(os.getcwd(), "uploads")
+
+
+def _evolucion_archivos_root(evolucion_id):
+    return os.path.join(_uploads_root(), "evoluciones", str(evolucion_id))
+
+
+def _historia_archivo_path(paciente_id, relative_path):
+    root = os.path.abspath(_historia_archivos_root(paciente_id))
+    candidate = os.path.abspath(os.path.join(root, relative_path))
+    if os.path.commonpath([root, candidate]) != root:
+        raise ValueError("Ruta de archivo inválida")
+    return candidate
+
+
+def _historia_archivo_payload(row):
+    return {
+        "id": row.get("id"),
+        "nombre": row.get("nombre_original"),
+        "mime_type": row.get("mime_type"),
+        "tamanio_bytes": row.get("tamanio_bytes"),
+        "hash_sha256": row.get("hash_sha256"),
+        "cargado_en": _to_iso_arg(row.get("cargado_en")),
+        "cargado_por": row.get("cargado_por"),
+        "url": f"/api/pacientes/{row.get('paciente_id')}/adjuntos/{row.get('id')}",
+    }
+
+
+def _historia_archivo_contenido_valido(extension, contenido):
+    """Reject renamed executables while accepting only the advertised formats."""
+    signatures = {
+        '.pdf': contenido.startswith(b'%PDF-'),
+        '.jpg': contenido.startswith(b'\xff\xd8\xff'),
+        '.jpeg': contenido.startswith(b'\xff\xd8\xff'),
+        '.png': contenido.startswith(b'\x89PNG\r\n\x1a\n'),
+    }
+    return signatures.get(extension, False)
 
 
 def _log_db_error(message, conn=None):
@@ -102,7 +207,7 @@ def _paciente_buscar_condition_and_params(term, dni, nombre, apellido, nro_hc):
 @requiere_rol('director', 'profesional', 'administrativo', 'area')
 def api_crear_paciente():
     """Crea un nuevo paciente."""
-        # 🧩 Soporta tanto JSON como form-data
+    # 🧩 Soporta tanto JSON como form-data
     if request.is_json:
         data = request.get_json(silent=True) or {}
     else:
@@ -112,24 +217,24 @@ def api_crear_paciente():
     cursor = conn.cursor(dictionary=True)
 
     try:
+        dni = data.get('dni')
+        nro_hc = data.get('nro_hc')
+
         # Verificar duplicado por DNI
-        cursor.execute("SELECT id FROM pacientes WHERE dni = %s", (data.get('dni'),))
+        cursor.execute("SELECT id FROM pacientes WHERE dni = %s", (dni,))
         if cursor.fetchone():
-            return jsonify({'error': f"⚠️ Ya existe un paciente con DNI {data.get('dni')}"}), 400
+            return jsonify({'error': f"⚠️ Ya existe un paciente con DNI {dni}"}), 400
 
         # Verificar duplicado por N° de Historia Clinica (nro_hc es UNIQUE en la DB).
-        # Sin esta validacion, un nro_hc repetido rompia el INSERT con IntegrityError -> 500.
-        cursor.execute("SELECT id FROM pacientes WHERE nro_hc = %s", (data.get('nro_hc'),))
+        cursor.execute("SELECT id FROM pacientes WHERE nro_hc = %s", (nro_hc,))
         if cursor.fetchone():
-            return jsonify({'error': f"⚠️ Ya existe un paciente con N° HC {data.get('nro_hc')}"}), 409
+            return jsonify({'error': f"⚠️ Ya existe un paciente con N° HC {nro_hc}"}), 409
 
-        # Normalizar campo discapacidad. cert_discapacidad es ENUM('Sí','No') en la DB:
-        # un "" (valor por defecto del <select> sin tocar) rompe el INSERT con
-        # "Data truncated for column 'cert_discapacidad'" (500). Debe quedar en None.
+        # Normalizar campo discapacidad.
         cert_discapacidad_raw = data.get('cert_discapacidad') or ''
-        if cert_discapacidad_raw.lower() in ('si', 'sí'):
+        if str(cert_discapacidad_raw).lower() in ('si', 'sí'):
             cert_discapacidad = 'Sí'
-        elif cert_discapacidad_raw.lower() == 'no':
+        elif str(cert_discapacidad_raw).lower() == 'no':
             cert_discapacidad = 'No'
         else:
             cert_discapacidad = None
@@ -149,8 +254,8 @@ def api_crear_paciente():
         """, (
             data.get('nro_hc'),
             data.get('dni'),
-            data.get('apellido', '').upper(),
-            data.get('nombre', '').upper(),
+            data.get('apellido', '').upper() if data.get('apellido') else None,
+            data.get('nombre', '').upper() if data.get('nombre') else None,
             data.get('fecha_nacimiento'),
             data.get('sexo'),
             data.get('nacionalidad'),
@@ -178,8 +283,6 @@ def api_crear_paciente():
         ))
         conn.commit()
     except IntegrityError:
-        # Defensa ante condicion de carrera o cualquier otra constraint UNIQUE
-        # (dni/nro_hc): responder 400 claro en lugar de un 500 opaco.
         conn.rollback()
         _log_db_error("Patient creation integrity error", conn)
         return jsonify({'error': '⚠️ Ya existe un paciente con ese DNI o N° HC'}), 409
@@ -202,10 +305,34 @@ def api_modificar_paciente(id):
     cursor = conn.cursor()
 
     try:
+        # Pre-check duplicidad DNI contra otros pacientes
+        new_dni = data.get('dni')
+        if new_dni and str(new_dni).strip():
+            cursor.execute("SELECT id FROM pacientes WHERE dni = %s AND id != %s", (new_dni, id))
+            if cursor.fetchone():
+                return jsonify({'error': f"⚠️ Ya existe otro paciente registrado con el DNI {new_dni}"}), 409
+
+        # Pre-check duplicidad N° HC contra otros pacientes
+        new_nro_hc = data.get('nro_hc')
+        if new_nro_hc and str(new_nro_hc).strip():
+            cursor.execute("SELECT id FROM pacientes WHERE nro_hc = %s AND id != %s", (new_nro_hc, id))
+            if cursor.fetchone():
+                return jsonify({'error': f"⚠️ Ya existe otro paciente registrado con el N° HC {new_nro_hc}"}), 409
+
+        # Validaciones de campos obligatorios en edicion si son enviados vacios
+        if 'dni' in data and (data.get('dni') is None or not str(data.get('dni')).strip()):
+            return jsonify({'error': '⚠️ El N° de Documento (DNI) no puede quedar vacío.'}), 400
+        if 'nro_hc' in data and (data.get('nro_hc') is None or not str(data.get('nro_hc')).strip()):
+            return jsonify({'error': '⚠️ El N° de Historia Clínica no puede quedar vacío.'}), 400
+        if 'nombre' in data and (data.get('nombre') is None or not str(data.get('nombre')).strip()):
+            return jsonify({'error': '⚠️ El Nombre no puede quedar vacío.'}), 400
+        if 'apellido' in data and (data.get('apellido') is None or not str(data.get('apellido')).strip()):
+            return jsonify({'error': '⚠️ El Apellido no puede quedar vacío.'}), 400
+
         cert_discapacidad_raw = data.get('cert_discapacidad') or ''
-        if cert_discapacidad_raw.lower() in ('si', 'sí'):
+        if str(cert_discapacidad_raw).lower() in ('si', 'sí'):
             cert_discapacidad = 'Sí'
-        elif cert_discapacidad_raw.lower() == 'no':
+        elif str(cert_discapacidad_raw).lower() == 'no':
             cert_discapacidad = 'No'
         else:
             cert_discapacidad = None
@@ -245,7 +372,7 @@ def api_modificar_paciente(id):
         # Solo actualizar campos enviados
         campos_no_vacios = {k: v for k, v in campos_validos.items() if v is not None}
         if not campos_no_vacios:
-            return jsonify({'error': 'Sin cambios para actualizar'}), 400
+            return jsonify({'message': 'No se realizaron cambios.', 'sin_cambios': True}), 200
 
         set_clause = ", ".join([f"{campo}=%s" for campo in campos_no_vacios.keys()])
         values = list(campos_no_vacios.values()) + [usuario_id, id]
@@ -429,55 +556,95 @@ def buscar_pacientes():
 # 🩺 Evoluciones
 # ==========================================================
 
+
+def _validar_intencion_de_firma(exigir_confirmacion=True):
+    """Validate the signing contract before opening a clinical transaction."""
+    try:
+        validar_profesional_firmante()
+        if exigir_confirmacion:
+            require_confirmation()
+        auth_event_id()
+    except FirmaElectronicaError as exc:
+        return jsonify({"error": exc.message}), exc.status_code
+    return None
+
 @bp_pacientes.route('/api/pacientes/<int:id>/evolucion', methods=['POST'])
 @login_required
-@requiere_rol('director', 'profesional', 'administrativo', 'area')
+@requiere_rol('director', 'profesional')
 def agregar_evolucion(id):
-    """Agrega una nueva evolución a un paciente."""
+    """Create and electronically sign a new clinical evolution atomically."""
+    validation_error = _validar_intencion_de_firma()
+    if validation_error:
+        return validation_error
+
     fecha = request.form.get('fecha')
     contenido = request.form.get('contenido')
     indicaciones = request.form.get('indicaciones')  
     archivos = request.files.getlist('archivos')
 
-    if not fecha or not contenido:
+    if not fecha or not contenido or not contenido.strip():
         return jsonify({'error': 'Faltan campos obligatorios'}), 400
 
     conn = get_connection()
     cursor = conn.cursor()
-    hash_evolucion = None
+    upload_dir = None
 
     try:
         cursor.execute("""
-                INSERT INTO evoluciones (paciente_id, fecha, contenido, indicaciones, usuario_id)
-                VALUES (%s, %s, %s, %s, %s)
+            INSERT INTO evoluciones (
+                paciente_id, fecha, contenido, indicaciones, usuario_id,
+                estado_firma, firmado_en
+            ) VALUES (%s, %s, %s, %s, %s, 'pendiente', NULL)
         """, (id, fecha, contenido, indicaciones, current_user.id))
-        conn.commit()
         evolucion_id = cursor.lastrowid
 
-        upload_dir = os.path.join(os.getcwd(), 'uploads', 'evoluciones', str(evolucion_id))
+        upload_dir = _evolucion_archivos_root(evolucion_id)
         os.makedirs(upload_dir, exist_ok=True)
 
         for archivo in archivos:
             if archivo.filename:
                 filename = secure_filename(archivo.filename)
+                if not filename:
+                    continue
                 archivo.save(os.path.join(upload_dir, filename))
                 cursor.execute("""
                     INSERT INTO evolucion_archivos (evolucion_id, filename)
                     VALUES (%s, %s)
                 """, (evolucion_id, filename))
-                conn.commit()
+
+        evolucion = {
+            'id': evolucion_id,
+            'paciente_id': id,
+            'fecha': fecha,
+            'contenido': contenido,
+            'indicaciones': indicaciones,
+            'usuario_id': current_user.id,
+            'version': 1,
+            'padre_id': None,
+            'motivo_rectificacion': None,
+        }
+        hash_evolucion, firmado_en = registrar_firma_y_auditoria(
+            cursor, evolucion, 'firma'
+        )
+        cursor.execute(
+            """
+            UPDATE evoluciones
+            SET hash_local = %s, estado_firma = 'firmada', firmado_en = %s
+            WHERE id = %s
+            """,
+            (hash_evolucion, firmado_en, evolucion_id),
+        )
+        conn.commit()
     except Exception:
         conn.rollback()
+        if upload_dir and os.path.isdir(upload_dir):
+            import shutil
+            shutil.rmtree(upload_dir, ignore_errors=True)
         _log_db_error("Patient evolution creation database error", conn)
         raise
     finally:
         cursor.close()
         conn.close()
-
-    try:
-        hash_evolucion = actualizar_hash_evolucion(evolucion_id)
-    except Exception as e:
-        print(f"Error calculando hash de evolucion: {e}")
 
     # 🔁 Actualizar historia consolidada automáticamente
     try:
@@ -492,7 +659,12 @@ def agregar_evolucion(id):
         print(f"⚠️ Error actualizando historia consolidada: {e}")
         msg_extra = " (⚠️ No se pudo actualizar historia)"
 
-    return jsonify({'message': f'Evolución guardada correctamente ✅{msg_extra}'})
+    return jsonify({
+        'message': f'Evolución guardada y firmada correctamente ✅{msg_extra}',
+        'id': evolucion_id,
+        'hash_local': hash_evolucion,
+        'estado_firma': 'firmada',
+    })
 
 @bp_pacientes.route('/api/pacientes/<int:id>/evoluciones', methods=['GET'])
 @login_required
@@ -516,6 +688,17 @@ def get_evoluciones(id):
                 e.tx_hash,
                 e.fecha_anclaje_bfa,
                 e.estado_bfa,
+                e.estado_firma,
+                e.firmado_en,
+                e.motivo_rectificacion,
+                f.payload_version AS firma_payload_version,
+                f.payload_hash AS firma_payload_hash,
+                f.algoritmo AS firma_algoritmo,
+                f.firmado_en AS firma_firmado_en,
+                f.rol AS firma_rol,
+                f.matricula_tipo AS firma_matricula_tipo,
+                f.matricula_numero AS firma_matricula_numero,
+                f.matricula_provincia AS firma_matricula_provincia,
                 u.nombre AS nombre_usuario,
                 CASE
                     WHEN u.rol = 'director' THEN 'Director'
@@ -523,6 +706,7 @@ def get_evoluciones(id):
                 END AS especialidad_usuario
             FROM evoluciones e
             JOIN usuarios u ON e.usuario_id = u.id
+            LEFT JOIN firmas_electronicas f ON f.evolucion_id = e.id
             WHERE e.paciente_id = %s AND e.activo = 1
             ORDER BY e.fecha DESC
         """, (id,))
@@ -542,6 +726,8 @@ def get_evoluciones(id):
                 'url': f"/api/uploads/evoluciones/{evo['id']}/{a['filename']}"
             } for a in archivos]
             evo['creado_en'] = _to_iso_arg(evo.get('creado_en'))
+            evo['firmado_en'] = _to_iso_arg(evo.get('firmado_en'))
+            evo['firma_firmado_en'] = _to_iso_arg(evo.get('firma_firmado_en'))
 
         return jsonify(evoluciones)
     except Exception:
@@ -558,28 +744,201 @@ def get_evoluciones(id):
 @requiere_rol('director', 'profesional', 'administrativo', 'area')
 def uploaded_file(evo_id, filename):
     """Sirve los archivos adjuntos de evoluciones."""
-    folder = os.path.join(os.getcwd(), 'uploads', 'evoluciones', str(evo_id))
+    folder = _evolucion_archivos_root(evo_id)
     return send_from_directory(folder, filename)
+
+
+@bp_pacientes.route('/api/pacientes/<int:paciente_id>/adjuntos', methods=['GET', 'POST'])
+@login_required
+@requiere_rol('director', 'profesional', 'administrativo', 'area')
+def api_adjuntos_historia(paciente_id):
+    """List or append documents attached directly to a patient's history.
+
+    These files are not evolutions. They are append-only source documents
+    (external studies, prior records or consents) with uploader, timestamp and
+    SHA-256 evidence. There is intentionally no overwrite/delete operation.
+    """
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    created_paths = []
+
+    try:
+        cursor.execute("SELECT id FROM pacientes WHERE id = %s", (paciente_id,))
+        if not cursor.fetchone():
+            return jsonify({'error': 'Paciente no encontrado'}), 404
+
+        if request.method == 'GET':
+            cursor.execute(
+                """
+                SELECT h.id, h.paciente_id, h.nombre_original, h.mime_type,
+                       h.tamanio_bytes, h.hash_sha256, h.cargado_en,
+                       u.nombre AS cargado_por
+                FROM historia_archivos h
+                JOIN usuarios u ON u.id = h.usuario_id
+                WHERE h.paciente_id = %s
+                ORDER BY h.cargado_en DESC, h.id DESC
+                """,
+                (paciente_id,),
+            )
+            return jsonify([_historia_archivo_payload(row) for row in cursor.fetchall()])
+
+        archivos = [archivo for archivo in request.files.getlist('archivos') if archivo and archivo.filename]
+        if not archivos:
+            return jsonify({'error': 'Debe seleccionar al menos un archivo'}), 400
+
+        root = _historia_archivos_root(paciente_id)
+        prepared = []
+        respuesta = []
+
+        for archivo in archivos:
+            nombre_original = archivo.filename.strip()
+            nombre_seguro = secure_filename(nombre_original)
+            extension = os.path.splitext(nombre_seguro)[1].lower()
+            mime_type = (archivo.mimetype or '').lower()
+
+            if not nombre_seguro or extension not in {'.pdf', '.jpg', '.jpeg', '.png'}:
+                return jsonify({'error': f'Formato no permitido para {nombre_original}'}), 415
+            if mime_type not in HISTORIA_ARCHIVO_MIMES and mime_type != 'application/octet-stream':
+                return jsonify({'error': f'Tipo MIME no permitido para {nombre_original}'}), 415
+
+            contenido = archivo.read()
+            if not contenido:
+                return jsonify({'error': f'El archivo {nombre_original} está vacío'}), 422
+            if len(contenido) > HISTORIA_ARCHIVO_MAX_BYTES:
+                return jsonify({'error': f'{nombre_original} supera el límite de 10 MB'}), 413
+            if not _historia_archivo_contenido_valido(extension, contenido):
+                return jsonify({'error': f'El contenido de {nombre_original} no coincide con su formato'}), 415
+
+            mime_type = HISTORIA_ARCHIVO_EXTENSION_MIMES[extension] if mime_type == 'application/octet-stream' else mime_type
+            prepared.append((nombre_original, nombre_seguro, mime_type, contenido))
+
+        os.makedirs(root, exist_ok=True)
+        for nombre_original, nombre_seguro, mime_type, contenido in prepared:
+
+            # El nombre público nunca se usa como ruta: se antepone un UUID y
+            # se guarda sólo dentro del directorio aislado del paciente.
+            nombre_almacenado = f"{uuid.uuid4().hex}_{nombre_seguro}"
+            ruta_relativa = nombre_almacenado
+            path = _historia_archivo_path(paciente_id, ruta_relativa)
+            with open(path, 'wb') as destino:
+                destino.write(contenido)
+            created_paths.append(path)
+
+            cargado_en = ahora_argentina_sin_tz()
+            hash_sha256 = hashlib.sha256(contenido).hexdigest()
+            cursor.execute(
+                """
+                INSERT INTO historia_archivos
+                    (paciente_id, usuario_id, nombre_original, nombre_almacenado,
+                     ruta_relativa, mime_type, tamanio_bytes, hash_sha256, cargado_en)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    paciente_id,
+                    current_user.id,
+                    nombre_original[:255],
+                    nombre_almacenado[:255],
+                    ruta_relativa,
+                    mime_type,
+                    len(contenido),
+                    hash_sha256,
+                    cargado_en,
+                ),
+            )
+            respuesta.append({
+                'id': cursor.lastrowid,
+                'paciente_id': paciente_id,
+                'nombre': nombre_original,
+                'mime_type': mime_type,
+                'tamanio_bytes': len(contenido),
+                'hash_sha256': hash_sha256,
+                'cargado_en': _to_iso_arg(cargado_en),
+                'cargado_por': current_user.nombre,
+                'url': f"/api/pacientes/{paciente_id}/adjuntos/{cursor.lastrowid}",
+            })
+
+        conn.commit()
+        return jsonify({'archivos': respuesta}), 201
+    except Exception:
+        conn.rollback()
+        for path in created_paths:
+            try:
+                if os.path.isfile(path):
+                    os.remove(path)
+            except OSError:
+                current_app.logger.exception("Could not clean failed history attachment")
+        _log_db_error("Patient history attachment database error", conn)
+        raise
+    finally:
+        cursor.close()
+        conn.close()
+
+
+@bp_pacientes.route('/api/pacientes/<int:paciente_id>/adjuntos/<int:archivo_id>', methods=['GET'])
+@login_required
+@requiere_rol('director', 'profesional', 'administrativo', 'area')
+def descargar_adjunto_historia(paciente_id, archivo_id):
+    """Serve a history document only after authenticated patient-scoped lookup."""
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(
+            """
+            SELECT id, paciente_id, nombre_original, ruta_relativa, mime_type
+            FROM historia_archivos
+            WHERE id = %s AND paciente_id = %s
+            LIMIT 1
+            """,
+            (archivo_id, paciente_id),
+        )
+        archivo = cursor.fetchone()
+        if not archivo:
+            return jsonify({'error': 'Archivo no encontrado'}), 404
+
+        try:
+            path = _historia_archivo_path(paciente_id, archivo['ruta_relativa'])
+        except ValueError:
+            current_app.logger.error("Invalid history attachment path id=%s", archivo_id)
+            return jsonify({'error': 'Archivo no disponible'}), 404
+        if not os.path.isfile(path):
+            return jsonify({'error': 'Archivo no disponible'}), 404
+
+        return send_file(
+            path,
+            mimetype=archivo['mime_type'],
+            as_attachment=True,
+            download_name=archivo['nombre_original'],
+            conditional=True,
+        )
+    finally:
+        cursor.close()
+        conn.close()
 
 
 @bp_pacientes.route('/api/pacientes/<int:paciente_id>/evolucion/<int:evo_id>', methods=['PUT'])
 @login_required
-@requiere_rol('director', 'profesional', 'administrativo', 'area')
+@requiere_rol('director', 'profesional')
 def api_editar_evolucion(paciente_id, evo_id):
     """
     Registra una edición de evolución agregando un nuevo registro Append-Only.
     Solo el creador original o el rol director pueden realizar la edición.
     """
+    validation_error = _validar_intencion_de_firma(exigir_confirmacion=False)
+    if validation_error:
+        return validation_error
+
     fecha = request.form.get('fecha')
     contenido = request.form.get('contenido')
     indicaciones = request.form.get('indicaciones')
+    motivo_rectificacion = (request.form.get('motivo_rectificacion') or '').strip()
     archivos = request.files.getlist('archivos')
 
-    if not fecha or not contenido:
+    if not fecha or not contenido or not contenido.strip():
         return jsonify({'error': 'Faltan campos obligatorios'}), 400
 
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
+    upload_dir = None
 
     try:
         # 1. Obtener la evolucion a editar
@@ -594,6 +953,13 @@ def api_editar_evolucion(paciente_id, evo_id):
         is_director = (current_user.rol == 'director')
         if not is_owner and not is_director:
             return jsonify({'error': 'No tenés permisos para editar esta evolución'}), 403
+        if not motivo_rectificacion:
+            return jsonify({'error': 'Debe indicar el motivo de la rectificación'}), 422
+
+        try:
+            require_confirmation()
+        except FirmaElectronicaError as exc:
+            return jsonify({'error': exc.message}), exc.status_code
 
         # 3. Determinar padre_id (si la actual ya tiene padre, heredamos el mismo padre)
         padre_id = evolucion_actual['padre_id'] if evolucion_actual['padre_id'] is not None else evolucion_actual['id']
@@ -606,9 +972,15 @@ def api_editar_evolucion(paciente_id, evo_id):
 
         # 5. Insertar la nueva evolucion de edicion
         cursor.execute("""
-            INSERT INTO evoluciones (paciente_id, fecha, contenido, indicaciones, usuario_id, padre_id, version, activo)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, 1)
-        """, (paciente_id, fecha, contenido, indicaciones, current_user.id, padre_id, nueva_version))
+            INSERT INTO evoluciones (
+                paciente_id, fecha, contenido, indicaciones, usuario_id,
+                padre_id, version, activo, motivo_rectificacion,
+                estado_firma, firmado_en
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, 1, %s, 'pendiente', NULL)
+        """, (
+            paciente_id, fecha, contenido, indicaciones, current_user.id,
+            padre_id, nueva_version, motivo_rectificacion,
+        ))
         
         nueva_evo_id = cursor.lastrowid
 
@@ -623,7 +995,7 @@ def api_editar_evolucion(paciente_id, evo_id):
         cursor.execute("SELECT filename FROM evolucion_archivos WHERE evolucion_id = %s", (evo_id,))
         adjuntos_viejos = cursor.fetchall()
         
-        upload_dir = os.path.join(os.getcwd(), 'uploads', 'evoluciones', str(nueva_evo_id))
+        upload_dir = _evolucion_archivos_root(nueva_evo_id)
         os.makedirs(upload_dir, exist_ok=True)
         
         for adj in adjuntos_viejos:
@@ -633,7 +1005,7 @@ def api_editar_evolucion(paciente_id, evo_id):
                 VALUES (%s, %s)
             """, (nueva_evo_id, filename))
             
-            ruta_origen = os.path.join(os.getcwd(), 'uploads', 'evoluciones', str(evo_id), filename)
+            ruta_origen = os.path.join(_evolucion_archivos_root(evo_id), filename)
             ruta_destino = os.path.join(upload_dir, filename)
             if os.path.exists(ruta_origen):
                 import shutil
@@ -642,29 +1014,50 @@ def api_editar_evolucion(paciente_id, evo_id):
         for archivo in archivos:
             if archivo.filename:
                 filename = secure_filename(archivo.filename)
+                if not filename:
+                    continue
                 archivo.save(os.path.join(upload_dir, filename))
                 cursor.execute("""
                     INSERT INTO evolucion_archivos (evolucion_id, filename)
                     VALUES (%s, %s)
                 """, (nueva_evo_id, filename))
 
+        evolucion = {
+            'id': nueva_evo_id,
+            'paciente_id': paciente_id,
+            'fecha': fecha,
+            'contenido': contenido,
+            'indicaciones': indicaciones,
+            'usuario_id': current_user.id,
+            'version': nueva_version,
+            'padre_id': padre_id,
+            'motivo_rectificacion': motivo_rectificacion,
+        }
+        hash_evolucion, firmado_en = registrar_firma_y_auditoria(
+            cursor, evolucion, 'rectificacion'
+        )
+        cursor.execute(
+            """
+            UPDATE evoluciones
+            SET hash_local = %s, estado_firma = 'firmada', firmado_en = %s
+            WHERE id = %s
+            """,
+            (hash_evolucion, firmado_en, nueva_evo_id),
+        )
         conn.commit()
 
     except Exception:
         conn.rollback()
+        if upload_dir and os.path.isdir(upload_dir):
+            import shutil
+            shutil.rmtree(upload_dir, ignore_errors=True)
         _log_db_error("Patient evolution edit database error", conn)
         raise
     finally:
         cursor.close()
         conn.close()
 
-    # 8. Recalcular hash de la nueva evolucion y consolidar historia clinica
-    hash_evolucion = None
-    try:
-        hash_evolucion = actualizar_hash_evolucion(nueva_evo_id)
-    except Exception as e:
-        print(f"Error calculando hash de evolucion editada: {e}")
-
+    # 8. Consolidar historia clínica luego de cerrar la transacción firmada.
     try:
         hash_local = actualizar_historia(paciente_id, current_user.id)
         partes = []
@@ -677,7 +1070,13 @@ def api_editar_evolucion(paciente_id, evo_id):
         print(f"⚠️ Error actualizando historia consolidada tras edicion: {e}")
         msg_extra = " (⚠️ No se pudo actualizar historia)"
 
-    return jsonify({'message': f'Evolución editada y guardada como versión {nueva_version} ✅{msg_extra}', 'id': nueva_evo_id})
+    return jsonify({
+        'message': f'Evolución editada (rectificación) y firmada como versión {nueva_version} ✅{msg_extra}',
+        'id': nueva_evo_id,
+        'hash_local': hash_evolucion,
+        'estado_firma': 'firmada',
+        'version': nueva_version,
+    })
 
 
 @bp_pacientes.route('/api/pacientes/<int:paciente_id>/evolucion/<int:evo_id>/historial', methods=['GET'])
@@ -701,6 +1100,15 @@ def api_get_historial_evolucion(paciente_id, evo_id):
 
         cursor.execute("""
             SELECT e.id, e.fecha, e.contenido, e.indicaciones, e.creado_en, e.version, e.activo,
+                   e.estado_firma, e.firmado_en, e.motivo_rectificacion,
+                   f.payload_version AS firma_payload_version,
+                   f.payload_hash AS firma_payload_hash,
+                   f.algoritmo AS firma_algoritmo,
+                   f.firmado_en AS firma_firmado_en,
+                   f.rol AS firma_rol,
+                   f.matricula_tipo AS firma_matricula_tipo,
+                   f.matricula_numero AS firma_matricula_numero,
+                   f.matricula_provincia AS firma_matricula_provincia,
                    u.nombre AS nombre_usuario,
                    CASE
                        WHEN u.rol = 'director' THEN 'Director'
@@ -708,6 +1116,7 @@ def api_get_historial_evolucion(paciente_id, evo_id):
                    END AS especialidad_usuario
             FROM evoluciones e
             JOIN usuarios u ON e.usuario_id = u.id
+            LEFT JOIN firmas_electronicas f ON f.evolucion_id = e.id
             WHERE (e.id = %s OR e.padre_id = %s)
             ORDER BY e.version ASC
         """, (padre_id, padre_id))
@@ -722,11 +1131,86 @@ def api_get_historial_evolucion(paciente_id, evo_id):
                 'url': f"/api/uploads/evoluciones/{item['id']}/{a['filename']}"
             } for a in archivos]
             item['creado_en'] = _to_iso_arg(item.get('creado_en'))
+            item['firmado_en'] = _to_iso_arg(item.get('firmado_en'))
+            item['firma_firmado_en'] = _to_iso_arg(item.get('firma_firmado_en'))
 
         return jsonify(historial)
 
     except Exception:
         _log_db_error("Patient evolution history read database error", conn)
+        raise
+    finally:
+        cursor.close()
+        conn.close()
+
+
+@bp_pacientes.route('/api/pacientes/<int:paciente_id>/evolucion/<int:evo_id>/firma', methods=['GET'])
+@login_required
+@requiere_rol('director', 'profesional', 'administrativo', 'area')
+def api_verificar_firma_evolucion(paciente_id, evo_id):
+    """Verify the local electronic-signature payload without contacting BFA."""
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(
+            """
+            SELECT e.*, f.payload_version AS firma_payload_version,
+                   f.payload_hash AS firma_payload_hash,
+                   f.algoritmo AS firma_algoritmo,
+                   f.firmado_en AS firma_firmado_en,
+                   u.nombre AS firmante_nombre,
+                   COALESCE(f.rol, u.rol) AS firmante_rol,
+                   COALESCE(f.matricula_tipo, u.matricula_tipo) AS firmante_matricula_tipo,
+                   COALESCE(f.matricula_numero, u.matricula_numero) AS firmante_matricula_numero,
+                   COALESCE(f.matricula_provincia, u.matricula_provincia) AS firmante_matricula_provincia
+            FROM evoluciones e
+            JOIN usuarios u ON u.id = e.usuario_id
+            LEFT JOIN firmas_electronicas f ON f.evolucion_id = e.id
+            WHERE e.id = %s AND e.paciente_id = %s
+            LIMIT 1
+            """,
+            (evo_id, paciente_id),
+        )
+        evolucion = cursor.fetchone()
+        if not evolucion:
+            return jsonify({'error': 'Evolución no encontrada'}), 404
+
+        firma_hash = evolucion.get('firma_payload_hash')
+        signer = {
+            'rol': evolucion.get('firmante_rol'),
+            'matricula_tipo': evolucion.get('firmante_matricula_tipo'),
+            'matricula_numero': evolucion.get('firmante_matricula_numero'),
+            'matricula_provincia': evolucion.get('firmante_matricula_provincia'),
+        }
+        calculado = hash_payload(payload_evolucion_firmable(evolucion, signer))
+        valida = bool(
+            firma_hash
+            and evolucion.get('estado_firma') == 'firmada'
+            and evolucion.get('hash_local') == calculado
+            and firma_hash == calculado
+        )
+
+        return jsonify({
+            'evolucion_id': evo_id,
+            'firmada': bool(firma_hash),
+            'valida': valida,
+            'estado_firma': evolucion.get('estado_firma') or 'pendiente',
+            'hash_local': evolucion.get('hash_local'),
+            'payload_hash': firma_hash,
+            'algoritmo': evolucion.get('firma_algoritmo'),
+            'payload_version': evolucion.get('firma_payload_version'),
+            'firmado_en': _to_iso_arg(evolucion.get('firma_firmado_en') or evolucion.get('firmado_en')),
+            'firmante': {
+                'nombre': evolucion.get('firmante_nombre'),
+                'rol': evolucion.get('firmante_rol'),
+                'matricula_tipo': evolucion.get('firmante_matricula_tipo'),
+                'matricula_numero': evolucion.get('firmante_matricula_numero'),
+                'matricula_provincia': evolucion.get('firmante_matricula_provincia'),
+            },
+        })
+    except Exception:
+        conn.rollback()
+        _log_db_error("Evolution electronic signature verification database error", conn)
         raise
     finally:
         cursor.close()
@@ -763,18 +1247,47 @@ def exportar_historia_pdf(id):
             e.indicaciones,
             e.creado_en,
             e.version,
+            e.estado_firma,
+            e.firmado_en,
+            e.motivo_rectificacion,
+            f.payload_version AS firma_payload_version,
+            f.payload_hash AS firma_payload_hash,
+            f.algoritmo AS firma_algoritmo,
+            f.firmado_en AS firma_firmado_en,
+            f.rol AS firma_rol,
+            f.matricula_tipo AS firma_matricula_tipo,
+            f.matricula_numero AS firma_matricula_numero,
+            f.matricula_provincia AS firma_matricula_provincia,
             u.nombre AS medico,
+            u.matricula_tipo,
+            u.matricula_numero,
+            u.matricula_provincia,
             CASE 
                 WHEN u.rol = 'director' THEN 'Director'
                 ELSE COALESCE(u.especialidad, 'Sin especificar')
             END AS especialidad
         FROM evoluciones e
         JOIN usuarios u ON e.usuario_id = u.id
+        LEFT JOIN firmas_electronicas f ON f.evolucion_id = e.id
         WHERE e.paciente_id = %s AND e.activo = 1
         ORDER BY e.fecha DESC
     """, (id,))
 
     evoluciones = cursor.fetchall()
+
+    cursor.execute(
+        """
+        SELECT h.id, h.paciente_id, h.nombre_original, h.mime_type,
+               h.tamanio_bytes, h.hash_sha256, h.cargado_en,
+               u.nombre AS cargado_por
+        FROM historia_archivos h
+        JOIN usuarios u ON u.id = h.usuario_id
+        WHERE h.paciente_id = %s
+        ORDER BY h.cargado_en ASC, h.id ASC
+        """,
+        (id,),
+    )
+    historia_archivos = cursor.fetchall()
 
     buffer = BytesIO()
     doc = SimpleDocTemplate(
@@ -830,16 +1343,55 @@ def exportar_historia_pdf(id):
     elements.append(Paragraph("<b>Historia Clínica</b>", styles["Heading1"]))
     elements.append(Spacer(1, 0.3*cm))
 
-    datos_paciente = f"""
-        <b>Paciente:</b> {paciente['apellido'].upper()} {paciente['nombre'].upper()}<br/>
-        <b>DNI:</b> {paciente['dni']}<br/>
-        <b>Cobertura:</b> {paciente.get('cobertura', '-')}<br/>
-        <b>N° HC:</b> {paciente['nro_hc']}<br/>
-        <b>Fecha de nacimiento:</b> {paciente.get('fecha_nacimiento', '-') or '-'}<br/>
-        <b>Sexo:</b> {paciente.get('sexo', '-') or '-'}
-    """
+    datos_paciente = "<br/>".join(
+        f"<b>{label}:</b> {_pdf_multiline(value)}"
+        for label, value in [
+            ("Paciente", f"{paciente.get('apellido', '').upper()} {paciente.get('nombre', '').upper()}".strip()),
+            ("DNI", paciente.get("dni")),
+            ("Cobertura", paciente.get("cobertura")),
+            ("N° HC", paciente.get("nro_hc")),
+            ("Fecha de nacimiento", paciente.get("fecha_nacimiento")),
+            ("Sexo", paciente.get("sexo")),
+        ]
+        if _pdf_value_present(value)
+    )
     elements.append(Paragraph(datos_paciente, styles["Normal"]))
     elements.append(Spacer(1, 0.5*cm))
+
+    # Datos clínicos de ingreso: sólo se incorporan campos con contenido.
+    campos_clinicos = [
+        ("Diagnóstico", paciente.get("diagnostico")),
+        ("Motivo de ingreso", paciente.get("motivo_ingreso")),
+        ("Enfermedad actual", paciente.get("enfermedad_actual")),
+        ("Antecedentes de la enfermedad actual", paciente.get("antecedentes_enfermedad_actual")),
+        ("Antecedentes personales", paciente.get("antecedentes_personales")),
+        ("Antecedentes heredofamiliares", paciente.get("antecedentes_heredofamiliares")),
+    ]
+    campos_clinicos = [(label, value) for label, value in campos_clinicos if _pdf_value_present(value)]
+    if campos_clinicos:
+        elements.append(Paragraph("<b>Información clínica inicial</b>", styles["Heading2"]))
+        for label, value in campos_clinicos:
+            elements.append(Paragraph(f"<b>{label}:</b> {_pdf_multiline(value)}", styles["Normal"]))
+        elements.append(Spacer(1, 0.3*cm))
+
+    if historia_archivos:
+        elements.append(Paragraph("<b>Documentación adjunta a la historia</b>", styles["Heading2"]))
+        elements.append(Paragraph(
+            "Los originales se conservan en el sistema. Se informa la huella de cada archivo para verificar su integridad.",
+            styles["Normal"],
+        ))
+        for archivo in historia_archivos:
+            cargado = _format_pdf_date(archivo.get("cargado_en")) or "-"
+            cargado_por = escape(str(archivo.get("cargado_por") or "-"))
+            nombre = escape(str(archivo.get("nombre_original") or "-"))
+            huella = escape(str(archivo.get("hash_sha256") or "-"))
+            elements.append(Paragraph(
+                f"<b>{nombre}</b> — cargado el {cargado} por {cargado_por}<br/>"
+                f"SHA-256: {huella}",
+                styles["Normal"],
+            ))
+        elements.append(Spacer(1, 0.3*cm))
+
     elements.append(Paragraph("<b>Evoluciones:</b>", styles["Heading2"]))
     elements.append(Spacer(1, 0.3*cm))
 
@@ -854,13 +1406,13 @@ def exportar_historia_pdf(id):
             medico = evo["medico"]
             especialidad = "Director" if evo["especialidad"] == "director" else evo["especialidad"].capitalize()
 
-            fecha_registro = evo["creado_en"].strftime("%d/%m/%Y %H:%M")
-            editado_str = " (Editado)" if evo.get("version", 1) > 1 else ""
+            firmado_en = evo.get("firma_firmado_en") or evo.get("firmado_en") or evo.get("creado_en")
+            firmado_str = _format_pdf_date(firmado_en)
 
             fila_superior = Table([
                 [
                     Paragraph(f"<b>Fecha:</b> {fecha_str}", styles["Normal"]),
-                    Paragraph(f"<font size='9' color='gray'>Registrado: {fecha_registro}{editado_str}</font>", styles["Right"])
+                    Paragraph(f"<font size='9' color='gray'>Actuación: {firmado_str or '-'} </font>", styles["Right"])
                 ]
             ], colWidths=[8*cm, 8*cm])
 
@@ -868,12 +1420,20 @@ def exportar_historia_pdf(id):
                 ('VALIGN', (0,0), (-1,-1), 'TOP'),
             ]))
 
-            fila_medico = Paragraph(f"<b>Profesional:</b> {medico} ({especialidad})", styles["Normal"])
+            matricula_tipo = evo.get("firma_matricula_tipo") or evo.get("matricula_tipo")
+            matricula_numero = evo.get("firma_matricula_numero") or evo.get("matricula_numero")
+            matricula_provincia = evo.get("firma_matricula_provincia") or evo.get("matricula_provincia")
+            matricula = " ".join(filter(None, [matricula_tipo, matricula_numero]))
+            if matricula_provincia:
+                matricula = f"{matricula} ({matricula_provincia})"
+            matricula_html = f" — Matrícula: {escape(matricula)}" if matricula else ""
+            fila_medico = Paragraph(f"<b>Profesional:</b> {escape(str(medico))} ({escape(str(especialidad))}){matricula_html}", styles["Normal"])
 
-            fila_contenido = Paragraph(evo["contenido"].replace("\n", "<br/>"), styles["Normal"])
+            fila_contenido = Paragraph(_pdf_multiline(evo["contenido"]), styles["Normal"])
 
             if evo.get("indicaciones"):
-                fila_indicaciones = Paragraph(f"<b>Indicaciones:</b> {evo['indicaciones'].replace('\n','<br/>')}", styles["Normal"])
+                indicaciones_html = _pdf_multiline(evo["indicaciones"])
+                fila_indicaciones = Paragraph(f"<b>Indicaciones:</b> {indicaciones_html}", styles["Normal"])
             else:
                 fila_indicaciones = Paragraph("", styles["Normal"])
 
@@ -886,6 +1446,16 @@ def exportar_historia_pdf(id):
 
             if evo.get("indicaciones"):
                 filas.append([fila_indicaciones])
+
+            if evo.get("estado_firma") == "firmada" and evo.get("firma_payload_hash"):
+                fila_firma = Paragraph(
+                    f"<b>Firma electrónica:</b> {escape(str(evo.get('firma_algoritmo') or 'SHA-256'))} "
+                    f"— huella {escape(str(evo['firma_payload_hash']))}",
+                    styles["Normal"],
+                )
+            else:
+                fila_firma = Paragraph("<b>Firma electrónica:</b> pendiente", styles["Normal"])
+            filas.append([fila_firma])
 
             bloque = Table(filas, colWidths=[16.5*cm])
             bloque.setStyle(style_box)
@@ -907,7 +1477,7 @@ def exportar_historia_pdf(id):
                 for a in archivos:
                     filename = a["filename"]
                     ext = filename.lower().split(".")[-1]
-                    file_path = os.path.join(os.getcwd(), "uploads", "evoluciones", str(evo["id"]), filename)
+                    file_path = os.path.join(_evolucion_archivos_root(evo["id"]), filename)
 
                     if os.path.exists(file_path):
                         if ext in ["jpg", "jpeg", "png"]:
@@ -1016,12 +1586,25 @@ def exportar_evolucion_pdf(paciente_id, evo_id):
     # ==========================================================
     cursor.execute("""
         SELECT e.id, e.fecha, e.contenido, e.indicaciones, e.creado_en, e.version,
-               u.nombre AS medico, 
+               e.estado_firma, e.firmado_en, e.motivo_rectificacion,
+               f.payload_version AS firma_payload_version,
+               f.payload_hash AS firma_payload_hash,
+               f.algoritmo AS firma_algoritmo,
+               f.firmado_en AS firma_firmado_en,
+               f.rol AS firma_rol,
+               f.matricula_tipo AS firma_matricula_tipo,
+               f.matricula_numero AS firma_matricula_numero,
+               f.matricula_provincia AS firma_matricula_provincia,
+               u.nombre AS medico,
+               u.matricula_tipo,
+               u.matricula_numero,
+               u.matricula_provincia,
                CASE WHEN u.rol = 'director' THEN 'Director'
                     ELSE COALESCE(u.especialidad, 'Sin especificar')
                END AS especialidad
         FROM evoluciones e
         JOIN usuarios u ON e.usuario_id = u.id
+        LEFT JOIN firmas_electronicas f ON f.evolucion_id = e.id
         WHERE e.paciente_id = %s AND e.id = %s
         LIMIT 1
     """, (paciente_id, evo_id))
@@ -1088,14 +1671,32 @@ def exportar_evolucion_pdf(paciente_id, evo_id):
     # ----------------------------------------------------------
     # 🔹 DATOS DEL PACIENTE
     # ----------------------------------------------------------
-    datos_paciente = f"""
-        <b>Paciente:</b> {paciente['apellido']} {paciente['nombre']}<br/>
-        <b>DNI:</b> {paciente['dni']}<br/>
-        <b>N° HC:</b> {paciente['nro_hc']}<br/>
-        <b>Cobertura:</b> {paciente.get('cobertura', '-')}
-    """
+    datos_paciente = "<br/>".join(
+        f"<b>{label}:</b> {_pdf_multiline(value)}"
+        for label, value in [
+            ("Paciente", f"{paciente.get('apellido', '')} {paciente.get('nombre', '')}".strip()),
+            ("DNI", paciente.get("dni")),
+            ("N° HC", paciente.get("nro_hc")),
+            ("Cobertura", paciente.get("cobertura")),
+        ]
+        if _pdf_value_present(value)
+    )
     elements.append(Paragraph(datos_paciente, styles["Normal"]))
     elements.append(Spacer(1, 0.5*cm))
+
+    campos_clinicos = [
+        ("Diagnóstico", paciente.get("diagnostico")),
+        ("Motivo de ingreso", paciente.get("motivo_ingreso")),
+        ("Enfermedad actual", paciente.get("enfermedad_actual")),
+        ("Antecedentes de la enfermedad actual", paciente.get("antecedentes_enfermedad_actual")),
+        ("Antecedentes personales", paciente.get("antecedentes_personales")),
+        ("Antecedentes heredofamiliares", paciente.get("antecedentes_heredofamiliares")),
+    ]
+    campos_clinicos = [(label, value) for label, value in campos_clinicos if _pdf_value_present(value)]
+    for label, value in campos_clinicos:
+        elements.append(Paragraph(f"<b>{label}:</b> {_pdf_multiline(value)}", styles["Normal"]))
+    if campos_clinicos:
+        elements.append(Spacer(1, 0.3*cm))
 
     # ----------------------------------------------------------
     # INFORMACIÓN DE LA EVOLUCIÓN
@@ -1104,22 +1705,43 @@ def exportar_evolucion_pdf(paciente_id, evo_id):
 
     elements.append(Paragraph(f"<b>Fecha:</b> {fecha_evo}", styles["Normal"]))
     elements.append(Spacer(1, 0.1*cm))
-    elements.append(Paragraph(f"<b>Profesional:</b> {evolucion['medico']} ({evolucion['especialidad']})", styles["Normal"]))
+    matricula_tipo = evolucion.get("firma_matricula_tipo") or evolucion.get("matricula_tipo")
+    matricula_numero = evolucion.get("firma_matricula_numero") or evolucion.get("matricula_numero")
+    matricula_provincia = evolucion.get("firma_matricula_provincia") or evolucion.get("matricula_provincia")
+    matricula = " ".join(filter(None, [matricula_tipo, matricula_numero]))
+    if matricula_provincia:
+        matricula = f"{matricula} ({matricula_provincia})"
+    matricula_html = f" — Matrícula: {escape(matricula)}" if matricula else ""
+    elements.append(Paragraph(
+        f"<b>Profesional:</b> {escape(str(evolucion['medico']))} "
+        f"({escape(str(evolucion['especialidad']))}){matricula_html}",
+        styles["Normal"],
+    ))
     elements.append(Spacer(1, 0.1*cm))
-    fecha_creacion = evolucion["creado_en"].strftime("%d/%m/%Y %H:%M")
-    editado_str = " (Editado)" if evolucion.get("version", 1) > 1 else ""
-    elements.append(Paragraph(f"<b>Registrado en el sistema:</b> {fecha_creacion}{editado_str}", styles["Normal"]))
+    firmado_en = evolucion.get("firma_firmado_en") or evolucion.get("firmado_en") or evolucion.get("creado_en")
+    elements.append(Paragraph(
+        f"<b>Actuación profesional:</b> {_format_pdf_date(firmado_en) or '-'}",
+        styles["Normal"],
+    ))
+    if evolucion.get("estado_firma") == "firmada" and evolucion.get("firma_payload_hash"):
+        elements.append(Paragraph(
+            f"<b>Firma electrónica:</b> {escape(str(evolucion.get('firma_algoritmo') or 'SHA-256'))} "
+            f"— huella {escape(str(evolucion['firma_payload_hash']))}",
+            styles["Normal"],
+        ))
+    else:
+        elements.append(Paragraph("<b>Firma electrónica:</b> pendiente", styles["Normal"]))
     elements.append(Spacer(1, 0.25*cm))
 
     # --- CONTENIDO DE LA EVOLUCIÓN ---
     elements.append(Paragraph("<b>Evolución:</b>", styles["Normal"]))
-    elements.append(Paragraph(evolucion["contenido"].replace("\n", "<br/>"), styles["Normal"]))
+    elements.append(Paragraph(_pdf_multiline(evolucion["contenido"]), styles["Normal"]))
     elements.append(Spacer(1, 0.3*cm))
 
     # --- INDICACIONES (OPCIONAL) ---
     if evolucion.get("indicaciones"):
         elements.append(Paragraph("<b>Indicaciones:</b>", styles["Normal"]))
-        elements.append(Paragraph(evolucion["indicaciones"].replace("\n","<br/>"), styles["Normal"]))
+        elements.append(Paragraph(_pdf_multiline(evolucion["indicaciones"]), styles["Normal"]))
         elements.append(Spacer(1, 0.3*cm))
 
     # ----------------------------------------------------------
@@ -1131,7 +1753,7 @@ def exportar_evolucion_pdf(paciente_id, evo_id):
 
         for a in archivos:
             nombre = a["filename"]
-            file_path = os.path.join("uploads", "evoluciones", str(evo_id), nombre)
+            file_path = os.path.join(_evolucion_archivos_root(evo_id), nombre)
             ext = nombre.lower().split(".")[-1]
 
             # IMÁGENES

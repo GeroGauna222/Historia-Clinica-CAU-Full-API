@@ -28,8 +28,11 @@ onMounted(async () => {
 });
 
 const actualizarPaciente = async (data) => {
-    await pacienteService.updatePaciente(route.params.id, data);
-    router.push('/pacientes');
+    const res = await pacienteService.updatePaciente(route.params.id, data);
+    setTimeout(() => {
+        router.push('/pacientes');
+    }, 1200);
+    return res;
 };
 </script>
 

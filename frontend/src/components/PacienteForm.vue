@@ -106,9 +106,14 @@ const registrar = async () => {
 
         // Si hay función onSubmit, la usamos (caso editar)
         if (props.onSubmit) {
-            await props.onSubmit(paciente.value);
-            mensaje.value = '✅ Paciente actualizado correctamente.';
-            tipoMensaje.value = 'success';
+            const res = await props.onSubmit(paciente.value);
+            if (res?.data?.sin_cambios) {
+                mensaje.value = 'ℹ️ No se realizaron cambios.';
+                tipoMensaje.value = 'info';
+            } else {
+                mensaje.value = '✅ Paciente actualizado correctamente.';
+                tipoMensaje.value = 'success';
+            }
         } else {
             // Si no hay onSubmit, registramos nuevo paciente
             const response = await pacienteService.crearPaciente(formData);
@@ -127,8 +132,9 @@ const registrar = async () => {
             }
         }
     } catch (error) {
-        console.error(error);
-        mensaje.value = '❌ Error de red o servidor.';
+        console.error('Error al guardar paciente:', error);
+        const serverError = error.response?.data?.error || error.response?.data?.message;
+        mensaje.value = serverError || '❌ Error de red o servidor al procesar la solicitud.';
         tipoMensaje.value = 'error';
     }
 };

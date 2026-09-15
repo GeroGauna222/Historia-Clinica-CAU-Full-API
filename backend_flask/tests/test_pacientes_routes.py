@@ -227,7 +227,11 @@ def test_agregar_evolucion_error_db_hace_rollback_loguea_y_cierra(client, monkey
     with pytest.raises(RuntimeError, match="database evolution insert failed"):
         client.post(
             "/api/pacientes/9/evolucion",
-            data={"fecha": "2026-07-03", "contenido": "No debe loguearse"},
+            data={
+                "fecha": "2026-07-03",
+                "contenido": "No debe loguearse",
+                "confirmar_firma": "true",
+            },
         )
 
     assert fake_connection.rolled_back is True
@@ -268,3 +272,47 @@ def test_get_evoluciones_error_db_hace_rollback_loguea_y_cierra(client, monkeypa
     assert "GET" in rendered_log
     assert "99" in rendered_log
     assert "7777" in rendered_log
+
+
+def test_modificar_paciente_dni_duplicado_devuelve_409(client, monkeypatch):
+    fake_cursor = FakeCursor(fetchone_results=[{"id": 20}])
+    monkeypatch.setattr(pacientes_routes, "get_connection", lambda: FakeConnection(fake_cursor))
+    login_as(client, MockUser(1, "administrativo"))
+
+    response = client.put("/api/pacientes/5", data={"dni": "12345678"})
+
+    assert response.status_code == 409
+    assert "DNI 12345678" in response.get_json()["error"]
+
+
+def test_modificar_paciente_nro_hc_duplicado_devuelve_409(client, monkeypatch):
+    fake_cursor = FakeCursor(fetchone_results=[{"id": 30}])
+    monkeypatch.setattr(pacientes_routes, "get_connection", lambda: FakeConnection(fake_cursor))
+    login_as(client, MockUser(1, "administrativo"))
+
+    response = client.put("/api/pacientes/5", data={"nro_hc": "9999"})
+
+    assert response.status_code == 409
+    assert "N° HC 9999" in response.get_json()["error"]
+
+
+def test_modificar_paciente_campo_requerido_vacio_devuelve_400(client, monkeypatch):
+    fake_cursor = FakeCursor(fetchone_results=[None])
+    monkeypatch.setattr(pacientes_routes, "get_connection", lambda: FakeConnection(fake_cursor))
+    login_as(client, MockUser(1, "administrativo"))
+
+    response = client.put("/api/pacientes/5", data={"nombre": "   "})
+
+    assert response.status_code == 400
+    assert "Nombre" in response.get_json()["error"]
+
+
+def test_modificar_paciente_sin_cambios_devuelve_200(client, monkeypatch):
+    fake_cursor = FakeCursor()
+    monkeypatch.setattr(pacientes_routes, "get_connection", lambda: FakeConnection(fake_cursor))
+    login_as(client, MockUser(1, "administrativo"))
+
+    response = client.put("/api/pacientes/5", json={})
+
+    assert response.status_code == 200
+    assert response.get_json().get("sin_cambios") is True

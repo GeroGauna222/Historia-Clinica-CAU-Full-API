@@ -260,7 +260,7 @@ def validar_disponibilidad():
     
     try:
         cursor.execute("""
-            SELECT t.id, t.fecha_inicio, t.fecha_fin, t.motivo, p.nombre AS paciente
+            SELECT t.id, t.fecha_inicio, t.fecha_fin, t.motivo, TRIM(CONCAT(COALESCE(p.nombre, ''), ' ', COALESCE(p.apellido, ''))) AS paciente
             FROM turnos t
             JOIN pacientes p ON t.paciente_id = p.id
             WHERE t.usuario_id = %s
