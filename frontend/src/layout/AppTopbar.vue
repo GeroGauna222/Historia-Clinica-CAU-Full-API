@@ -2,6 +2,7 @@
 import { useLayout } from '@/layout/composables/layout';
 import AppConfigurator from './AppConfigurator.vue';
 import UserMenu from '@/components/dashboard/UserMenu.vue'; // ← nuevo menú de usuario
+import PacientesPresentesMenu from '@/components/dashboard/PacientesPresentesMenu.vue';
 import { useRouter } from 'vue-router';
 
 const { toggleMenu, toggleDarkMode, isDarkTheme } = useLayout();
@@ -32,6 +33,9 @@ function irAgenda() {
 
         <!-- ▶️ Acciones -->
         <div class="layout-topbar-actions flex items-center gap-4">
+            <!-- 👥 Pacientes en recepción -->
+            <PacientesPresentesMenu />
+
             <!-- 🧭 Agenda directo -->
             <button type="button" class="layout-topbar-action" @click="irAgenda">
                 <i class="pi pi-calendar"></i>

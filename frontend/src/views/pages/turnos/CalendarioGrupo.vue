@@ -51,15 +51,16 @@ async function fetchAusenciasConteo(pacienteId) {
     }
 }
 
-async function guardarAusenciaTurno(ausencia) {
+async function guardarAsistenciaTurno(estado) {
     if (!turnoSeleccionado.value) return;
     guardandoAusencia.value = true;
     try {
         const esGrupal = turnoSeleccionado.value.tipo === 'turno_grupal';
-        const url = esGrupal ? `/turnos/grupales/${turnoSeleccionado.value.turnoId}/ausencia` : `/turnos/${turnoSeleccionado.value.turnoId}/ausencia`;
+        const url = esGrupal ? `/turnos/grupales/${turnoSeleccionado.value.turnoId}/asistencia` : `/turnos/${turnoSeleccionado.value.turnoId}/asistencia`;
 
-        await api.patch(url, { ausencia }, { withCredentials: true });
-        turnoSeleccionado.value.ausencia = ausencia;
+        await api.patch(url, { estado_asistencia: estado }, { withCredentials: true });
+        turnoSeleccionado.value.estado_asistencia = estado;
+        turnoSeleccionado.value.ausencia = estado === 'con_aviso' || estado === 'sin_aviso' ? estado : null;
 
         // Recargar agenda para refrescar color
         await cargarTurnosGrupo();
@@ -69,10 +70,10 @@ async function guardarAusenciaTurno(ausencia) {
             const res = await api.get(`/pacientes/${turnoSeleccionado.value.paciente_id}/ausencias`, { withCredentials: true });
             ausenciasConteoDetalle.value = res.data;
         }
-        toast.add({ severity: 'success', summary: 'Estado de asistencia', detail: 'Se actualizó el estado de ausencia correctamente.', life: 3000 });
+        toast.add({ severity: 'success', summary: 'Estado de asistencia', detail: 'Se actualizó el estado de asistencia correctamente.', life: 3000 });
     } catch (e) {
         console.error(e);
-        toast.add({ severity: 'error', summary: 'Error', detail: 'No se pudo actualizar el estado de ausencia.', life: 3500 });
+        toast.add({ severity: 'error', summary: 'Error', detail: 'No se pudo actualizar el estado de asistencia.', life: 3500 });
     } finally {
         guardandoAusencia.value = false;
     }
@@ -212,6 +213,7 @@ const calendarOptions = reactive({
             description: info.event.extendedProps.description,
             observaciones: info.event.extendedProps.observaciones,
             ausencia: info.event.extendedProps.ausencia,
+            estado_asistencia: info.event.extendedProps.estado_asistencia || (info.event.extendedProps.ausencia ? info.event.extendedProps.ausencia : 'programado'),
             paciente_id: info.event.extendedProps.paciente_id,
             creadoPorNombre: info.event.extendedProps.creado_por_nombre,
             creadoEn: info.event.extendedProps.creado_en,
@@ -244,14 +246,18 @@ const calendarOptions = reactive({
             return;
         }
 
-        const ausencia = info.event.extendedProps.ausencia;
-        if (ausencia === 'sin_aviso') {
+        const estadoAsistencia = info.event.extendedProps.estado_asistencia || (info.event.extendedProps.ausencia ? info.event.extendedProps.ausencia : 'programado');
+        if (estadoAsistencia === 'sin_aviso') {
             info.el.style.setProperty('background-color', '#C0392B', 'important');
             info.el.style.setProperty('border-color', '#C0392B', 'important');
             info.el.style.setProperty('color', '#ffffff', 'important');
-        } else if (ausencia === 'con_aviso') {
+        } else if (estadoAsistencia === 'con_aviso') {
             info.el.style.setProperty('background-color', '#E67E22', 'important');
             info.el.style.setProperty('border-color', '#E67E22', 'important');
+            info.el.style.setProperty('color', '#ffffff', 'important');
+        } else if (estadoAsistencia === 'presente') {
+            info.el.style.setProperty('background-color', '#059669', 'important');
+            info.el.style.setProperty('border-color', '#047857', 'important');
             info.el.style.setProperty('color', '#ffffff', 'important');
         }
 
@@ -259,8 +265,9 @@ const calendarOptions = reactive({
         const profNombre = info.event.extendedProps.profesional || '';
         const desc = info.event.extendedProps.description || '';
         let prefix = '';
-        if (ausencia === 'sin_aviso') prefix = '[Falta Sin Aviso] ';
-        else if (ausencia === 'con_aviso') prefix = '[Falta Con Aviso] ';
+        if (estadoAsistencia === 'sin_aviso') prefix = '[Falta Sin Aviso] ';
+        else if (estadoAsistencia === 'con_aviso') prefix = '[Falta Con Aviso] ';
+        else if (estadoAsistencia === 'presente') prefix = '[Presente] ';
 
         tippy(info.el, {
             content: `<strong>${prefix}${pacNombre}</strong><br>${profNombre}${desc ? '<br><span style="opacity:0.7">' + desc + '</span>' : ''}`,
@@ -278,18 +285,21 @@ async function cargarContextoUsuario() {
 
 function crearEventoIndividual(t) {
     let title = t.paciente;
-    if (t.ausencia === 'sin_aviso') {
+    const estadoAsistencia = t.estado_asistencia || (t.ausencia ? t.ausencia : 'programado');
+    if (estadoAsistencia === 'sin_aviso') {
         title = `[Falta Sin Aviso] ${title}`;
-    } else if (t.ausencia === 'con_aviso') {
+    } else if (estadoAsistencia === 'con_aviso') {
         title = `[Falta Con Aviso] ${title}`;
+    } else if (estadoAsistencia === 'presente') {
+        title = `[Presente] ${title}`;
     }
     return {
         id: `ind-${t.id}`,
         title,
         start: t.start,
         end: t.end,
-        backgroundColor: t.color || grupo.value?.color || '#0891B2',
-        borderColor: t.color || grupo.value?.color || '#0E7490',
+        backgroundColor: estadoAsistencia === 'presente' ? '#059669' : t.color || grupo.value?.color || '#0891B2',
+        borderColor: estadoAsistencia === 'presente' ? '#047857' : t.color || grupo.value?.color || '#0E7490',
         textColor: '#ffffff',
         classNames: ['evento-individual'],
         extendedProps: {
@@ -301,6 +311,7 @@ function crearEventoIndividual(t) {
             description: t.description || '',
             observaciones: t.observaciones,
             ausencia: t.ausencia,
+            estado_asistencia: estadoAsistencia,
             paciente_id: t.paciente_id,
             creado_por_nombre: t.creado_por_nombre,
             creado_en: t.creado_en,
@@ -311,19 +322,22 @@ function crearEventoIndividual(t) {
 
 function crearEventoGrupal(t) {
     let title = t.paciente;
-    if (t.ausencia === 'sin_aviso') {
+    const estadoAsistencia = t.estado_asistencia || (t.ausencia ? t.ausencia : 'programado');
+    if (estadoAsistencia === 'sin_aviso') {
         title = `[Falta Sin Aviso] ${title}`;
-    } else if (t.ausencia === 'con_aviso') {
+    } else if (estadoAsistencia === 'con_aviso') {
         title = `[Falta Con Aviso] ${title}`;
+    } else if (estadoAsistencia === 'presente') {
+        title = `[Presente] ${title}`;
     }
     return {
         id: `grp-${t.id}`,
         title,
         start: t.start,
         end: t.end,
-        backgroundColor: 'rgba(8, 145, 178, 0.1)',
-        borderColor: '#0891B2',
-        textColor: '#134E4A',
+        backgroundColor: estadoAsistencia === 'presente' ? '#059669' : 'rgba(8, 145, 178, 0.1)',
+        borderColor: estadoAsistencia === 'presente' ? '#047857' : '#0891B2',
+        textColor: estadoAsistencia === 'presente' ? '#ffffff' : '#134E4A',
         classNames: ['evento-grupal'],
         extendedProps: {
             tipo: 'turno_grupal',
@@ -334,6 +348,7 @@ function crearEventoGrupal(t) {
             description: t.description || '',
             observaciones: t.observaciones,
             ausencia: t.ausencia,
+            estado_asistencia: estadoAsistencia,
             paciente_id: t.paciente_id,
             creado_por_nombre: t.creado_por_nombre,
             creado_en: t.creado_en,
@@ -718,34 +733,44 @@ onMounted(async () => {
                         <span class="font-semibold text-slate-500 text-xs block"><i class="pi pi-check-square mr-1 text-[#0891B2]"></i>Asistencia del Paciente:</span>
                         <div class="flex flex-wrap gap-2 pt-1">
                             <Button
-                                label="Presente"
-                                icon="pi pi-check"
-                                :severity="!turnoSeleccionado.ausencia ? 'success' : 'secondary'"
-                                :outlined="!!turnoSeleccionado.ausencia"
+                                label="Programado"
+                                icon="pi pi-calendar"
+                                :severity="turnoSeleccionado.estado_asistencia === 'programado' ? 'info' : 'secondary'"
+                                :outlined="turnoSeleccionado.estado_asistencia !== 'programado'"
                                 size="small"
                                 class="!text-xs !py-1 !px-2.5 !rounded-lg"
                                 :loading="guardandoAusencia"
-                                @click="guardarAusenciaTurno(null)"
+                                @click="guardarAsistenciaTurno('programado')"
+                            />
+                            <Button
+                                label="Presente"
+                                icon="pi pi-check"
+                                :severity="turnoSeleccionado.estado_asistencia === 'presente' ? 'success' : 'secondary'"
+                                :outlined="turnoSeleccionado.estado_asistencia !== 'presente'"
+                                size="small"
+                                class="!text-xs !py-1 !px-2.5 !rounded-lg"
+                                :loading="guardandoAusencia"
+                                @click="guardarAsistenciaTurno('presente')"
                             />
                             <Button
                                 label="Faltó con aviso"
                                 icon="pi pi-envelope"
-                                :severity="turnoSeleccionado.ausencia === 'con_aviso' ? 'warning' : 'secondary'"
-                                :outlined="turnoSeleccionado.ausencia !== 'con_aviso'"
+                                :severity="turnoSeleccionado.estado_asistencia === 'con_aviso' ? 'warning' : 'secondary'"
+                                :outlined="turnoSeleccionado.estado_asistencia !== 'con_aviso'"
                                 size="small"
                                 class="!text-xs !py-1 !px-2.5 !rounded-lg"
                                 :loading="guardandoAusencia"
-                                @click="guardarAusenciaTurno('con_aviso')"
+                                @click="guardarAsistenciaTurno('con_aviso')"
                             />
                             <Button
                                 label="Faltó sin aviso"
                                 icon="pi pi-times"
-                                :severity="turnoSeleccionado.ausencia === 'sin_aviso' ? 'danger' : 'secondary'"
-                                :outlined="turnoSeleccionado.ausencia !== 'sin_aviso'"
+                                :severity="turnoSeleccionado.estado_asistencia === 'sin_aviso' ? 'danger' : 'secondary'"
+                                :outlined="turnoSeleccionado.estado_asistencia !== 'sin_aviso'"
                                 size="small"
                                 class="!text-xs !py-1 !px-2.5 !rounded-lg"
                                 :loading="guardandoAusencia"
-                                @click="guardarAusenciaTurno('sin_aviso')"
+                                @click="guardarAsistenciaTurno('sin_aviso')"
                             />
                         </div>
                         <div v-if="ausenciasConteoDetalle" class="text-[11px] text-slate-400 pt-1">
