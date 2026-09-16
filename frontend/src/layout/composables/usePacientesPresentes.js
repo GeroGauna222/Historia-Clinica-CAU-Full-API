@@ -6,6 +6,7 @@ import { useUserStore } from '@/stores/user';
 const presentes = ref([]);
 const cargando = ref(false);
 const notificados = new Set();
+let usuarioEstadoId = null;
 let timer = null;
 let initialized = false;
 
@@ -51,19 +52,33 @@ export function usePacientesPresentes() {
     async function cargarPresentes(silencioso = false) {
         const rol = (userStore.rol || '').toLowerCase().trim();
         if (!userStore.id || !['profesional', 'director', 'administrativo', 'area'].includes(rol)) {
+            presentes.value = [];
+            notificados.clear();
+            usuarioEstadoId = null;
             return;
+        }
+
+        const usuarioId = userStore.id;
+        if (usuarioEstadoId !== usuarioId) {
+            notificados.clear();
+            usuarioEstadoId = usuarioId;
         }
 
         try {
             cargando.value = true;
             const res = await api.get('/turnos/presentes-hoy', { withCredentials: true });
+            if (userStore.id !== usuarioId) return;
             const data = res.data || [];
             presentes.value = data;
+
+            const idsPresentes = new Set(data.map((t) => t.id));
+            for (const id of notificados) {
+                if (!idsPresentes.has(id)) notificados.delete(id);
+            }
 
             if (rol === 'profesional') {
                 for (const t of data) {
                     if (!notificados.has(t.id)) {
-                        notificados.add(t.id);
                         if (!silencioso) {
                             toast.add({
                                 severity: 'info',
@@ -72,6 +87,7 @@ export function usePacientesPresentes() {
                                 life: 8000
                             });
                             reproducirAvisoSonoro();
+                            notificados.add(t.id);
                         }
                     }
                 }
@@ -87,7 +103,7 @@ export function usePacientesPresentes() {
         if (initialized) return;
         initialized = true;
 
-        cargarPresentes(true);
+        cargarPresentes(false);
 
         timer = setInterval(() => {
             cargarPresentes(false);
@@ -100,6 +116,9 @@ export function usePacientesPresentes() {
             timer = null;
             initialized = false;
         }
+        presentes.value = [];
+        notificados.clear();
+        usuarioEstadoId = null;
     }
 
     return {

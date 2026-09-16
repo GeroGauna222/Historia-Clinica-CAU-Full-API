@@ -488,11 +488,14 @@ function crearEventosAusencia(ausencia) {
 function adaptarEventoTurno(t) {
     const tipo = t.tipo || 'individual';
     const esGrupal = tipo === 'grupal';
+    const estadoAsistencia = t.estado_asistencia || (t.ausencia ? t.ausencia : 'programado');
     let title = esGrupal ? `${t.grupo_nombre || t.profesional} (${t.paciente})` : t.paciente;
-    if (t.ausencia === 'sin_aviso') {
+    if (estadoAsistencia === 'sin_aviso') {
         title = `[Falta Sin Aviso] ${title}`;
-    } else if (t.ausencia === 'con_aviso') {
+    } else if (estadoAsistencia === 'con_aviso') {
         title = `[Falta Con Aviso] ${title}`;
+    } else if (estadoAsistencia === 'presente') {
+        title = `[Presente] ${title}`;
     }
     return {
         id: t.id,
@@ -514,6 +517,7 @@ function adaptarEventoTurno(t) {
             description: t.description,
             observaciones: t.observaciones,
             ausencia: t.ausencia,
+            estado_asistencia: estadoAsistencia,
             paciente_id: t.paciente_id,
             creadoPorNombre: t.creado_por_nombre,
             creadoEn: t.creado_en,
