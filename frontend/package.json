@@ -6,7 +6,8 @@
         "build": "vite build",
         "preview": "vite preview",
         "lint": "eslint --fix . --ext .vue,.js,.jsx,.cjs,.mjs --fix --ignore-path .gitignore",
-        "test": "vitest run"
+        "test": "vitest run",
+        "check:tokens": "node scripts/check-tokens.mjs"
     },
     "dependencies": {
         "@fullcalendar/common": "^5.11.5",
