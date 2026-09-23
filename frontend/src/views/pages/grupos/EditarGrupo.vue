@@ -76,7 +76,7 @@ async function guardarCambios() {
 
 <template>
     <div class="flex justify-center items-start p-6 md:p-8">
-        <div class="bg-surface-0 dark:bg-surface-900 shadow-xl rounded-2xl p-8 w-full max-w-3xl transition-colors">
+        <div class="bg-card shadow-xl rounded-2xl p-8 w-full max-w-3xl transition-colors">
             <div class="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
                 <Button label="Volver" icon="pi pi-arrow-left" text severity="secondary" @click="router.push('/grupos')" />
                 <div class="text-center md:text-right">
@@ -86,50 +86,50 @@ async function guardarCambios() {
 
             <div v-if="cargando" class="flex flex-col items-center py-10">
                 <i class="pi pi-spin pi-spinner text-4xl text-primary mb-2"></i>
-                <p class="text-gray-500">Cargando datos del grupo...</p>
+                <p class="text-muted-color">Cargando datos del grupo...</p>
             </div>
 
             <form v-else @submit.prevent="guardarCambios" class="space-y-6">
                 <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
                     <div class="md:col-span-3 flex flex-col gap-2">
-                        <label class="font-semibold text-gray-700 dark:text-gray-200">Nombre del grupo</label>
+                        <label class="font-semibold text-color">Nombre del grupo</label>
                         <InputText v-model="grupo.nombre" class="w-full" required />
                     </div>
                     <div class="flex flex-col gap-2">
-                        <label class="font-semibold text-gray-700 dark:text-gray-200">Color</label>
-                        <input v-model="grupo.color" type="color" class="w-full h-[42px] p-1 bg-transparent border border-gray-300 dark:border-gray-600 rounded-lg cursor-pointer" />
+                        <label class="font-semibold text-color">Color</label>
+                        <input v-model="grupo.color" type="color" class="w-full h-[42px] p-1 bg-transparent border border-surface rounded-lg cursor-pointer" />
                     </div>
                 </div>
 
                 <div class="flex flex-col gap-2">
-                    <label class="font-semibold text-gray-700 dark:text-gray-200">Descripcion</label>
+                    <label class="font-semibold text-color">Descripcion</label>
                     <Textarea v-model="grupo.descripcion" rows="3" class="w-full" autoResize />
                 </div>
 
                 <label class="flex items-center gap-2">
                     <input v-model="grupo.es_rehabilitacion" type="checkbox" />
-                    <span class="font-semibold text-gray-700 dark:text-gray-200">Grupo de Rehabilitacion</span>
+                    <span class="font-semibold text-color">Grupo de Rehabilitacion</span>
                 </label>
 
                 <div class="flex flex-col gap-2">
-                    <label class="font-semibold text-gray-700 dark:text-gray-200">Miembros del grupo</label>
+                    <label class="font-semibold text-color">Miembros del grupo</label>
                     <MultiSelect v-model="miembrosSeleccionadosIds" :options="usuariosDisponibles" optionLabel="nombre" optionValue="id" placeholder="Gestionar miembros..." display="chip" filter class="w-full" :maxSelectedLabels="10">
                         <template #option="slotProps">
                             <div class="flex flex-col">
                                 <span class="font-medium">{{ slotProps.option.nombre }}</span>
-                                <span class="text-xs text-gray-500 capitalize">{{ slotProps.option.rol }}</span>
+                                <span class="text-xs text-muted-color capitalize">{{ slotProps.option.rol }}</span>
                             </div>
                         </template>
                     </MultiSelect>
                 </div>
 
-                <div class="flex justify-center pt-6 border-t border-gray-100 dark:border-gray-800">
+                <div class="flex justify-center pt-6 border-t border-surface">
                     <Button type="submit" label="Guardar Cambios" icon="pi pi-save" class="w-full md:w-auto px-8 py-3 font-bold shadow-lg" :loading="guardando" />
                 </div>
             </form>
 
-            <div v-if="mensaje" class="mt-6 p-3 rounded-lg bg-green-100 text-green-700 text-center font-medium border border-green-200">{{ mensaje }}</div>
-            <div v-if="error" class="mt-6 p-3 rounded-lg bg-red-100 text-red-700 text-center font-medium border border-red-200">{{ error }}</div>
+            <div v-if="mensaje" class="mt-6 p-3 rounded-lg bg-status-presente-bg text-status-presente-fg text-center font-medium border border-status-presente-border">{{ mensaje }}</div>
+            <div v-if="error" class="mt-6 p-3 rounded-lg bg-status-sin-aviso-bg text-status-sin-aviso-fg text-center font-medium border border-status-sin-aviso-border">{{ error }}</div>
         </div>
     </div>
 </template>

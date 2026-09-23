@@ -103,18 +103,18 @@ onMounted(async () => {
 
         <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
             <div>
-                <h1 class="text-3xl font-bold text-gray-800 dark:text-white">Posteos de Grupo</h1>
-                <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">{{ grupo?.nombre || 'Grupo' }} - Comunicacion interna del equipo.</p>
+                <h1 class="text-3xl font-bold text-color">Posteos de Grupo</h1>
+                <p class="text-sm text-muted-color mt-1">{{ grupo?.nombre || 'Grupo' }} - Comunicacion interna del equipo.</p>
             </div>
             <Button label="Volver a grupos" icon="pi pi-arrow-left" text @click="router.push('/grupos')" />
         </div>
 
-        <div v-if="loading" class="text-sm text-gray-500">Cargando posteos...</div>
+        <div v-if="loading" class="text-sm text-muted-color">Cargando posteos...</div>
 
-        <div v-else-if="accesoDenegado" class="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl p-4">No tiene permisos para ver los posteos de este grupo.</div>
+        <div v-else-if="accesoDenegado" class="text-sm text-status-sin-aviso-fg bg-status-sin-aviso-bg border border-status-sin-aviso-border rounded-xl p-4">No tiene permisos para ver los posteos de este grupo.</div>
 
         <template v-else>
-            <Card v-if="puedePostear" class="border border-cyan-100 dark:border-slate-700">
+            <Card v-if="puedePostear" class="border border-surface">
                 <template #title>Nuevo posteo</template>
                 <template #content>
                     <div class="space-y-3">
@@ -127,21 +127,21 @@ onMounted(async () => {
                 </template>
             </Card>
 
-            <div v-if="posteos.length === 0" class="text-sm text-gray-500 dark:text-gray-400 bg-white dark:bg-slate-900 border border-dashed border-gray-300 dark:border-slate-700 rounded-xl p-6 text-center">Todavia no hay posteos en este grupo.</div>
+            <div v-if="posteos.length === 0" class="text-sm text-muted-color bg-card border border-dashed border-surface rounded-xl p-6 text-center">Todavia no hay posteos en este grupo.</div>
 
             <div v-else class="space-y-4">
-                <Card v-for="p in posteos" :key="p.id" class="border border-gray-100 dark:border-slate-700">
+                <Card v-for="p in posteos" :key="p.id" class="border border-surface">
                     <template #title>
                         <div class="flex items-start justify-between gap-3">
                             <div>
-                                <h2 class="text-base font-semibold text-gray-800 dark:text-gray-100">{{ p.titulo || 'Posteo del equipo' }}</h2>
-                                <p class="text-xs text-gray-500 mt-1">{{ p.autor_nombre }} ({{ p.autor_rol }}) - {{ formatearFecha(p.creado_en) }}</p>
+                                <h2 class="text-base font-semibold text-color">{{ p.titulo || 'Posteo del equipo' }}</h2>
+                                <p class="text-xs text-muted-color mt-1">{{ p.autor_nombre }} ({{ p.autor_rol }}) - {{ formatearFecha(p.creado_en) }}</p>
                             </div>
                             <Button v-if="p.puede_eliminar" icon="pi pi-trash" text severity="danger" @click="eliminarPosteo(p)" />
                         </div>
                     </template>
                     <template #content>
-                        <p class="whitespace-pre-line text-sm text-gray-700 dark:text-gray-200">{{ p.contenido }}</p>
+                        <p class="whitespace-pre-line text-sm text-color">{{ p.contenido }}</p>
                     </template>
                 </Card>
             </div>

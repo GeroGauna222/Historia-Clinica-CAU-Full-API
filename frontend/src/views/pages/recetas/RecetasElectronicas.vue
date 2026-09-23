@@ -296,11 +296,11 @@ onMounted(async () => {
         </div>
 
         <section class="grid grid-cols-1 xl:grid-cols-3 gap-4">
-            <div class="bg-surface-0 dark:bg-surface-900 border border-surface-200 dark:border-surface-700 rounded-lg p-4">
+            <div class="bg-card border border-surface rounded-lg p-4">
                 <h2 class="text-lg font-semibold m-0 mb-4">Paciente</h2>
                 <InputText v-model="busquedaPaciente" class="w-full" placeholder="Buscar por DNI o nombre" @input="buscarPacientes" />
-                <div v-if="pacientes.length" class="mt-2 border border-surface-200 dark:border-surface-700 rounded-lg overflow-hidden">
-                    <button v-for="paciente in pacientes" :key="paciente.id" type="button" class="w-full text-left p-3 border-0 bg-transparent hover:bg-surface-100 dark:hover:bg-surface-800 cursor-pointer" @click="seleccionarPaciente(paciente)">
+                <div v-if="pacientes.length" class="mt-2 border border-surface rounded-lg overflow-hidden">
+                    <button v-for="paciente in pacientes" :key="paciente.id" type="button" class="w-full text-left p-3 border-0 bg-transparent hover:bg-emphasis cursor-pointer" @click="seleccionarPaciente(paciente)">
                         <span class="font-medium">{{ paciente.apellido }}, {{ paciente.nombre }}</span>
                         <span class="block text-sm text-color-secondary">DNI {{ paciente.dni }} - HC {{ paciente.nro_hc }}</span>
                     </button>
@@ -313,7 +313,7 @@ onMounted(async () => {
                 </div>
             </div>
 
-            <div class="bg-surface-0 dark:bg-surface-900 border border-surface-200 dark:border-surface-700 rounded-lg p-4 xl:col-span-2">
+            <div class="bg-card border border-surface rounded-lg p-4 xl:col-span-2">
                 <h2 class="text-lg font-semibold m-0 mb-4">Cobertura</h2>
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
                     <Select v-model="form.financiador" :options="financiadores" optionLabel="nombreComercial" filter showClear placeholder="Particular / sin financiador" class="w-full" />
@@ -324,7 +324,7 @@ onMounted(async () => {
             </div>
         </section>
 
-        <section class="bg-surface-0 dark:bg-surface-900 border border-surface-200 dark:border-surface-700 rounded-lg p-4">
+        <section class="bg-card border border-surface rounded-lg p-4">
             <h2 class="text-lg font-semibold m-0 mb-4">Profesional</h2>
             <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
                 <InputText v-model="form.medico.apellido" placeholder="Apellido" class="w-full" disabled />
@@ -340,7 +340,7 @@ onMounted(async () => {
         </section>
 
         <section class="grid grid-cols-1 xl:grid-cols-3 gap-4">
-            <div class="bg-surface-0 dark:bg-surface-900 border border-surface-200 dark:border-surface-700 rounded-lg p-4 xl:col-span-2">
+            <div class="bg-card border border-surface rounded-lg p-4 xl:col-span-2">
                 <div v-if="modo === 'receta'">
                     <div class="flex items-center justify-between gap-3 mb-4">
                         <h2 class="text-lg font-semibold m-0">Medicamentos</h2>
@@ -361,7 +361,7 @@ onMounted(async () => {
                         </Column>
                     </DataTable>
 
-                    <div v-for="(medicamento, index) in form.medicamentos" :key="index" class="mt-4 border border-surface-200 dark:border-surface-700 rounded-lg p-3">
+                    <div v-for="(medicamento, index) in form.medicamentos" :key="index" class="mt-4 border border-surface rounded-lg p-3">
                         <div class="flex items-center justify-between gap-2 mb-3">
                             <span class="font-medium">Medicamento {{ index + 1 }}</span>
                             <div class="flex gap-1">
@@ -385,7 +385,7 @@ onMounted(async () => {
                         <h2 class="text-lg font-semibold m-0">Estudios</h2>
                         <Button label="Agregar" icon="pi pi-plus" text @click="agregarEstudio" />
                     </div>
-                    <div v-for="(estudio, index) in form.estudios" :key="index" class="mb-4 border border-surface-200 dark:border-surface-700 rounded-lg p-3">
+                    <div v-for="(estudio, index) in form.estudios" :key="index" class="mb-4 border border-surface rounded-lg p-3">
                         <div class="flex items-center justify-between gap-2 mb-3">
                             <span class="font-medium">Estudio {{ index + 1 }}</span>
                             <Button icon="pi pi-trash" text rounded severity="danger" :disabled="form.estudios.length === 1" @click="quitarEstudio(index)" />
@@ -400,20 +400,14 @@ onMounted(async () => {
                 </div>
             </div>
 
-            <div class="bg-surface-0 dark:bg-surface-900 border border-surface-200 dark:border-surface-700 rounded-lg p-4">
+            <div class="bg-card border border-surface rounded-lg p-4">
                 <h2 class="text-lg font-semibold m-0 mb-4">Diagnostico general</h2>
                 <div class="flex gap-2">
                     <InputText v-model="diagnosticoBusqueda" class="w-full" placeholder="Buscar CIE-10" @keyup.enter="buscarDiagnosticos" />
                     <Button icon="pi pi-search" text rounded @click="buscarDiagnosticos" />
                 </div>
-                <div v-if="diagnosticos.length" class="mt-2 border border-surface-200 dark:border-surface-700 rounded-lg overflow-hidden max-h-56 overflow-y-auto">
-                    <button
-                        v-for="diagnostico in diagnosticos"
-                        :key="diagnostico.iddiagnostico"
-                        type="button"
-                        class="w-full text-left p-3 border-0 bg-transparent hover:bg-surface-100 dark:hover:bg-surface-800 cursor-pointer"
-                        @click="seleccionarDiagnostico(diagnostico)"
-                    >
+                <div v-if="diagnosticos.length" class="mt-2 border border-surface rounded-lg overflow-hidden max-h-56 overflow-y-auto">
+                    <button v-for="diagnostico in diagnosticos" :key="diagnostico.iddiagnostico" type="button" class="w-full text-left p-3 border-0 bg-transparent hover:bg-emphasis cursor-pointer" @click="seleccionarDiagnostico(diagnostico)">
                         <span class="font-medium">{{ diagnostico.coddiagnostico }}</span>
                         <span class="block text-sm text-color-secondary">{{ diagnostico.descdiagnostico }}</span>
                     </button>
@@ -425,7 +419,7 @@ onMounted(async () => {
             </div>
         </section>
 
-        <section class="bg-surface-0 dark:bg-surface-900 border border-surface-200 dark:border-surface-700 rounded-lg p-4">
+        <section class="bg-card border border-surface rounded-lg p-4">
             <h2 class="text-lg font-semibold m-0 mb-4">Lugar de atencion</h2>
             <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
                 <InputText v-model="form.lugarAtencion.nombreConsultorio" class="w-full" disabled />
@@ -435,18 +429,18 @@ onMounted(async () => {
             </div>
         </section>
 
-        <section v-if="emitida" class="bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 rounded-lg p-4">
+        <section v-if="emitida" class="bg-status-presente-bg border border-status-presente-border rounded-lg p-4">
             <h2 class="text-lg font-semibold m-0 mb-3">Resultado</h2>
             <div v-if="emitida.qbitos" class="space-y-2">
                 <div v-for="receta in emitida.qbitos.recetas || []" :key="receta.idReceta || receta.id" class="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
                     <span>ID receta: {{ receta.idReceta || receta.id }}</span>
-                    <a v-if="receta.s3Link" :href="receta.s3Link" target="_blank" rel="noopener" class="text-primary-600 font-medium">Abrir PDF</a>
+                    <a v-if="receta.s3Link" :href="receta.s3Link" target="_blank" rel="noopener" class="text-primary font-medium">Abrir PDF</a>
                 </div>
             </div>
             <div v-else class="space-y-2">
                 <div v-for="resultado in emitida.resultados || []" :key="resultado.estudioIndex" class="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
                     <span>Estudio {{ resultado.estudioIndex + 1 }} emitido</span>
-                    <a v-for="receta in (resultado.qbitos.recetas || []).filter((item) => item.s3Link)" :key="receta.idReceta || receta.id" :href="receta.s3Link" target="_blank" rel="noopener" class="text-primary-600 font-medium">Abrir PDF</a>
+                    <a v-for="receta in (resultado.qbitos.recetas || []).filter((item) => item.s3Link)" :key="receta.idReceta || receta.id" :href="receta.s3Link" target="_blank" rel="noopener" class="text-primary font-medium">Abrir PDF</a>
                 </div>
             </div>
         </section>

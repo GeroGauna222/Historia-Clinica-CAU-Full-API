@@ -86,10 +86,10 @@ onMounted(() => {
     <div class="p-6 md:p-8 w-full h-full">
         <Toast />
 
-        <div class="bg-surface-0 dark:bg-surface-900 shadow-xl rounded-2xl p-6 transition-colors min-h-[500px]">
+        <div class="bg-card shadow-xl rounded-2xl p-6 transition-colors min-h-[500px]">
             <div class="mb-6">
-                <h1 class="text-3xl font-bold text-gray-800 dark:text-white flex items-center gap-2"><i class="pi pi-calendar text-primary"></i> Agenda General</h1>
-                <p class="text-gray-500 dark:text-gray-400 text-sm mt-1">Visualizá los turnos programados y gestioná los días no laborables.</p>
+                <h1 class="text-3xl font-bold text-color flex items-center gap-2"><i class="pi pi-calendar text-primary"></i> Agenda General</h1>
+                <p class="text-muted-color text-sm mt-1">Visualizá los turnos programados y gestioná los días no laborables.</p>
             </div>
 
             <TabView>
@@ -97,12 +97,12 @@ onMounted(() => {
                     <div class="overflow-x-auto mt-2">
                         <DataTable :value="turnos" :loading="loading" paginator :rows="10" stripedRows class="p-datatable-sm" tableStyle="min-width: 50rem">
                             <template #empty>
-                                <div class="text-center p-6 text-gray-500">No hay turnos registrados.</div>
+                                <div class="text-center p-6 text-muted-color">No hay turnos registrados.</div>
                             </template>
 
                             <Column field="start" header="Fecha y Hora" sortable>
                                 <template #body="slotProps">
-                                    <span class="font-bold text-gray-700 dark:text-gray-200">
+                                    <span class="font-bold text-color">
                                         {{ formatDateTime(slotProps.data.start) }}
                                     </span>
                                 </template>
@@ -124,32 +124,32 @@ onMounted(() => {
 
                 <TabPanel header="Bloqueos de Agenda">
                     <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 mt-4">
-                        <div class="lg:col-span-1 bg-surface-50 dark:bg-surface-800 p-6 rounded-xl border border-surface-200 dark:border-surface-700 h-fit">
-                            <h3 class="text-lg font-bold text-gray-800 dark:text-white mb-4 flex items-center gap-2"><i class="pi pi-ban text-red-500"></i> Bloquear Día</h3>
+                        <div class="lg:col-span-1 bg-subtle p-6 rounded-xl border border-surface h-fit">
+                            <h3 class="text-lg font-bold text-color mb-4 flex items-center gap-2"><i class="pi pi-ban text-status-sin-aviso-fg"></i> Bloquear Día</h3>
 
                             <div class="flex flex-col gap-4">
                                 <div class="flex flex-col gap-2">
-                                    <label class="text-sm font-semibold text-gray-600 dark:text-gray-300">Seleccionar fecha</label>
+                                    <label class="text-sm font-semibold text-muted-color">Seleccionar fecha</label>
                                     <DatePicker v-model="fechaAusencia" showIcon dateFormat="dd/mm/yy" placeholder="Elegir día..." class="w-full" />
                                 </div>
 
                                 <Button label="Bloquear Agenda" icon="pi pi-lock" severity="danger" @click="agregarAusencia" :disabled="!fechaAusencia" class="w-full" />
-                                <small class="text-gray-500 text-xs"> * Al bloquear un día, no se podrán asignar nuevos turnos en esa fecha. </small>
+                                <small class="text-muted-color text-xs"> * Al bloquear un día, no se podrán asignar nuevos turnos en esa fecha. </small>
                             </div>
                         </div>
 
                         <div class="lg:col-span-2">
-                            <h3 class="text-lg font-bold text-gray-800 dark:text-white mb-4">Días Bloqueados</h3>
+                            <h3 class="text-lg font-bold text-color mb-4">Días Bloqueados</h3>
 
                             <div class="overflow-x-auto">
                                 <DataTable :value="ausencias" :loading="loading" paginator :rows="5" class="p-datatable-sm">
                                     <template #empty>
-                                        <div class="text-center p-4 text-gray-500">No hay días bloqueados.</div>
+                                        <div class="text-center p-4 text-muted-color">No hay días bloqueados.</div>
                                     </template>
 
                                     <Column field="fecha" header="Fecha Bloqueada" sortable>
                                         <template #body="slotProps">
-                                            <span class="font-mono font-medium text-red-600 dark:text-red-400">
+                                            <span class="font-mono font-medium text-status-sin-aviso-fg">
                                                 {{ formatDate(slotProps.data.fecha) }}
                                             </span>
                                         </template>

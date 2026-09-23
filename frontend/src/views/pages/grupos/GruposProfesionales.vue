@@ -128,13 +128,13 @@ function irPosteos(grupo) {
 <template>
     <div class="p-6 md:p-8 max-w-7xl mx-auto">
         <div class="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
-            <h1 class="text-3xl font-bold text-gray-800 dark:text-white">Agendas Grupales</h1>
+            <h1 class="text-3xl font-bold text-color">Agendas Grupales</h1>
 
             <Button v-if="esDirector" label="Nuevo Grupo" icon="pi pi-plus" @click="crearGrupo" raised />
         </div>
 
         <div v-if="loading" class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            <div v-for="i in 3" :key="i" class="p-4 border rounded-xl bg-white dark:bg-gray-800 shadow-sm">
+            <div v-for="i in 3" :key="i" class="p-4 border rounded-xl bg-card shadow-sm">
                 <Skeleton width="60%" height="1.5rem" class="mb-2"></Skeleton>
                 <Skeleton width="100%" height="1rem" class="mb-4"></Skeleton>
                 <div class="flex gap-2">
@@ -145,8 +145,8 @@ function irPosteos(grupo) {
         </div>
 
         <div v-else-if="grupos.length === 0" class="text-center py-10">
-            <i class="pi pi-folder-open text-6xl text-gray-300 dark:text-gray-600 mb-4"></i>
-            <p class="text-gray-500 dark:text-gray-400 text-lg">No hay grupos registrados.</p>
+            <i class="pi pi-folder-open text-6xl text-muted-color mb-4"></i>
+            <p class="text-muted-color text-lg">No hay grupos registrados.</p>
             <Button v-if="esDirector" label="Crear el primero" class="mt-4" text @click="crearGrupo" />
         </div>
 
@@ -156,7 +156,7 @@ function irPosteos(grupo) {
                     <div class="flex justify-between items-start">
                         <div class="flex items-center gap-2 min-w-0">
                             <span class="text-xl font-bold truncate" :title="grupo.nombre">{{ grupo.nombre }}</span>
-                            <span v-if="grupo.es_rehabilitacion" class="text-[10px] uppercase tracking-wide px-2 py-1 rounded bg-green-100 text-green-700 border border-green-300">Rehab</span>
+                            <span v-if="grupo.es_rehabilitacion" class="text-[10px] uppercase tracking-wide px-2 py-1 rounded bg-status-presente-bg text-status-presente-fg border border-status-presente-border">Rehab</span>
                         </div>
                         <div v-if="esDirector" class="flex gap-1">
                             <Button icon="pi pi-pencil" text rounded size="small" @click="editarGrupo(grupo)" v-tooltip.top="'Editar'" />
@@ -166,7 +166,7 @@ function irPosteos(grupo) {
                 </template>
 
                 <template #content>
-                    <p class="text-gray-600 dark:text-gray-300 text-sm h-10 line-clamp-2">
+                    <p class="text-muted-color text-sm h-10 line-clamp-2">
                         {{ grupo.descripcion || 'Sin descripcion' }}
                     </p>
                 </template>
@@ -187,22 +187,22 @@ function irPosteos(grupo) {
             </div>
 
             <div v-else>
-                <ul class="divide-y divide-gray-100 dark:divide-gray-700 mb-6">
+                <ul class="divide-y divide-line mb-6">
                     <li v-for="m in miembros" :key="m.id" class="flex justify-between items-center py-3">
                         <div class="flex items-center gap-3">
-                            <Avatar :label="m.nombre[0]" shape="circle" class="bg-blue-100 text-blue-600" />
+                            <Avatar :label="m.nombre[0]" shape="circle" class="bg-highlight text-primary" />
                             <div class="flex flex-col">
-                                <span class="font-medium text-gray-800 dark:text-gray-200">{{ m.nombre }}</span>
-                                <span class="text-xs text-gray-500 capitalize">{{ m.rol }}</span>
+                                <span class="font-medium text-color">{{ m.nombre }}</span>
+                                <span class="text-xs text-muted-color capitalize">{{ m.rol }}</span>
                             </div>
                         </div>
                         <Button v-if="esDirector" icon="pi pi-times" text rounded severity="danger" @click="quitarMiembro(m)" v-tooltip.left="'Quitar del grupo'" />
                     </li>
-                    <li v-if="miembros.length === 0" class="text-center py-4 text-gray-500 text-sm">Este grupo aun no tiene miembros.</li>
+                    <li v-if="miembros.length === 0" class="text-center py-4 text-muted-color text-sm">Este grupo aun no tiene miembros.</li>
                 </ul>
 
-                <div v-if="esDirector" class="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg border border-gray-100 dark:border-gray-700">
-                    <label class="block text-sm font-semibold mb-2 text-gray-700 dark:text-gray-300">Agregar profesional:</label>
+                <div v-if="esDirector" class="bg-subtle p-4 rounded-lg border border-surface">
+                    <label class="block text-sm font-semibold mb-2 text-color">Agregar profesional:</label>
                     <div class="flex gap-2">
                         <Select v-model="nuevoMiembro" :options="usuarios" optionLabel="nombre" optionValue="id" placeholder="Seleccionar..." class="w-full" filter />
                         <Button icon="pi pi-plus" @click="agregarMiembro" :disabled="!nuevoMiembro" />

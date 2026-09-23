@@ -253,21 +253,21 @@ onMounted(cargarDisponibilidades);
     <div class="p-6 md:p-8 w-full max-w-5xl mx-auto">
         <Toast />
 
-        <div class="bg-surface-0 dark:bg-surface-900 shadow-xl rounded-2xl p-6 md:p-8 transition-colors border border-gray-100 dark:border-gray-800">
+        <div class="bg-card shadow-xl rounded-2xl p-6 md:p-8 transition-colors border border-surface">
             <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
                 <div>
-                    <h1 class="text-3xl font-bold text-gray-800 dark:text-white">Disponibilidad Horaria</h1>
-                    <p class="text-gray-500 dark:text-gray-400 mt-1">Configurá los días y franjas horarias en las que atendés turnos.</p>
+                    <h1 class="text-3xl font-bold text-color">Disponibilidad Horaria</h1>
+                    <p class="text-muted-color mt-1">Configurá los días y franjas horarias en las que atendés turnos.</p>
                 </div>
 
-                <div class="flex items-center gap-3 bg-primary-50 dark:bg-primary-900/20 px-4 py-2 rounded-xl border border-primary-100 dark:border-primary-800">
+                <div class="flex items-center gap-3 bg-highlight px-4 py-2 rounded-xl border border-surface">
                     <Avatar :label="nombreUsuario?.charAt(0)" shape="circle" class="bg-primary text-white" />
-                    <span class="font-bold text-primary-700 dark:text-primary-300">{{ nombreUsuario }}</span>
+                    <span class="font-bold text-primary">{{ nombreUsuario }}</span>
                 </div>
             </div>
 
             <div class="space-y-4">
-                <div class="hidden md:grid grid-cols-12 gap-4 px-4 text-sm font-bold text-gray-500 uppercase tracking-wider mb-2">
+                <div class="hidden md:grid grid-cols-12 gap-4 px-4 text-sm font-bold text-muted-color uppercase tracking-wider mb-2">
                     <div class="col-span-3">Día</div>
                     <div class="col-span-2 text-center">Estado</div>
                     <div class="col-span-7 text-center">Franjas Horarias de Atención</div>
@@ -276,22 +276,22 @@ onMounted(cargarDisponibilidades);
                 <div
                     v-for="dia in diasSemana"
                     :key="dia.nombre"
-                    class="group grid grid-cols-1 md:grid-cols-12 gap-4 items-start p-4 rounded-xl border border-gray-200 dark:border-gray-700 hover:border-primary-300 dark:hover:border-primary-700 hover:shadow-md transition-all bg-surface-50 dark:bg-surface-800"
+                    class="group grid grid-cols-1 md:grid-cols-12 gap-4 items-start p-4 rounded-xl border border-surface hover:border-primary hover:shadow-md transition-all bg-subtle"
                     :class="{ 'opacity-60 grayscale': !dia.activo }"
                 >
                     <!-- Día -->
                     <div class="col-span-1 md:col-span-3 flex items-center gap-3 py-1">
-                        <div class="w-10 h-10 rounded-lg flex items-center justify-center font-bold text-lg transition-colors" :class="dia.activo ? 'bg-primary text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-500'">
+                        <div class="w-10 h-10 rounded-lg flex items-center justify-center font-bold text-lg transition-colors" :class="dia.activo ? 'bg-primary text-primary-contrast' : 'bg-emphasis text-muted-color'">
                             {{ dia.nombre.charAt(0) }}
                         </div>
-                        <span class="text-lg font-semibold text-gray-800 dark:text-gray-200 capitalize">
+                        <span class="text-lg font-semibold text-color capitalize">
                             {{ dia.nombre }}
                         </span>
                     </div>
 
                     <!-- Toggle Activo -->
                     <div class="col-span-1 md:col-span-2 flex items-center md:justify-center justify-between py-1">
-                        <span class="md:hidden text-sm font-medium text-gray-500">¿Atiende este día?</span>
+                        <span class="md:hidden text-sm font-medium text-muted-color">¿Atiende este día?</span>
                         <InputSwitch v-model="dia.activo" @change="onDiaSwitchChange(dia)" />
                     </div>
 
@@ -299,16 +299,16 @@ onMounted(cargarDisponibilidades);
                     <div class="col-span-1 md:col-span-7 flex flex-col gap-3">
                         <div v-for="(rango, rIdx) in dia.rangos" :key="rIdx" class="flex flex-col md:flex-row items-center gap-3 w-full" :class="{ 'opacity-50': !dia.activo || !rango.activo }">
                             <div class="flex items-center gap-2 w-full md:w-auto">
-                                <i class="pi pi-sun text-gray-400"></i>
-                                <label class="md:hidden text-sm text-gray-500 w-16">Desde:</label>
+                                <i class="pi pi-sun text-muted-color"></i>
+                                <label class="md:hidden text-sm text-muted-color w-16">Desde:</label>
                                 <input type="time" v-model="rango.hora_inicio" :disabled="!dia.activo || !rango.activo" class="p-inputtext p-component w-full md:w-32 text-center" />
                             </div>
 
-                            <span class="hidden md:block text-gray-400">—</span>
+                            <span class="hidden md:block text-muted-color">—</span>
 
                             <div class="flex items-center gap-2 w-full md:w-auto">
-                                <i class="pi pi-moon text-gray-400"></i>
-                                <label class="md:hidden text-sm text-gray-500 w-16">Hasta:</label>
+                                <i class="pi pi-moon text-muted-color"></i>
+                                <label class="md:hidden text-sm text-muted-color w-16">Hasta:</label>
                                 <input type="time" v-model="rango.hora_fin" :disabled="!dia.activo || !rango.activo" class="p-inputtext p-component w-full md:w-32 text-center" />
                             </div>
 
@@ -320,7 +320,7 @@ onMounted(cargarDisponibilidades);
 
                         <!-- Botón Agregar Franja -->
                         <div class="flex justify-start items-center">
-                            <button type="button" @click="agregarRango(dia)" class="flex items-center gap-1.5 text-sm font-semibold text-primary hover:text-primary-600 transition-colors focus:outline-none cursor-pointer mt-1">
+                            <button type="button" @click="agregarRango(dia)" class="flex items-center gap-1.5 text-sm font-semibold text-primary hover:text-primary-emphasis transition-colors focus:outline-none cursor-pointer mt-1">
                                 <i class="pi pi-plus text-xs"></i>
                                 Agregar Franja Horaria
                             </button>
@@ -330,7 +330,7 @@ onMounted(cargarDisponibilidades);
             </div>
 
             <!-- Botones -->
-            <div class="flex justify-end items-center gap-4 mt-8 pt-6 border-t border-gray-100 dark:border-gray-800">
+            <div class="flex justify-end items-center gap-4 mt-8 pt-6 border-t border-surface">
                 <Button label="Cancelar" icon="pi pi-times" text severity="secondary" @click="irAlDashboard" />
                 <Button label="Guardar Cambios" icon="pi pi-check" :loading="guardando" @click="guardarDisponibilidades" />
             </div>
@@ -339,26 +339,26 @@ onMounted(cargarDisponibilidades);
         <!-- Diálogo de Advertencia por Turnos Huérfanos -->
         <Dialog v-model:visible="mostrarAdvertenciaTurnos" modal header="⚠️ Turnos Fuera de Rango Horario" :style="{ width: '50rem' }" :breakpoints="{ '1199px': '75vw', '575px': '90vw' }">
             <div class="p-fluid">
-                <p class="text-red-600 dark:text-red-400 font-semibold mb-4 text-base">Informar a administración sobre los turnos futuros que quedan fuera del nuevo rango horario:</p>
-                <div class="max-h-72 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-xl mb-4">
+                <p class="text-status-sin-aviso-fg font-semibold mb-4 text-base">Informar a administración sobre los turnos futuros que quedan fuera del nuevo rango horario:</p>
+                <div class="max-h-72 overflow-y-auto border border-surface rounded-xl mb-4">
                     <table class="w-full text-left border-collapse">
                         <thead>
-                            <tr class="bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-300 font-semibold text-sm border-b border-gray-200 dark:border-gray-700">
+                            <tr class="bg-subtle text-muted-color font-semibold text-sm border-b border-surface">
                                 <th class="p-3">Fecha y Hora</th>
                                 <th class="p-3">Paciente</th>
                                 <th class="p-3">Motivo</th>
                             </tr>
                         </thead>
                         <tbody class="text-sm">
-                            <tr v-for="t in turnosAfectados" :key="t.id" class="border-b border-gray-100 dark:border-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50/50 dark:hover:bg-gray-800/30 transition-colors">
+                            <tr v-for="t in turnosAfectados" :key="t.id" class="border-b border-surface text-color hover:bg-emphasis transition-colors">
                                 <td class="p-3 font-medium">{{ t.fecha }} hs</td>
                                 <td class="p-3 font-semibold">{{ t.paciente }}</td>
-                                <td class="p-3 text-gray-500 dark:text-gray-400">{{ t.motivo }}</td>
+                                <td class="p-3 text-muted-color">{{ t.motivo }}</td>
                             </tr>
                         </tbody>
                     </table>
                 </div>
-                <p class="text-sm text-gray-500 dark:text-gray-400 mb-6">¿Desea confirmar el cambio de disponibilidad y conservar estos turnos como excepciones fuera de horario?</p>
+                <p class="text-sm text-muted-color mb-6">¿Desea confirmar el cambio de disponibilidad y conservar estos turnos como excepciones fuera de horario?</p>
             </div>
             <template #footer>
                 <Button label="Cancelar y Corregir" icon="pi pi-times" class="p-button-text" severity="secondary" @click="mostrarAdvertenciaTurnos = false" />

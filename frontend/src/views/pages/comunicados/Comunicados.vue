@@ -92,11 +92,11 @@ onMounted(async () => {
         <Toast />
 
         <div>
-            <h1 class="text-3xl font-bold text-gray-800 dark:text-white">Comunicados</h1>
-            <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Avisos institucionales para todo el equipo.</p>
+            <h1 class="text-3xl font-bold text-color">Comunicados</h1>
+            <p class="text-sm text-muted-color mt-1">Avisos institucionales para todo el equipo.</p>
         </div>
 
-        <Card v-if="puedePublicar" class="border border-cyan-100 dark:border-slate-700">
+        <Card v-if="puedePublicar" class="border border-surface">
             <template #title>Nuevo comunicado</template>
             <template #content>
                 <div class="space-y-3">
@@ -109,25 +109,23 @@ onMounted(async () => {
             </template>
         </Card>
 
-        <div v-if="loading" class="text-sm text-gray-500">Cargando comunicados...</div>
+        <div v-if="loading" class="text-sm text-muted-color">Cargando comunicados...</div>
 
-        <div v-else-if="comunicados.length === 0" class="text-sm text-gray-500 dark:text-gray-400 bg-white dark:bg-slate-900 border border-dashed border-gray-300 dark:border-slate-700 rounded-xl p-6 text-center">
-            No hay comunicados publicados por el momento.
-        </div>
+        <div v-else-if="comunicados.length === 0" class="text-sm text-muted-color bg-card border border-dashed border-surface rounded-xl p-6 text-center">No hay comunicados publicados por el momento.</div>
 
         <div v-else class="space-y-4">
-            <Card v-for="c in comunicados" :key="c.id" class="border border-gray-100 dark:border-slate-700">
+            <Card v-for="c in comunicados" :key="c.id" class="border border-surface">
                 <template #title>
                     <div class="flex items-start justify-between gap-3">
                         <div>
-                            <h2 class="text-lg font-semibold text-gray-800 dark:text-gray-100">{{ c.titulo }}</h2>
-                            <p class="text-xs text-gray-500 mt-1">{{ c.autor_nombre }} ({{ c.autor_rol }}) - {{ formatearFecha(c.creado_en) }}</p>
+                            <h2 class="text-lg font-semibold text-color">{{ c.titulo }}</h2>
+                            <p class="text-xs text-muted-color mt-1">{{ c.autor_nombre }} ({{ c.autor_rol }}) - {{ formatearFecha(c.creado_en) }}</p>
                         </div>
                         <Button v-if="c.puede_eliminar" icon="pi pi-trash" text severity="danger" @click="eliminarComunicado(c)" />
                     </div>
                 </template>
                 <template #content>
-                    <p class="whitespace-pre-line text-sm text-gray-700 dark:text-gray-200">{{ c.contenido }}</p>
+                    <p class="whitespace-pre-line text-sm text-color">{{ c.contenido }}</p>
                 </template>
             </Card>
         </div>
