@@ -21,6 +21,10 @@ export default defineConfig({
             '@': fileURLToPath(new URL('./src', import.meta.url))
         }
     },
+    test: {
+        environment: 'jsdom',
+        include: ['src/**/*.test.js', 'scripts/**/*.test.mjs']
+    },
     server: {
         host: '0.0.0.0', // 🔹 Necesario para exponer el servidor dentro del contenedor
         port: 5173,
