@@ -1,11 +1,11 @@
 <script setup>
 import { useLayout } from '@/layout/composables/layout';
-import AppConfigurator from './AppConfigurator.vue';
-import UserMenu from '@/components/dashboard/UserMenu.vue'; // ← nuevo menú de usuario
+import UserMenu from '@/components/dashboard/UserMenu.vue';
 import PacientesPresentesMenu from '@/components/dashboard/PacientesPresentesMenu.vue';
+import ColorSchemeSwitcher from '@/components/ui/ColorSchemeSwitcher.vue';
 import { useRouter } from 'vue-router';
 
-const { toggleMenu, toggleDarkMode, isDarkTheme } = useLayout();
+const { toggleMenu } = useLayout();
 const router = useRouter();
 
 // 👉 Ir a Agenda
@@ -26,7 +26,7 @@ function irAgenda() {
                 <img src="@/assets/cau_icon.png" alt="Logo CAU" class="h-8 md:h-10" />
                 <div class="flex flex-col leading-tight">
                     <div class="font-bold text-lg">CAU <span class="font-normal">UNSAM</span></div>
-                    <div class="text-xs text-gray-500">Centro Asistencial Universitario</div>
+                    <div class="text-xs text-muted-color">Centro Asistencial Universitario</div>
                 </div>
             </router-link>
         </div>
@@ -41,29 +41,8 @@ function irAgenda() {
                 <i class="pi pi-calendar"></i>
             </button>
 
-            <!-- 🎨 Tema -->
-            <button type="button" class="layout-topbar-action" @click="toggleDarkMode">
-                <i :class="['pi', { 'pi-moon': isDarkTheme, 'pi-sun': !isDarkTheme }]"></i>
-            </button>
-
-            <!-- 🎛 Configurador -->
-            <div class="relative">
-                <button
-                    v-styleclass="{
-                        selector: '@next',
-                        enterFromClass: 'hidden',
-                        enterActiveClass: 'animate-scalein',
-                        leaveToClass: 'hidden',
-                        leaveActiveClass: 'animate-fadeout',
-                        hideOnOutsideClick: true
-                    }"
-                    type="button"
-                    class="layout-topbar-action layout-topbar-action-highlight"
-                >
-                    <i class="pi pi-palette"></i>
-                </button>
-                <AppConfigurator />
-            </div>
+            <!-- Color scheme (Sistema / Claro / Oscuro) -->
+            <ColorSchemeSwitcher />
 
             <!-- 👤 Nuevo menú de usuario (foto + perfil + logout) -->
             <UserMenu />
