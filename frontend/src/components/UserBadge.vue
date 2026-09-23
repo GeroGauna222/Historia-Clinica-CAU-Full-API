@@ -26,13 +26,13 @@ const roleClass = computed(() => {
 
     switch (r) {
         case 'director':
-            return 'bg-emerald-50 border-emerald-200 text-emerald-700 dark:bg-emerald-900 dark:border-emerald-700 dark:text-emerald-200';
+            return 'bg-status-presente-bg border-status-presente-border text-status-presente-fg';
         case 'administrativo':
-            return 'bg-indigo-50 border-indigo-200 text-indigo-700 dark:bg-indigo-900 dark:border-indigo-700 dark:text-indigo-200';
+            return 'bg-highlight border-surface text-primary';
         case 'profesional':
-            return 'bg-amber-50 border-amber-200 text-amber-700 dark:bg-amber-900 dark:border-amber-700 dark:text-amber-200';
+            return 'bg-status-con-aviso-bg border-status-con-aviso-border text-status-con-aviso-fg';
         default:
-            return 'bg-gray-50 border-gray-200 text-gray-700 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300';
+            return 'bg-subtle border-surface text-color';
     }
 });
 </script>
@@ -41,18 +41,18 @@ const roleClass = computed(() => {
     <div class="flex items-center gap-3">
         <!-- Placeholder mientras carga -->
         <div v-if="loading" class="flex items-center gap-2">
-            <div class="animate-pulse w-8 h-8 rounded-full bg-gray-300/60"></div>
-            <div class="animate-pulse h-4 w-28 rounded bg-gray-300/60"></div>
-            <div class="animate-pulse h-5 w-16 rounded bg-gray-300/60"></div>
+            <div class="animate-pulse w-8 h-8 rounded-full bg-line/60"></div>
+            <div class="animate-pulse h-4 w-28 rounded bg-line/60"></div>
+            <div class="animate-pulse h-5 w-16 rounded bg-line/60"></div>
         </div>
 
         <!-- Usuario autenticado -->
         <template v-else-if="user">
             <div class="text-right leading-tight hidden sm:block">
-                <div class="font-medium text-sm text-gray-800 dark:text-gray-100">
+                <div class="font-medium text-sm text-color">
                     {{ user.nombre }}
                 </div>
-                <div class="text-xs text-gray-500 dark:text-gray-400">{{ user.username }}</div>
+                <div class="text-xs text-muted-color">{{ user.username }}</div>
             </div>
 
             <!-- Avatar -->
@@ -72,7 +72,7 @@ const roleClass = computed(() => {
 
         <!-- Sin usuario -->
         <template v-else>
-            <span class="text-sm text-gray-500 dark:text-gray-400">No autenticado</span>
+            <span class="text-sm text-muted-color">No autenticado</span>
         </template>
     </div>
 </template>

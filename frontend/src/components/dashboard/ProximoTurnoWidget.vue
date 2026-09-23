@@ -10,6 +10,6 @@ defineProps({ turno: Object });
             <p><b>Hora:</b> {{ new Date(turno.fecha).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }}</p>
             <p><b>Motivo:</b> {{ turno.motivo }}</p>
         </div>
-        <div v-else class="text-gray-500">No hay turnos próximos</div>
+        <div v-else class="text-muted-color">No hay turnos próximos</div>
     </div>
 </template>

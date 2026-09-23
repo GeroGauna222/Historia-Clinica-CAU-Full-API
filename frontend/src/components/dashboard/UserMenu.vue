@@ -81,20 +81,20 @@ const logout = async () => {
 
 <template>
     <div class="relative" ref="menuRef">
-        <button @click="toggleMenu" class="flex items-center gap-3 p-1.5 rounded-lg hover:bg-surface-100 dark:hover:bg-surface-800 transition focus:outline-none cursor-pointer border-none bg-transparent">
+        <button @click="toggleMenu" class="flex items-center gap-3 p-1.5 rounded-lg hover:bg-emphasis transition focus:outline-none cursor-pointer border-none bg-transparent">
             <div class="hidden md:flex flex-col items-end leading-tight text-right mr-1">
                 <span class="font-bold text-sm text-color">{{ userStore.loggingOut ? 'Cerrando sesion...' : userStore.nombre || userStore.username || '' }}</span>
                 <span class="text-[10px] uppercase tracking-wide text-muted-color font-semibold">{{ userStore.rol }}</span>
             </div>
 
             <div class="relative w-9 h-9">
-                <img v-if="fotoUrl" :src="fotoUrl" alt="Perfil" class="w-full h-full rounded-full object-cover border border-gray-300 shadow-sm" @error="imageError = true" />
+                <img v-if="fotoUrl" :src="fotoUrl" alt="Perfil" class="w-full h-full rounded-full object-cover border border-surface shadow-sm" @error="imageError = true" />
 
                 <div v-else class="w-full h-full rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-sm shadow-sm select-none">
                     {{ inicial }}
                 </div>
 
-                <span class="absolute bottom-0 right-0 block h-2.5 w-2.5 rounded-full bg-green-500 ring-2 ring-white"></span>
+                <span class="absolute bottom-0 right-0 block h-2.5 w-2.5 rounded-full bg-green-500 ring-2 ring-card"></span>
             </div>
         </button>
 
@@ -106,8 +106,8 @@ const logout = async () => {
             leave-from-class="transform opacity-100 scale-100"
             leave-to-class="transform opacity-0 scale-95"
         >
-            <div v-if="menuActive" class="absolute right-0 mt-2 w-64 origin-top-right bg-surface-0 dark:bg-surface-800 rounded-xl shadow-xl ring-1 ring-surface-200 dark:ring-surface-700 z-50 overflow-hidden">
-                <div class="px-4 py-3 border-b border-surface-200 dark:border-surface-700 md:hidden bg-surface-50 dark:bg-surface-900">
+            <div v-if="menuActive" class="absolute right-0 mt-2 w-64 origin-top-right bg-card rounded-xl shadow-xl ring-1 ring-line z-50 overflow-hidden">
+                <div class="px-4 py-3 border-b border-surface md:hidden bg-subtle">
                     <p class="text-sm font-medium text-color">{{ userStore.nombre }}</p>
                     <p class="text-xs text-muted-color truncate">{{ userStore.email }}</p>
                 </div>
@@ -123,9 +123,9 @@ const logout = async () => {
                         Cambiar contrasena
                     </button>
 
-                    <div class="border-t border-surface-200 dark:border-surface-700 my-1"></div>
+                    <div class="border-t border-surface my-1"></div>
 
-                    <button @click="logout" class="flex w-full items-center px-4 py-2.5 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-950 transition text-left">
+                    <button @click="logout" class="flex w-full items-center px-4 py-2.5 text-sm text-status-sin-aviso-fg hover:bg-status-sin-aviso-bg transition text-left">
                         <i class="pi pi-sign-out mr-3"></i>
                         Cerrar Sesion
                     </button>

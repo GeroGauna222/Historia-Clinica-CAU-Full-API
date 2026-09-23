@@ -8,12 +8,12 @@ defineProps({ stats: Object });
             <div class="flex justify-between mb-4">
                 <div>
                     <span class="block text-muted-color font-medium mb-4">Turnos del día</span>
-                    <div class="text-surface-900 dark:text-surface-0 font-medium text-xl">
+                    <div class="text-color font-medium text-xl">
                         {{ stats.turnos_hoy }}
                     </div>
                 </div>
-                <div class="flex items-center justify-center bg-blue-100 rounded-border" style="width: 2.5rem; height: 2.5rem">
-                    <i class="pi pi-calendar text-blue-500 !text-xl"></i>
+                <div class="flex items-center justify-center bg-highlight rounded-border" style="width: 2.5rem; height: 2.5rem">
+                    <i class="pi pi-calendar text-primary !text-xl"></i>
                 </div>
             </div>
             <span class="text-primary font-medium">+{{ stats.turnos_hoy || 0 }}</span>
@@ -26,11 +26,11 @@ defineProps({ stats: Object });
             <div class="flex justify-between mb-4">
                 <div>
                     <span class="block text-muted-color font-medium mb-4">Próximo turno</span>
-                    <div class="text-surface-900 dark:text-surface-0 font-medium text-xl">
+                    <div class="text-color font-medium text-xl">
                         {{ stats.proximo_turno?.paciente || '—' }}
                     </div>
                 </div>
-                <div class="flex items-center justify-center bg-green-100 rounded-border" style="width: 2.5rem; height: 2.5rem">
+                <div class="flex items-center justify-center bg-status-presente-bg rounded-border" style="width: 2.5rem; height: 2.5rem">
                     <i class="pi pi-user text-green-500 !text-xl"></i>
                 </div>
             </div>
