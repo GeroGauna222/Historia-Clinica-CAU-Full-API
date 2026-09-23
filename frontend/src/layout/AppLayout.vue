@@ -1,6 +1,7 @@
 <script setup>
 import { useLayout } from '@/layout/composables/layout';
 import { computed, ref, watch } from 'vue';
+import ArrivalNoticeDialog from '@/components/ArrivalNoticeDialog.vue';
 import AppFooter from './AppFooter.vue';
 import AppSidebar from './AppSidebar.vue';
 import AppTopbar from './AppTopbar.vue';
@@ -72,4 +73,5 @@ function isOutsideClicked(event) {
         <div class="layout-mask animate-fadein"></div>
     </div>
     <Toast />
+    <ArrivalNoticeDialog />
 </template>
