@@ -26,12 +26,13 @@ describe('ArrivalNoticeDialog', () => {
     });
 
     it('renders the patient name, time, DNI and the Informado button', async () => {
-        pendientes.value = [{ id: 1, paciente: 'Juan Perez', dni: '12345678', fecha_inicio: '2026-09-23T10:30:00', motivo: 'Control' }];
+        pendientes.value = [{ id: 1, paciente: 'Juan Perez', dni: '12345678', start: '2026-09-23T10:30:00', motivo: 'Control' }];
         mount(ArrivalNoticeDialog, { attachTo: document.body });
         await new Promise((resolve) => setTimeout(resolve, 0));
 
         expect(document.body.textContent).toContain('Juan Perez');
         expect(document.body.textContent).toContain('12345678');
+        expect(document.body.textContent).toContain('10:30');
         expect(document.body.textContent).toContain('Paciente en recepción');
         const button = Array.from(document.body.querySelectorAll('button')).find((b) => b.textContent.includes('Informado'));
         expect(button).toBeTruthy();
@@ -39,8 +40,8 @@ describe('ArrivalNoticeDialog', () => {
 
     it('shows the plural title when there is more than one pendiente', async () => {
         pendientes.value = [
-            { id: 1, paciente: 'Juan Perez', dni: '1', fecha_inicio: '2026-09-23T10:30:00' },
-            { id: 2, paciente: 'Maria Gomez', dni: '2', fecha_inicio: '2026-09-23T10:45:00' }
+            { id: 1, paciente: 'Juan Perez', dni: '1', start: '2026-09-23T10:30:00' },
+            { id: 2, paciente: 'Maria Gomez', dni: '2', start: '2026-09-23T10:45:00' }
         ];
         mount(ArrivalNoticeDialog, { attachTo: document.body });
         await new Promise((resolve) => setTimeout(resolve, 0));
@@ -49,7 +50,7 @@ describe('ArrivalNoticeDialog', () => {
     });
 
     it('calls marcarInformado and clears pendientes when the button is clicked', async () => {
-        pendientes.value = [{ id: 1, paciente: 'Juan Perez', dni: '12345678', fecha_inicio: '2026-09-23T10:30:00' }];
+        pendientes.value = [{ id: 1, paciente: 'Juan Perez', dni: '12345678', start: '2026-09-23T10:30:00' }];
         mount(ArrivalNoticeDialog, { attachTo: document.body });
         await new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -62,7 +63,7 @@ describe('ArrivalNoticeDialog', () => {
     });
 
     it('disables the escape/dismiss affordances on the underlying Dialog', () => {
-        pendientes.value = [{ id: 1, paciente: 'Juan Perez', dni: '1', fecha_inicio: '2026-09-23T10:30:00' }];
+        pendientes.value = [{ id: 1, paciente: 'Juan Perez', dni: '1', start: '2026-09-23T10:30:00' }];
         const wrapper = mount(ArrivalNoticeDialog, { attachTo: document.body });
 
         const dialog = wrapper.findComponent({ name: 'Dialog' });

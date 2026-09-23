@@ -37,7 +37,7 @@ function formatoHora(isoString) {
                 <div v-for="t in pendientes" :key="t.id" class="py-3">
                     <p class="text-lg font-bold text-color">{{ t.paciente }}</p>
                     <div class="mt-1 flex items-center gap-3 text-sm text-muted-color">
-                        <span class="font-mono">{{ formatoHora(t.fecha_inicio) }}</span>
+                        <span class="font-mono">{{ formatoHora(t.start) }}</span>
                         <span v-if="t.dni">DNI: {{ t.dni }}</span>
                     </div>
                 </div>
