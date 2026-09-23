@@ -1,8 +1,16 @@
 /** @type {import('tailwindcss').Config} */
 import PrimeUI from 'tailwindcss-primeui';
 
+// Maps a CSS variable to a Tailwind color that still supports opacity modifiers (e.g. bg-line/60).
+const token = (variable) => `color-mix(in srgb, var(${variable}) calc(100% * <alpha-value>), transparent)`;
+
+const status = (name) => ({
+    fg: token(`--cau-status-${name}-fg`),
+    bg: token(`--cau-status-${name}-bg`),
+    border: token(`--cau-status-${name}-border`)
+});
+
 export default {
-    // Habilita dark mode por clase, y también respeta el prefijo que usa PrimeVue
     darkMode: ['class', '[class*="app-dark"]'],
 
     content: ['./index.html', './src/**/*.{vue,js,ts,jsx,tsx}'],
@@ -10,33 +18,20 @@ export default {
     theme: {
         extend: {
             fontFamily: {
-                sans: ['Noto Sans', 'sans-serif'],
+                sans: ['Inter', 'sans-serif'],
                 heading: ['Figtree', 'sans-serif']
             },
             colors: {
-                primary: {
-                    DEFAULT: '#00BFA5', // verde institucional CAU
-                    50: '#E0F2F1',
-                    100: '#B2DFDB',
-                    200: '#80CBC4',
-                    300: '#4DB6AC',
-                    400: '#26A69A',
-                    500: '#009688',
-                    600: '#00897B',
-                    700: '#00796B',
-                    800: '#00695C',
-                    900: '#004D40'
-                },
-                surface: {
-                    0: '#FFFFFF',
-                    50: '#F9FAFB',
-                    100: '#F4F4F5',
-                    900: '#1E1E1E',
-                    950: '#121212'
-                },
-                textcolor: {
-                    light: '#1E1E1E',
-                    dark: '#E5E5E5'
+                // PrimeVue keeps surface-0 white in dark mode; these follow the active scheme.
+                card: token('--p-content-background'),
+                ground: token('--p-app-background'),
+                subtle: token('--p-app-subtle-background'),
+                line: token('--p-content-border-color'),
+                status: {
+                    programado: status('programado'),
+                    presente: status('presente'),
+                    'con-aviso': status('con-aviso'),
+                    'sin-aviso': status('sin-aviso')
                 }
             }
         },

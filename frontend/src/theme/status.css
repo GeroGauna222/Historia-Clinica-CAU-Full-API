@@ -1,0 +1,36 @@
+/* Appointment and signature status tokens (DB enum turnos.estado_asistencia). */
+:root {
+    --cau-status-programado-fg: #334155;
+    --cau-status-programado-bg: #f1f5f9;
+    --cau-status-programado-border: #cbd5e1;
+
+    --cau-status-presente-fg: #15803d;
+    --cau-status-presente-bg: #dcfce7;
+    --cau-status-presente-border: #86efac;
+
+    --cau-status-con-aviso-fg: #b45309;
+    --cau-status-con-aviso-bg: #fef3c7;
+    --cau-status-con-aviso-border: #fcd34d;
+
+    --cau-status-sin-aviso-fg: #b91c1c;
+    --cau-status-sin-aviso-bg: #fee2e2;
+    --cau-status-sin-aviso-border: #fca5a5;
+}
+
+:root.app-dark {
+    --cau-status-programado-fg: #cbd5e1;
+    --cau-status-programado-bg: rgba(148, 163, 184, 0.14);
+    --cau-status-programado-border: rgba(203, 213, 225, 0.32);
+
+    --cau-status-presente-fg: #4ade80;
+    --cau-status-presente-bg: rgba(74, 222, 128, 0.12);
+    --cau-status-presente-border: rgba(74, 222, 128, 0.32);
+
+    --cau-status-con-aviso-fg: #fbbf24;
+    --cau-status-con-aviso-bg: rgba(251, 191, 36, 0.12);
+    --cau-status-con-aviso-border: rgba(251, 191, 36, 0.32);
+
+    --cau-status-sin-aviso-fg: #f87171;
+    --cau-status-sin-aviso-bg: rgba(248, 113, 113, 0.12);
+    --cau-status-sin-aviso-border: rgba(248, 113, 113, 0.32);
+}

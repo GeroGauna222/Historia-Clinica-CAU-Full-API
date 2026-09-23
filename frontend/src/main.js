@@ -2,7 +2,8 @@ import { createApp } from 'vue';
 import App from './App.vue';
 import router from './router';
 import { createPinia } from 'pinia';
-import Aura from '@primeuix/themes/aura';
+import { CauPreset } from '@/theme/cauPreset';
+import { useColorScheme } from '@/theme/useColorScheme';
 import PrimeVue from 'primevue/config';
 import ConfirmationService from 'primevue/confirmationservice';
 import ToastService from 'primevue/toastservice';
@@ -15,6 +16,7 @@ import Dialog from 'primevue/dialog';
 // Estilos
 import 'primeicons/primeicons.css';
 import '@/assets/styles.scss';
+import '@/theme/status.css';
 
 // 🧩 Importar el store del usuario
 import { useUserStore } from '@/stores/user';
@@ -28,8 +30,8 @@ async function bootstrap() {
     app.use(PrimeVue, {
         locale: es,
         theme: {
-            preset: Aura,
-            options: { darkModeSelector: '.app-dark' }
+            preset: CauPreset,
+            options: { darkModeSelector: '.app-dark', cssLayer: false }
         }
     });
     app.use(ToastService);
@@ -46,6 +48,9 @@ async function bootstrap() {
     } catch (err) {
         console.warn('⚠️ No se pudo cargar el usuario al iniciar:', err);
     }
+
+    // Color scheme must be resolved before the first render.
+    useColorScheme().init();
 
     // 🔥 Ahora que el store tiene el rol, montamos la app
     app.mount('#app');
