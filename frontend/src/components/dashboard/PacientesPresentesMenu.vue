@@ -94,7 +94,7 @@ function formatoHora(isoString) {
                                 <p v-if="p.dni" class="text-xs text-muted-color">DNI: {{ p.dni }}</p>
                             </div>
                             <span class="text-xs font-mono font-medium text-status-presente-fg bg-status-presente-bg px-1.5 py-0.5 rounded">
-                                {{ formatoHora(p.start) }}
+                                {{ formatoHora(p.fecha_inicio) }}
                             </span>
                         </div>
                         <p v-if="p.motivo" class="text-xs text-muted-color mt-1 truncate"><span class="font-medium text-muted-color">Motivo:</span> {{ p.motivo }}</p>
