@@ -12,7 +12,8 @@
     transition:
         transform var(--layout-section-transition-duration),
         left var(--layout-section-transition-duration);
-    background-color: var(--surface-overlay);
+    background-color: var(--surface-card);
+    border: 1px solid var(--surface-border);
     border-radius: var(--content-border-radius);
     padding: 0.5rem 1.5rem;
 }
@@ -67,7 +68,7 @@
             color: var(--text-color);
             cursor: pointer;
             padding: 0.75rem 1rem;
-            border-radius: var(--content-border-radius);
+            border-radius: 8px;
             transition:
                 background-color var(--element-transition-duration),
                 box-shadow var(--element-transition-duration);
@@ -83,8 +84,9 @@
             }
 
             &.active-route {
-                font-weight: 700;
-                color: var(--primary-color);
+                font-weight: 600;
+                background-color: var(--p-highlight-background);
+                color: var(--p-highlight-color);
             }
 
             &:hover {

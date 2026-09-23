@@ -23,9 +23,9 @@
     align-items: center;
     font-size: 13px;
     z-index: 100;
-    border-top: 1px solid var(--footer-border);
-    background-color: var(--footer-bg);
-    color: var(--footer-text);
+    border-top: 1px solid var(--p-content-border-color);
+    background-color: var(--p-content-background);
+    color: var(--p-text-muted-color);
     transition:
         background-color 0.3s ease,
         color 0.3s ease;
@@ -38,31 +38,12 @@
 
 /* Colores institucionales */
 .brand {
-    color: var(--footer-brand);
+    color: var(--p-primary-color);
     font-weight: 600;
 }
 
 .author {
-    color: var(--footer-author);
+    color: var(--p-primary-color);
     font-weight: 600;
-}
-
-/* ====== 🎨 Tema claro ====== */
-:root {
-    --footer-bg: #f9fafb;
-    --footer-border: #e5e7eb;
-    --footer-text: #6b7280;
-    --footer-brand: #003b70;
-    --footer-author: #00936b;
-}
-
-/* ====== 🌙 Tema oscuro ====== */
-.app-dark .app-footer,
-html.dark .app-footer {
-    --footer-bg: #1a1a1a;
-    --footer-border: #2e2e2e;
-    --footer-text: #e0e0e0;
-    --footer-brand: #3db5e6; /* celeste institucional */
-    --footer-author: #00bfa5; /* verde turquesa */
 }
 </style>

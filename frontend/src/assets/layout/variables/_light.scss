@@ -1,16 +1,6 @@
 :root {
-  --surface-ground: #f9fafb;
-  --surface-card: #ffffff;
-  --surface-hover: #f0f0f0;
-  --surface-overlay: #ffffff;
-  --surface-border: #d9d9d9;
-
-  --text-color: #212121;
-  --text-color-secondary: #555555;
-
-  --primary-color: #00796b;
-  --primary-contrast-color: #ffffff;
-
-  --code-background: #f4f4f4;
-  --code-color: #212121;
+    --surface-ground: var(--p-app-background);
+    --code-background: var(--p-surface-100);
+    --code-color: var(--p-text-color);
+    --cau-card-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.06);
 }

@@ -9,6 +9,7 @@
     width: 100%;
     padding: 0 2rem;
     background-color: var(--surface-card);
+    border-bottom: 1px solid var(--surface-border);
     transition: left var(--layout-section-transition-duration);
     display: flex;
     align-items: center;
@@ -24,8 +25,9 @@
         align-items: center;
         font-size: 1.5rem;
         border-radius: var(--content-border-radius);
-        color: var(--text-color);
-        font-weight: 500;
+        color: var(--primary-color);
+        font-family: 'Figtree', sans-serif;
+        font-weight: 600;
         gap: 0.5rem;
 
         svg {
