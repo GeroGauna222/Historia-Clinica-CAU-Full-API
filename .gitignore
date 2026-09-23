@@ -117,3 +117,6 @@ __pycache__/
 historia_clinica_bfa back antes de intentar migrar a react/
 frontend/.vite/
 .env
+
+# Brainstorming companion mockups
+.superpowers/
