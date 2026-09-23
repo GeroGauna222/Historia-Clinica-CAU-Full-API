@@ -161,7 +161,7 @@ onMounted(() => {
         <div class="flex items-end gap-4 flex-wrap">
             <div class="w-64">
                 <label class="block text-sm mb-1">Tipo</label>
-                <select v-model="tipoEntidad" class="w-full p-2 border rounded bg-card">
+                <select v-model="tipoEntidad" class="w-full p-2 border border-surface rounded bg-card">
                     <option value="historia">Historia consolidada</option>
                     <option value="evolucion">Evolucion</option>
                 </select>
@@ -170,7 +170,7 @@ onMounted(() => {
             <div class="w-64">
                 <label class="block text-sm mb-1">ID</label>
                 <!-- Si no usás PrimeVue InputNumber, podés cambiar por input type="number" -->
-                <InputNumber v-model="historiaId" inputClass="w-full p-2 border rounded" :useGrouping="false" :min="1" placeholder="Ej: 12" />
+                <InputNumber v-model="historiaId" inputClass="w-full p-2 border border-surface rounded" :useGrouping="false" :min="1" placeholder="Ej: 12" />
             </div>
 
             <div class="flex items-center gap-2">
@@ -190,7 +190,7 @@ onMounted(() => {
         </div>
 
         <!-- Resultado -->
-        <Card v-if="resultado" class="border rounded-lg shadow-sm">
+        <Card v-if="resultado" class="border border-surface rounded-lg shadow-sm">
             <template #title>
                 <div class="flex items-center justify-between">
                     <span class="text-lg font-semibold">
@@ -237,7 +237,7 @@ onMounted(() => {
         </Card>
 
         <!-- Auditorías -->
-        <Card class="border rounded-lg shadow-sm">
+        <Card class="border border-surface rounded-lg shadow-sm">
             <template #title>
                 <div class="flex items-center justify-between">
                     <span class="text-lg font-semibold">Auditorías de verificación</span>

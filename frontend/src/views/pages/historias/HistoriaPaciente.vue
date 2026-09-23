@@ -606,7 +606,7 @@ onMounted(() => {
             <!-- 📂 Evoluciones agrupadas por año -->
             <div v-for="{ año, items } in evolucionesPorAño" :key="año" class="mb-6">
                 <!-- CABECERA DEL AÑO -->
-                <button @click="accordionAbierto[año] = !accordionAbierto[año]" class="w-full flex justify-between items-center px-4 py-3 bg-emphasis hover:bg-emphasis text-color rounded-lg transition font-semibold">
+                <button @click="accordionAbierto[año] = !accordionAbierto[año]" class="w-full flex justify-between items-center px-4 py-3 bg-subtle hover:bg-emphasis text-color rounded-lg transition font-semibold">
                     <span> {{ año }}</span>
                     <i :class="accordionAbierto[año] ? 'pi pi-chevron-up' : 'pi pi-chevron-down'"></i>
                 </button>

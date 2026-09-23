@@ -134,7 +134,7 @@ function irPosteos(grupo) {
         </div>
 
         <div v-if="loading" class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            <div v-for="i in 3" :key="i" class="p-4 border rounded-xl bg-card shadow-sm">
+            <div v-for="i in 3" :key="i" class="p-4 border border-surface rounded-xl bg-card shadow-sm">
                 <Skeleton width="60%" height="1.5rem" class="mb-2"></Skeleton>
                 <Skeleton width="100%" height="1rem" class="mb-4"></Skeleton>
                 <div class="flex gap-2">
