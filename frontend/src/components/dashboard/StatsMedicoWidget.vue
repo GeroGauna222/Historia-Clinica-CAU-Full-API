@@ -31,7 +31,7 @@ defineProps({ stats: Object });
                     </div>
                 </div>
                 <div class="flex items-center justify-center bg-status-presente-bg rounded-border" style="width: 2.5rem; height: 2.5rem">
-                    <i class="pi pi-user text-green-500 !text-xl"></i>
+                    <i class="pi pi-user text-status-presente-fg !text-xl"></i>
                 </div>
             </div>
             <span class="text-primary font-medium">{{ stats.proximo_turno?.hora || '' }}</span>
