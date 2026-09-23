@@ -161,7 +161,7 @@ onMounted(() => {
         <div class="flex items-end gap-4 flex-wrap">
             <div class="w-64">
                 <label class="block text-sm mb-1">Tipo</label>
-                <select v-model="tipoEntidad" class="w-full p-2 border rounded bg-white">
+                <select v-model="tipoEntidad" class="w-full p-2 border rounded bg-card">
                     <option value="historia">Historia consolidada</option>
                     <option value="evolucion">Evolucion</option>
                 </select>
@@ -181,7 +181,7 @@ onMounted(() => {
 
             <div v-if="loadingAccion" class="flex items-center gap-2 ml-auto">
                 <ProgressSpinner style="width: 28px; height: 28px" strokeWidth="6" aria-label="Cargando" />
-                <span class="text-sm text-gray-500">Procesando…</span>
+                <span class="text-sm text-muted-color">Procesando…</span>
             </div>
         </div>
 
@@ -241,7 +241,7 @@ onMounted(() => {
             <template #title>
                 <div class="flex items-center justify-between">
                     <span class="text-lg font-semibold">Auditorías de verificación</span>
-                    <div class="text-sm text-gray-500">Total: {{ totalAuditorias }}</div>
+                    <div class="text-sm text-muted-color">Total: {{ totalAuditorias }}</div>
                 </div>
             </template>
             <template #content>
@@ -297,20 +297,3 @@ onMounted(() => {
         </Card>
     </div>
 </template>
-
-<style scoped>
-/* fallback rápido si no tenés PrimeVue Tag/Button:
-   (podés eliminar si usás los componentes reales) */
-.p-tag {
-    @apply inline-flex items-center px-2 py-1 rounded text-xs font-semibold;
-}
-.p-tag-success {
-    @apply bg-green-100 text-green-700;
-}
-.p-tag-danger {
-    @apply bg-red-100 text-red-700;
-}
-.p-tag-info {
-    @apply bg-blue-100 text-blue-700;
-}
-</style>

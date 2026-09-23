@@ -133,7 +133,7 @@ const verHistoria = (id) => {
     <div class="p-4">
         <h1 class="text-2xl font-bold mb-4">Buscar Pacientes</h1>
 
-        <p class="text-sm text-gray-500 mb-2">{{ mensaje }}</p>
+        <p class="text-sm text-muted-color mb-2">{{ mensaje }}</p>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <input v-model="dni" placeholder="DNI" class="p-2 border rounded" />

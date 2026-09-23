@@ -202,9 +202,9 @@ const eliminarTurnoConfirmado = async () => {
 
 <template>
     <div class="p-6 md:p-8 w-full h-full">
-        <div class="bg-surface-0 dark:bg-surface-900 shadow-xl rounded-2xl p-6 transition-colors">
+        <div class="bg-card shadow-xl rounded-2xl p-6 transition-colors">
             <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
-                <h1 class="text-3xl font-bold text-gray-800 dark:text-white">Listado de Pacientes</h1>
+                <h1 class="text-3xl font-bold text-color">Listado de Pacientes</h1>
 
                 <div class="flex gap-2 w-full md:w-auto">
                     <IconField iconPosition="left" class="w-full md:w-64">
@@ -219,7 +219,7 @@ const eliminarTurnoConfirmado = async () => {
             <div class="overflow-x-auto">
                 <DataTable :value="filtrados" paginator :rows="10" :rowsPerPageOptions="[5, 10, 20]" tableStyle="min-width: 60rem" stripedRows class="p-datatable-sm">
                     <template #empty>
-                        <div class="text-center p-8 text-gray-500">
+                        <div class="text-center p-8 text-muted-color">
                             <i class="pi pi-users text-4xl mb-3 block"></i>
                             No se encontraron pacientes.
                         </div>
@@ -240,10 +240,10 @@ const eliminarTurnoConfirmado = async () => {
                     <Column field="telefono" header="Teléfono">
                         <template #body="slotProps">
                             <span v-if="slotProps.data.telefono || slotProps.data.celular" class="text-sm flex items-center gap-1">
-                                <i class="pi pi-phone text-gray-400"></i>
+                                <i class="pi pi-phone text-muted-color"></i>
                                 {{ slotProps.data.celular || slotProps.data.telefono }}
                             </span>
-                            <span v-else class="text-gray-400 text-sm">-</span>
+                            <span v-else class="text-muted-color text-sm">-</span>
                         </template>
                     </Column>
 
@@ -263,8 +263,8 @@ const eliminarTurnoConfirmado = async () => {
         <!-- Dialog Confirmar Eliminación Paciente -->
         <Dialog v-model:visible="mostrarDialog" modal header="Confirmar Eliminación" :style="{ width: '400px' }" :draggable="false">
             <div class="flex items-center gap-3 mb-4">
-                <i class="pi pi-exclamation-triangle text-red-500 text-4xl"></i>
-                <div class="text-gray-700 dark:text-gray-300">
+                <i class="pi pi-exclamation-triangle text-status-sin-aviso-fg text-4xl"></i>
+                <div class="text-color">
                     <p class="font-bold text-lg mb-1">¿Estás seguro?</p>
                     <p class="text-sm">
                         Vas a eliminar al paciente <strong>{{ pacienteAEliminar?.apellido }} {{ pacienteAEliminar?.nombre }}</strong
@@ -281,7 +281,7 @@ const eliminarTurnoConfirmado = async () => {
 
         <!-- Modal Historial de Turnos del Paciente -->
         <Dialog v-model:visible="mostrarHistorialDialog" modal :header="`Historial de Turnos - ${pacienteHistorial?.apellido || ''} ${pacienteHistorial?.nombre || ''}`" :style="{ width: '90vw', maxWidth: '1000px' }" :draggable="false">
-            <div v-if="cargandoHistorial" class="text-center p-8 text-gray-500">
+            <div v-if="cargandoHistorial" class="text-center p-8 text-muted-color">
                 <i class="pi pi-spin pi-spinner text-3xl mb-2 block"></i>
                 Cargando historial de turnos...
             </div>
@@ -289,7 +289,7 @@ const eliminarTurnoConfirmado = async () => {
             <div v-else class="overflow-x-auto">
                 <DataTable :value="turnosHistorial" paginator :rows="5" :rowsPerPageOptions="[5, 10, 20]" stripedRows class="p-datatable-sm" tableStyle="min-width: 50rem">
                     <template #empty>
-                        <div class="text-center p-6 text-gray-500">
+                        <div class="text-center p-6 text-muted-color">
                             <i class="pi pi-calendar-times text-3xl mb-2 block"></i>
                             El paciente no tiene turnos registrados.
                         </div>
@@ -317,7 +317,7 @@ const eliminarTurnoConfirmado = async () => {
                         <template #body="slotProps">
                             <div>
                                 <p class="text-sm font-medium">{{ slotProps.data.description || 'Sin motivo' }}</p>
-                                <p v-if="slotProps.data.observaciones" class="text-xs text-gray-500 dark:text-gray-400 italic">
+                                <p v-if="slotProps.data.observaciones" class="text-xs text-muted-color italic">
                                     {{ slotProps.data.observaciones }}
                                 </p>
                             </div>
@@ -375,7 +375,7 @@ const eliminarTurnoConfirmado = async () => {
         <!-- Sub-Dialog Eliminar Turno desde Historial -->
         <Dialog v-model:visible="mostrarEliminarTurnoDialog" modal header="Eliminar Turno" :style="{ width: '400px' }" :draggable="false">
             <div class="flex items-center gap-3 mb-4">
-                <i class="pi pi-exclamation-triangle text-red-500 text-3xl"></i>
+                <i class="pi pi-exclamation-triangle text-status-sin-aviso-fg text-3xl"></i>
                 <p class="text-sm">¿Estás seguro de que deseas eliminar este turno? Esta acción no se puede deshacer.</p>
             </div>
             <template #footer>

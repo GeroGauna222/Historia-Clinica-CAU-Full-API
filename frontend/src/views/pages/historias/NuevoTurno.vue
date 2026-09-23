@@ -242,21 +242,21 @@ async function crearTurno() {
 
 <template>
     <div class="flex justify-center items-start p-8">
-        <div class="bg-white shadow-xl rounded-2xl p-8 w-full max-w-2xl">
-            <h1 class="text-3xl font-bold text-center mb-8 text-gray-800 dark:text-white">Nuevo Turno</h1>
+        <div class="bg-card shadow-xl rounded-2xl p-8 w-full max-w-2xl">
+            <h1 class="text-3xl font-bold text-center mb-8 text-color">Nuevo Turno</h1>
 
             <form @submit.prevent="crearTurno" class="space-y-6">
                 <div class="relative">
-                    <label class="block mb-2 font-semibold text-gray-700">Paciente</label>
+                    <label class="block mb-2 font-semibold text-color">Paciente</label>
                     <input v-model="searchPaciente" @input="buscarPacientes" type="text" placeholder="Buscar por DNI o nombre" class="w-full p-3 border rounded-xl shadow-sm focus:ring-2 focus:ring-blue-500" autocomplete="off" />
-                    <ul v-if="pacientes.length > 0" class="absolute z-20 left-0 right-0 border rounded-lg mt-2 bg-white shadow-md divide-y max-h-48 overflow-y-auto">
-                        <li v-for="p in pacientes" :key="p.id" @click="seleccionarPaciente(p)" class="px-3 py-2 hover:bg-blue-100 cursor-pointer">{{ p.apellido }} {{ p.nombre }} (DNI: {{ p.dni }})</li>
+                    <ul v-if="pacientes.length > 0" class="absolute z-20 left-0 right-0 border rounded-lg mt-2 bg-card shadow-md divide-y max-h-48 overflow-y-auto">
+                        <li v-for="p in pacientes" :key="p.id" @click="seleccionarPaciente(p)" class="px-3 py-2 hover:bg-highlight cursor-pointer">{{ p.apellido }} {{ p.nombre }} (DNI: {{ p.dni }})</li>
                     </ul>
-                    <p v-if="pacienteId" class="mt-2 text-sm text-green-600 font-medium">Seleccionado: {{ pacienteSeleccionado }}</p>
+                    <p v-if="pacienteId" class="mt-2 text-sm text-status-presente-fg font-medium">Seleccionado: {{ pacienteSeleccionado }}</p>
                 </div>
 
                 <div>
-                    <label class="block mb-2 font-semibold text-gray-700">Profesional</label>
+                    <label class="block mb-2 font-semibold text-color">Profesional</label>
                     <select v-model="usuarioId" class="w-full p-3 border rounded-xl shadow-sm focus:ring-2 focus:ring-blue-500" required>
                         <option value="" disabled>Seleccione un profesional</option>
                         <option v-for="p in profesionales" :key="p.id" :value="p.id">{{ p.nombre }} ({{ p.especialidad || 'Sin especialidad' }})</option>
@@ -264,7 +264,7 @@ async function crearTurno() {
                 </div>
 
                 <div>
-                    <label class="block mb-2 font-semibold text-gray-700">Fecha y hora</label>
+                    <label class="block mb-2 font-semibold text-color">Fecha y hora</label>
                     <DatePicker
                         v-model="fecha"
                         showTime
@@ -278,36 +278,36 @@ async function crearTurno() {
                         inputClass="w-full p-3 border rounded-xl shadow-sm"
                         required
                     />
-                    <small v-if="disabledDates.length > 0" class="text-gray-500">Hay dias completamente bloqueados para este profesional.</small>
+                    <small v-if="disabledDates.length > 0" class="text-muted-color">Hay dias completamente bloqueados para este profesional.</small>
                 </div>
 
                 <div>
-                    <label class="block mb-2 font-semibold text-gray-700">Motivo</label>
+                    <label class="block mb-2 font-semibold text-color">Motivo</label>
                     <textarea v-model="motivo" rows="3" placeholder="Motivo del turno" class="w-full p-3 border rounded-xl shadow-sm focus:ring-2 focus:ring-blue-500"></textarea>
                 </div>
 
                 <div class="mt-6 border-t pt-4">
-                    <label class="flex items-center gap-2 text-gray-700 font-semibold cursor-pointer">
+                    <label class="flex items-center gap-2 text-color font-semibold cursor-pointer">
                         <input type="checkbox" v-model="esTanda" class="accent-blue-600 w-5 h-5" />
                         Crear tanda de turnos (kinesiologia, rehabilitacion, etc.)
                     </label>
 
                     <transition name="fade">
-                        <div v-if="esTanda" class="mt-4 space-y-4 bg-blue-50 p-4 rounded-xl border border-blue-100">
+                        <div v-if="esTanda" class="mt-4 space-y-4 bg-highlight p-4 rounded-xl border border-surface">
                             <div>
-                                <label class="block mb-2 font-semibold text-gray-700">Cantidad de turnos</label>
+                                <label class="block mb-2 font-semibold text-color">Cantidad de turnos</label>
                                 <input v-model.number="cantidad" type="number" min="1" class="w-full p-3 border rounded-xl shadow-sm focus:ring-2 focus:ring-blue-500" placeholder="Ejemplo: 10" />
                             </div>
 
                             <div>
-                                <label class="block mb-2 font-semibold text-gray-700">Dias de la semana</label>
+                                <label class="block mb-2 font-semibold text-color">Dias de la semana</label>
                                 <div class="grid grid-cols-3 gap-2">
                                     <label v-for="(dia, idx) in diasSemana" :key="idx" class="flex items-center space-x-2">
                                         <input type="checkbox" v-model="diasSeleccionados" :value="dia" class="accent-blue-600 w-5 h-5" />
                                         <span>{{ dia }}</span>
                                     </label>
                                 </div>
-                                <p class="text-gray-500 text-sm mt-1">Selecciona los dias en que se repetira el turno</p>
+                                <p class="text-muted-color text-sm mt-1">Selecciona los dias en que se repetira el turno</p>
                             </div>
                         </div>
                     </transition>
@@ -318,10 +318,10 @@ async function crearTurno() {
                 </div>
             </form>
 
-            <p v-if="mensaje" class="mt-6 text-green-600 font-semibold text-center">
+            <p v-if="mensaje" class="mt-6 text-status-presente-fg font-semibold text-center">
                 {{ mensaje }}
             </p>
-            <p v-if="error" class="mt-6 text-red-600 font-semibold text-center">
+            <p v-if="error" class="mt-6 text-status-sin-aviso-fg font-semibold text-center">
                 {{ error }}
             </p>
         </div>

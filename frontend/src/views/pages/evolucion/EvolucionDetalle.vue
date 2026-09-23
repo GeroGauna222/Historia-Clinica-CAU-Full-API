@@ -59,16 +59,16 @@ onMounted(fetchEvolucion);
     <div class="min-h-screen p-6 md:p-10 app-bg transition-colors flex justify-center items-start">
         <div class="max-w-3xl w-full">
             <!-- 🔙 Volver -->
-            <button @click="router.back()" class="text-primary-600 hover:text-primary-800 flex items-center mb-6 font-medium transition"><i class="pi pi-arrow-left mr-2"></i> Volver a la Historia Clínica</button>
+            <button @click="router.back()" class="text-primary hover:text-primary-emphasis flex items-center mb-6 font-medium transition"><i class="pi pi-arrow-left mr-2"></i> Volver a la Historia Clínica</button>
 
             <!-- ⏳ Cargando -->
-            <div v-if="loading" class="text-gray-500 dark:text-gray-300 text-center py-8">
-                <i class="pi pi-spin pi-spinner text-primary-500 text-lg mr-2"></i>
+            <div v-if="loading" class="text-muted-color text-center py-8">
+                <i class="pi pi-spin pi-spinner text-primary text-lg mr-2"></i>
                 Cargando evolución...
             </div>
 
             <!-- ⚠️ Error -->
-            <div v-else-if="error" class="text-red-500 font-medium text-center py-6">
+            <div v-else-if="error" class="text-status-sin-aviso-fg font-medium text-center py-6">
                 {{ error }}
             </div>
 
@@ -99,7 +99,7 @@ onMounted(fetchEvolucion);
                 <div v-if="evolucion.archivos?.length" class="rounded-xl p-4 border mt-4 app-card">
                     <h3 class="font-semibold mb-3 flex items-center"><i class="pi pi-paperclip mr-2"></i> Archivos adjuntos</h3>
                     <ul class="list-disc pl-6 space-y-1">
-                        <li v-for="archivo in evolucion.archivos" :key="archivo.url" class="text-primary-500 hover:underline text-sm">
+                        <li v-for="archivo in evolucion.archivos" :key="archivo.url" class="text-primary hover:underline text-sm">
                             <a :href="archivo.url" target="_blank">{{ archivo.nombre }}</a>
                         </li>
                     </ul>
