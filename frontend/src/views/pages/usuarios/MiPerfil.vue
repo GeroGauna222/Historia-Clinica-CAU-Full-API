@@ -94,7 +94,7 @@ const eliminarFoto = async () => {
 </script>
 
 <template>
-    <div class="max-w-lg mx-auto bg-surface-0 dark:bg-surface-900 p-8 rounded-2xl shadow-lg mt-6 border border-surface-200 dark:border-surface-700 transition-colors">
+    <div class="max-w-lg mx-auto bg-card p-8 rounded-2xl shadow-lg mt-6 border border-surface transition-colors">
         <h1 class="text-2xl font-bold mb-8 text-color text-center">Editar mi Perfil</h1>
 
         <div class="flex flex-col items-center mb-8">
@@ -123,7 +123,7 @@ const eliminarFoto = async () => {
             </div>
         </div>
 
-        <div class="flex justify-between items-center mt-8 pt-6 border-t border-surface-200 dark:border-surface-700">
+        <div class="flex justify-between items-center mt-8 pt-6 border-t border-surface">
             <Button v-if="userStore.foto" label="Eliminar foto" icon="pi pi-trash" text severity="danger" size="small" @click="confirmarEliminarFoto = true" />
             <div v-else></div>
             <Button label="Guardar cambios" icon="pi pi-check" @click="actualizarPerfil" />

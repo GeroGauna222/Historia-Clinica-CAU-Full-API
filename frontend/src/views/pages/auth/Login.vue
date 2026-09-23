@@ -38,21 +38,21 @@ const irARecuperar = () => {
 <template>
     <Toast />
     <FloatingConfigurator />
-    <div class="bg-surface-50 dark:bg-surface-950 flex items-center justify-center min-h-screen min-w-[100vw] overflow-hidden">
+    <div class="bg-ground flex items-center justify-center min-h-screen min-w-[100vw] overflow-hidden">
         <div class="flex flex-col items-center justify-center">
             <div style="border-radius: 56px; padding: 0.3rem; background: linear-gradient(180deg, var(--primary-color) 10%, rgba(33, 150, 243, 0) 30%)">
-                <div class="w-full bg-surface-0 dark:bg-surface-900 py-20 px-8 sm:px-20" style="border-radius: 53px">
+                <div class="w-full bg-card py-20 px-8 sm:px-20" style="border-radius: 53px">
                     <div class="text-center mb-8">
                         <img :src="logoUnsam" alt="Logo CAU" class="mb-6 w-20 mx-auto" />
-                        <div class="text-surface-900 dark:text-surface-0 text-3xl font-medium mb-4">Bienvenido al Sistema de <br />Historias Clínicas del CAU</div>
+                        <div class="text-color text-3xl font-medium mb-4">Bienvenido al Sistema de <br />Historias Clínicas del CAU</div>
                         <span class="text-muted-color font-medium">Iniciá sesión para continuar</span>
                     </div>
 
                     <div>
-                        <label for="usuario1" class="block text-surface-900 dark:text-surface-0 text-xl font-medium mb-2">Usuario</label>
+                        <label for="usuario1" class="block text-color text-xl font-medium mb-2">Usuario</label>
                         <InputText id="usuario1" type="text" placeholder="Usuario" class="w-full md:w-[30rem] mb-8" v-model="usuario" />
 
-                        <label for="password1" class="block text-surface-900 dark:text-surface-0 font-medium text-xl mb-2">Contraseña</label>
+                        <label for="password1" class="block text-color font-medium text-xl mb-2">Contraseña</label>
                         <Password id="password1" v-model="password" placeholder="Contraseña" :toggleMask="true" class="mb-4" fluid :feedback="false" @keyup.enter="login"></Password>
 
                         <div class="flex items-center justify-between mt-2 mb-8 gap-8">

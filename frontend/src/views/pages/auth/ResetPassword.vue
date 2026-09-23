@@ -60,38 +60,38 @@ async function resetear() {
 </script>
 
 <template>
-    <div class="bg-surface-50 dark:bg-surface-950 flex items-center justify-center min-h-screen min-w-[100vw] overflow-hidden">
+    <div class="bg-ground flex items-center justify-center min-h-screen min-w-[100vw] overflow-hidden">
         <div class="flex flex-col items-center justify-center">
             <div style="border-radius: 56px; padding: 0.3rem; background: linear-gradient(180deg, var(--primary-color) 10%, rgba(33, 150, 243, 0) 30%)">
-                <div class="w-full bg-surface-0 dark:bg-surface-900 py-20 px-8 sm:px-20" style="border-radius: 53px">
+                <div class="w-full bg-card py-20 px-8 sm:px-20" style="border-radius: 53px">
                     <div class="text-center mb-8">
                         <img :src="logoUnsam" alt="Logo CAU" class="mb-6 w-24 mx-auto" />
-                        <div class="text-surface-900 dark:text-surface-0 text-3xl font-medium mb-4">Restablecer Contraseña</div>
+                        <div class="text-color text-3xl font-medium mb-4">Restablecer Contraseña</div>
                         <span class="text-muted-color font-medium"> Ingresá tu nueva contraseña para continuar. </span>
                     </div>
 
                     <form @submit.prevent="resetear" class="space-y-6 w-full md:w-[28rem]">
                         <div>
-                            <label for="password" class="block text-surface-900 dark:text-surface-0 text-xl font-medium mb-2"> Nueva contraseña </label>
+                            <label for="password" class="block text-color text-xl font-medium mb-2"> Nueva contraseña </label>
                             <Password id="password" v-model="password" :toggleMask="true" :feedback="false" fluid placeholder="********" :invalid="!!passwordError" @input="validarEnVivo" />
-                            <p v-if="passwordError" class="text-red-500 text-xs mt-1">
+                            <p v-if="passwordError" class="text-status-sin-aviso-fg text-xs mt-1">
                                 {{ passwordError }}
                             </p>
                             <p v-else class="text-muted-color text-xs mt-1">Mínimo 8 caracteres, una mayúscula, una minúscula, un número y un símbolo.</p>
                         </div>
 
                         <div>
-                            <label for="confirmPassword" class="block text-surface-900 dark:text-surface-0 text-xl font-medium mb-2"> Confirmar contraseña </label>
+                            <label for="confirmPassword" class="block text-color text-xl font-medium mb-2"> Confirmar contraseña </label>
                             <Password id="confirmPassword" v-model="confirmPassword" :toggleMask="true" :feedback="false" fluid placeholder="********" :invalid="!!confirmError" />
-                            <p v-if="confirmError" class="text-red-500 text-xs mt-1">Las contraseñas no coinciden.</p>
+                            <p v-if="confirmError" class="text-status-sin-aviso-fg text-xs mt-1">Las contraseñas no coinciden.</p>
                         </div>
 
                         <Button type="submit" label="Guardar nueva contraseña" class="w-full" :loading="loading" :disabled="!!passwordError || !!confirmError || !password" />
 
-                        <p v-if="mensaje" class="text-green-600 text-center mt-4 text-sm font-medium bg-green-50 dark:bg-green-950 p-2 rounded border border-green-200 dark:border-green-800">
+                        <p v-if="mensaje" class="text-status-presente-fg text-center mt-4 text-sm font-medium bg-status-presente-bg p-2 rounded border border-status-presente-border">
                             {{ mensaje }}
                         </p>
-                        <p v-if="error" class="text-red-600 text-center mt-4 text-sm font-medium bg-red-50 dark:bg-red-950 p-2 rounded border border-red-200 dark:border-red-800">
+                        <p v-if="error" class="text-status-sin-aviso-fg text-center mt-4 text-sm font-medium bg-status-sin-aviso-bg p-2 rounded border border-status-sin-aviso-border">
                             {{ error }}
                         </p>
 

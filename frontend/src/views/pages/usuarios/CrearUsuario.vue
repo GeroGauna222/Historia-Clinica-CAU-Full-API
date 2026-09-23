@@ -120,98 +120,98 @@ async function onSubmit() {
 
 <template>
     <div class="flex justify-center items-start p-6 md:p-8">
-        <div class="bg-surface-0 dark:bg-surface-900 shadow-xl rounded-2xl p-8 w-full max-w-3xl transition-colors">
+        <div class="bg-card shadow-xl rounded-2xl p-8 w-full max-w-3xl transition-colors">
             <div class="text-center mb-8">
-                <h1 class="text-3xl font-bold text-gray-800 dark:text-white mb-2">Crear Usuario</h1>
-                <p class="text-gray-500 dark:text-gray-400">Registrar un nuevo miembro del personal</p>
+                <h1 class="text-3xl font-bold text-color mb-2">Crear Usuario</h1>
+                <p class="text-muted-color">Registrar un nuevo miembro del personal</p>
             </div>
 
             <form @submit.prevent="onSubmit" class="space-y-6">
                 <div class="flex flex-col gap-2">
-                    <label class="font-semibold text-gray-700 dark:text-gray-200">Nombre completo</label>
+                    <label class="font-semibold text-color">Nombre completo</label>
                     <InputText v-model.trim="form.nombre" placeholder="Ej: Ana Perez" class="w-full" :disabled="loading" />
                 </div>
 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div class="flex flex-col gap-2">
-                        <label class="font-semibold text-gray-700 dark:text-gray-200">Usuario</label>
+                        <label class="font-semibold text-color">Usuario</label>
                         <InputText v-model.trim="form.username" placeholder="Ej: aperez" class="w-full" :disabled="loading" />
                     </div>
 
                     <div class="flex flex-col gap-2">
-                        <label class="font-semibold text-gray-700 dark:text-gray-200">Email</label>
+                        <label class="font-semibold text-color">Email</label>
                         <InputText v-model.trim="form.email" type="email" placeholder="ana@ejemplo.com" class="w-full" :disabled="loading" />
                     </div>
                 </div>
 
                 <div class="flex flex-col gap-2">
-                    <label class="font-semibold text-gray-700 dark:text-gray-200">Contrasena</label>
+                    <label class="font-semibold text-color">Contrasena</label>
                     <Password v-model="form.password" :feedback="false" toggleMask placeholder="********" class="w-full" inputClass="w-full" :disabled="loading" />
-                    <small class="text-gray-500 dark:text-gray-400">Minimo 8 caracteres, mayuscula, minuscula y numero.</small>
+                    <small class="text-muted-color">Minimo 8 caracteres, mayuscula, minuscula y numero.</small>
                 </div>
 
                 <div class="flex flex-col gap-2">
-                    <label class="font-semibold text-gray-700 dark:text-gray-200">Rol</label>
+                    <label class="font-semibold text-color">Rol</label>
                     <Dropdown v-model="form.rol" :options="roles" placeholder="Selecciona un rol" class="w-full" :disabled="loading" />
                 </div>
 
                 <transition name="fade">
-                    <div v-if="rolPuedePrescribir()" class="space-y-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-100 dark:border-blue-800">
+                    <div v-if="rolPuedePrescribir()" class="space-y-4 p-4 bg-highlight rounded-xl border border-surface">
                         <div class="flex flex-col gap-2">
-                            <label class="font-semibold text-gray-700 dark:text-gray-200">Especialidad</label>
+                            <label class="font-semibold text-color">Especialidad</label>
                             <InputText v-model.trim="form.especialidad" placeholder="Ej: Cardiologia, Pediatria..." class="w-full" :disabled="loading" />
                         </div>
 
                         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <div class="flex flex-col gap-2">
-                                <label class="font-semibold text-gray-700 dark:text-gray-200">DNI profesional</label>
+                                <label class="font-semibold text-color">DNI profesional</label>
                                 <InputText v-model.trim="form.dni" class="w-full" :disabled="loading" />
                             </div>
                             <div class="flex flex-col gap-2">
-                                <label class="font-semibold text-gray-700 dark:text-gray-200">Sexo</label>
+                                <label class="font-semibold text-color">Sexo</label>
                                 <Dropdown v-model="form.sexo" :options="sexos" optionLabel="label" optionValue="value" class="w-full" :disabled="loading" />
                             </div>
                             <div class="flex flex-col gap-2">
-                                <label class="font-semibold text-gray-700 dark:text-gray-200">Telefono</label>
+                                <label class="font-semibold text-color">Telefono</label>
                                 <InputText v-model.trim="form.telefono" class="w-full" :disabled="loading" />
                             </div>
                             <div class="flex flex-col gap-2">
-                                <label class="font-semibold text-gray-700 dark:text-gray-200">Tipo matricula</label>
+                                <label class="font-semibold text-color">Tipo matricula</label>
                                 <Dropdown v-model="form.matricula_tipo" :options="tiposMatricula" class="w-full" :disabled="loading" />
                             </div>
                             <div class="flex flex-col gap-2">
-                                <label class="font-semibold text-gray-700 dark:text-gray-200">Numero matricula</label>
+                                <label class="font-semibold text-color">Numero matricula</label>
                                 <InputText v-model.trim="form.matricula_numero" class="w-full" :disabled="loading" />
                             </div>
                             <div class="flex flex-col gap-2">
-                                <label class="font-semibold text-gray-700 dark:text-gray-200">Provincia matricula</label>
+                                <label class="font-semibold text-color">Provincia matricula</label>
                                 <InputText v-model.trim="form.matricula_provincia" class="w-full" :disabled="loading" />
                             </div>
                         </div>
 
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div class="flex flex-col gap-2">
-                                <label class="font-semibold text-gray-700 dark:text-gray-200">Lugar de atencion</label>
+                                <label class="font-semibold text-color">Lugar de atencion</label>
                                 <InputText v-model.trim="form.lugar_atencion_nombre" class="w-full" :disabled="loading" />
                             </div>
                             <div class="flex flex-col gap-2">
-                                <label class="font-semibold text-gray-700 dark:text-gray-200">Direccion de atencion</label>
+                                <label class="font-semibold text-color">Direccion de atencion</label>
                                 <InputText v-model.trim="form.lugar_atencion_direccion" placeholder="Calle y numero" class="w-full" :disabled="loading" />
                             </div>
                             <div class="flex flex-col gap-2">
-                                <label class="font-semibold text-gray-700 dark:text-gray-200">Contacto de atencion</label>
+                                <label class="font-semibold text-color">Contacto de atencion</label>
                                 <InputText v-model.trim="form.lugar_atencion_contacto" class="w-full" :disabled="loading" />
                             </div>
                             <div class="flex flex-col gap-2">
-                                <label class="font-semibold text-gray-700 dark:text-gray-200">Email de atencion</label>
+                                <label class="font-semibold text-color">Email de atencion</label>
                                 <InputText v-model.trim="form.lugar_atencion_email" type="email" class="w-full" :disabled="loading" />
                             </div>
                         </div>
                     </div>
                 </transition>
 
-                <div v-if="error" class="p-3 rounded-lg bg-red-100 text-red-700 text-center font-medium border border-red-200">{{ error }}</div>
-                <div v-if="ok" class="p-3 rounded-lg bg-green-100 text-green-700 text-center font-medium border border-green-200">{{ ok }}</div>
+                <div v-if="error" class="p-3 rounded-lg bg-status-sin-aviso-bg text-status-sin-aviso-fg text-center font-medium border border-status-sin-aviso-border">{{ error }}</div>
+                <div v-if="ok" class="p-3 rounded-lg bg-status-presente-bg text-status-presente-fg text-center font-medium border border-status-presente-border">{{ ok }}</div>
 
                 <div class="flex justify-center pt-4">
                     <Button type="submit" label="Crear Usuario" icon="pi pi-user-plus" class="w-full md:w-auto px-8 py-3 font-bold shadow-lg" :loading="loading" />

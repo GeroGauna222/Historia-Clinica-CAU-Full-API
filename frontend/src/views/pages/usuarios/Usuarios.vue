@@ -69,9 +69,9 @@ const eliminarUsuarioConfirmado = async () => {
 
 <template>
     <div class="p-6 md:p-8 w-full h-full">
-        <div class="bg-surface-0 dark:bg-surface-900 shadow-xl rounded-2xl p-6 transition-colors">
+        <div class="bg-card shadow-xl rounded-2xl p-6 transition-colors">
             <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
-                <h1 class="text-3xl font-bold text-gray-800 dark:text-white">Usuarios Registrados</h1>
+                <h1 class="text-3xl font-bold text-color">Usuarios Registrados</h1>
 
                 <div class="flex gap-2 w-full md:w-auto">
                     <IconField iconPosition="left" class="w-full md:w-64">
@@ -86,10 +86,10 @@ const eliminarUsuarioConfirmado = async () => {
             <div class="overflow-x-auto">
                 <DataTable :value="filtrados" paginator :rows="5" :rowsPerPageOptions="[5, 10, 20]" tableStyle="min-width: 50rem" stripedRows class="p-datatable-sm">
                     <template #empty>
-                        <div class="text-center p-4 text-gray-500">No se encontraron usuarios.</div>
+                        <div class="text-center p-4 text-muted-color">No se encontraron usuarios.</div>
                     </template>
 
-                    <Column field="nombre" header="Nombre" sortable class="font-bold text-gray-700 dark:text-gray-200"></Column>
+                    <Column field="nombre" header="Nombre" sortable class="font-bold text-color"></Column>
                     <Column field="username" header="Usuario" sortable></Column>
                     <Column field="email" header="Email" sortable></Column>
 
@@ -126,7 +126,7 @@ const eliminarUsuarioConfirmado = async () => {
         <Dialog v-model:visible="mostrarDialog" modal header="Confirmar acción" :style="{ width: '400px' }" :draggable="false">
             <div class="flex items-center gap-3 mb-4">
                 <i class="pi pi-exclamation-triangle text-orange-500 text-4xl"></i>
-                <span class="text-gray-700 dark:text-gray-300">
+                <span class="text-color">
                     Esta acción marcará al usuario <strong>{{ usuarioAEliminar?.username }}</strong> como inactivo. <br /><br />¿Estás seguro de continuar?
                 </span>
             </div>

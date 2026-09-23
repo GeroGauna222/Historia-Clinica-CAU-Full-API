@@ -82,7 +82,7 @@ async function onSubmit() {
 
 <template>
     <div class="flex justify-center items-start p-8">
-        <div class="bg-surface-0 dark:bg-surface-900 shadow-xl rounded-2xl p-8 w-full max-w-3xl transition-colors">
+        <div class="bg-card shadow-xl rounded-2xl p-8 w-full max-w-3xl transition-colors">
             <h1 class="text-3xl font-bold text-center mb-8 text-color">Editar usuario</h1>
 
             <form @submit.prevent="onSubmit" class="space-y-6">
@@ -118,7 +118,7 @@ async function onSubmit() {
                     </div>
                 </div>
 
-                <section v-if="rolPuedePrescribir()" class="space-y-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-100 dark:border-blue-800">
+                <section v-if="rolPuedePrescribir()" class="space-y-4 p-4 bg-highlight rounded-xl border border-surface">
                     <h2 class="text-lg font-semibold m-0 text-color">Datos para recetas electronicas</h2>
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div>
