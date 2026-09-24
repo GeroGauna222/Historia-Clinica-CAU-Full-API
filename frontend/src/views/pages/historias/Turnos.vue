@@ -1,14 +1,10 @@
 <script setup>
 import { ref, onMounted, onUnmounted, reactive, computed, watch } from 'vue';
 import FullCalendar from '@fullcalendar/vue3';
-import dayGridPlugin from '@fullcalendar/daygrid';
-import timeGridPlugin from '@fullcalendar/timegrid';
-import interactionPlugin from '@fullcalendar/interaction';
-import tippy from 'tippy.js';
-import 'tippy.js/dist/tippy.css';
 import api from '@/api/axios';
 import { fechaBonitaCompleta } from '@/utils/formatDate';
-import '@/assets/calendar-theme.css';
+import AgendaEvent from '@/components/agenda/AgendaEvent.vue';
+import { useAgendaCalendar } from '@/composables/useAgendaCalendar';
 
 import Dialog from 'primevue/dialog';
 import Button from 'primevue/button';
@@ -21,16 +17,6 @@ import Toast from 'primevue/toast';
 import { useToast } from 'primevue/usetoast';
 
 const toast = useToast();
-
-const esLocale = {
-    code: 'es',
-    week: { dow: 1, doy: 4 },
-    buttonText: { prev: 'Ant', next: 'Sig', today: 'Hoy', month: 'Mes', week: 'Semana', day: 'Dia', list: 'Agenda' },
-    weekText: 'Sm',
-    allDayText: 'Todo el dia',
-    moreLinkText: 'mas',
-    noEventsText: 'No hay eventos para mostrar'
-};
 
 const DIAS_INDEX = { Lunes: 1, Martes: 2, Miercoles: 3, Jueves: 4, Viernes: 5, Sabado: 6, Domingo: 0 };
 const TIPOS_EVENTO_AGENDA = [
@@ -246,8 +232,6 @@ function crearEventosNoDisponibilidad(disponibilidades) {
                 startTime: '00:00:00',
                 endTime: '23:59:59',
                 display: 'background',
-                classNames: ['no-disponible-background'],
-                backgroundColor: 'rgba(107, 114, 128, 0.22)',
                 extendedProps: { tipo: 'indisponible_bg' }
             });
             continue;
@@ -270,8 +254,6 @@ function crearEventosNoDisponibilidad(disponibilidades) {
                     startTime: minutosATiempo(cursor),
                     endTime: minutosATiempo(r.inicio, true),
                     display: 'background',
-                    classNames: ['no-disponible-background'],
-                    backgroundColor: 'rgba(107, 114, 128, 0.22)',
                     extendedProps: { tipo: 'indisponible_bg' }
                 });
             }
@@ -284,8 +266,6 @@ function crearEventosNoDisponibilidad(disponibilidades) {
                 startTime: minutosATiempo(cursor),
                 endTime: minutosATiempo(finDia, true),
                 display: 'background',
-                classNames: ['no-disponible-background'],
-                backgroundColor: 'rgba(107, 114, 128, 0.22)',
                 extendedProps: { tipo: 'indisponible_bg' }
             });
         }
@@ -294,20 +274,10 @@ function crearEventosNoDisponibilidad(disponibilidades) {
     return eventos;
 }
 
-const calendarOptions = reactive({
-    plugins: [dayGridPlugin, timeGridPlugin, interactionPlugin],
-    initialView: 'timeGridWeek',
-    locale: esLocale,
-    headerToolbar: { left: 'prev,next today', center: 'title', right: 'dayGridMonth,timeGridWeek,timeGridDay' },
-    slotMinTime: '07:00:00',
-    slotMaxTime: '22:00:00',
+const calendarOptions = useAgendaCalendar({
     slotDuration: '00:20:00',
     snapDuration: '00:20:00',
     slotLabelInterval: '00:20:00',
-    allDaySlot: false,
-    height: '100%',
-    slotEventOverlap: true,
-    eventOverlap: true,
     events: eventos,
     dateClick(info) {
         abrirModalNuevoTurno(info.date);
@@ -336,8 +306,8 @@ const calendarOptions = reactive({
             ausenciaId: e.extendedProps.ausenciaId,
             usuarioId: e.extendedProps.usuarioId,
             grupoId: e.extendedProps.grupoId,
-            creadoPorNombre: e.extendedProps.creadoPorNombre ?? e.extendedProps.creado_por_nombre,
-            creadoEn: e.extendedProps.creadoEn ?? e.extendedProps.creado_en,
+            creadoPorNombre: e.extendedProps.creadoPorNombre,
+            creadoEn: e.extendedProps.creadoEn,
             start: e.start,
             end: e.end
         };
@@ -354,51 +324,6 @@ const calendarOptions = reactive({
 
         editando.value = false;
         modalVisible.value = true;
-    },
-    eventDidMount(info) {
-        const tipo = info.event.extendedProps.tipo;
-        if (tipo === 'ausencia_bg' || tipo === 'indisponible_bg') return;
-
-        if (tipo === 'ausencia') {
-            const tipoEvento = info.event.extendedProps.tipoEvento || 'Bloqueo';
-            tippy(info.el, {
-                content: `<strong>${tipoEvento}</strong><br>${info.event.extendedProps.profesional || 'Profesional'}<br><span style="opacity:0.7">${info.event.extendedProps.description || ''}</span>`,
-                allowHTML: true,
-                placement: 'top',
-                theme: 'medical'
-            });
-            return;
-        }
-
-        const estadoAsistencia = info.event.extendedProps.estado_asistencia || (info.event.extendedProps.ausencia ? info.event.extendedProps.ausencia : 'programado');
-        if (estadoAsistencia === 'sin_aviso') {
-            info.el.style.setProperty('background-color', '#C0392B', 'important');
-            info.el.style.setProperty('border-color', '#C0392B', 'important');
-            info.el.style.setProperty('color', '#ffffff', 'important');
-        } else if (estadoAsistencia === 'con_aviso') {
-            info.el.style.setProperty('background-color', '#E67E22', 'important');
-            info.el.style.setProperty('border-color', '#E67E22', 'important');
-            info.el.style.setProperty('color', '#ffffff', 'important');
-        } else if (estadoAsistencia === 'presente') {
-            info.el.style.setProperty('background-color', '#059669', 'important');
-            info.el.style.setProperty('border-color', '#047857', 'important');
-            info.el.style.setProperty('color', '#ffffff', 'important');
-        }
-
-        const pacNombre = info.event.extendedProps.paciente || '';
-        const profNombre = info.event.extendedProps.profesional || '';
-        const motivo = info.event.extendedProps.description || '';
-        let prefix = '';
-        if (estadoAsistencia === 'sin_aviso') prefix = '[Falta Sin Aviso] ';
-        else if (estadoAsistencia === 'con_aviso') prefix = '[Falta Con Aviso] ';
-        else if (estadoAsistencia === 'presente') prefix = '[Presente] ';
-
-        tippy(info.el, {
-            content: `<strong>${prefix}${pacNombre}</strong><br>${profNombre}${motivo ? '<br><span style="opacity:0.7">' + motivo + '</span>' : ''}`,
-            allowHTML: true,
-            placement: 'top',
-            theme: 'medical'
-        });
     }
 });
 
@@ -450,10 +375,6 @@ function crearEventosAusencia(ausencia) {
             title: `${tipoEvento}: ${ausencia.nombre_usuario || 'Profesional'}`,
             start: ausencia.fecha_inicio,
             end: ausencia.fecha_fin,
-            backgroundColor: 'rgba(239,68,68,0.12)',
-            borderColor: '#EF4444',
-            textColor: '#991B1B',
-            classNames: ['evento-ausencia'],
             extendedProps: {
                 tipo: 'ausencia',
                 tipoEvento,
@@ -477,8 +398,6 @@ function crearEventosAusencia(ausencia) {
             display: 'background',
             start: toLocalDateTimeString(inicioDia),
             end: toLocalDateTimeString(finDia),
-            classNames: ['ausencia-background'],
-            backgroundColor: 'rgba(248, 113, 113, 0.15)',
             extendedProps: { tipo: 'ausencia_bg' }
         });
     }
@@ -489,23 +408,12 @@ function adaptarEventoTurno(t) {
     const tipo = t.tipo || 'individual';
     const esGrupal = tipo === 'grupal';
     const estadoAsistencia = t.estado_asistencia || (t.ausencia ? t.ausencia : 'programado');
-    let title = esGrupal ? `${t.grupo_nombre || t.profesional} (${t.paciente})` : t.paciente;
-    if (estadoAsistencia === 'sin_aviso') {
-        title = `[Falta Sin Aviso] ${title}`;
-    } else if (estadoAsistencia === 'con_aviso') {
-        title = `[Falta Con Aviso] ${title}`;
-    } else if (estadoAsistencia === 'presente') {
-        title = `[Presente] ${title}`;
-    }
+    const title = esGrupal ? `${t.grupo_nombre || t.profesional} (${t.paciente})` : t.paciente;
     return {
         id: t.id,
         title,
         start: t.start,
         end: t.end,
-        backgroundColor: esGrupal ? 'rgba(8,145,178,0.1)' : '#0891B2',
-        borderColor: esGrupal ? '#0891B2' : '#0E7490',
-        textColor: esGrupal ? '#134E4A' : '#ffffff',
-        classNames: esGrupal ? ['evento-grupal'] : ['evento-propio'],
         extendedProps: {
             tipo,
             turnoId: t.turnoId || t.id,
@@ -522,7 +430,8 @@ function adaptarEventoTurno(t) {
             creadoPorNombre: t.creado_por_nombre,
             creadoEn: t.creado_en,
             editable: Boolean(t.editable) && !esGrupal,
-            grupoId: t.grupo_id
+            grupoId: t.grupo_id,
+            grupoNombre: t.grupo_nombre
         }
     };
 }
@@ -752,23 +661,30 @@ onUnmounted(() => {
 
         <!-- Leyenda -->
         <div class="flex items-center gap-4 mb-4 flex-wrap">
-            <span class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#0891B2]/10 text-[#0891B2] dark:bg-cyan-900/30 dark:text-cyan-300 text-xs font-medium">
-                <span class="w-2.5 h-2.5 rounded-full bg-[#0891B2] inline-block"></span> Individual
+            <span class="evt evt-programado inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium" style="color: var(--evt-fg); background: var(--evt-bg)">
+                <span class="w-2.5 h-2.5 rounded-full inline-block" style="background: var(--evt-bar)"></span> Individual
             </span>
-            <span class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#0891B2]/5 border border-dashed border-[#0891B2] text-[#0891B2] dark:border-cyan-400 dark:text-cyan-300 text-xs font-medium">
-                <span class="w-2.5 h-2.5 rounded-full border-2 border-dashed border-[#0891B2] dark:border-cyan-400 inline-block"></span> Grupal
+            <span
+                class="evt evt-programado evt-grupal inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-dashed text-xs font-medium"
+                style="color: var(--evt-fg); background: color-mix(in srgb, var(--evt-bg) 50%, transparent); border-color: var(--evt-bar)"
+            >
+                <span class="w-2.5 h-2.5 rounded-full border-2 border-dashed inline-block" style="border-color: var(--evt-bar)"></span> Grupal
             </span>
-            <span class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400 text-xs font-medium">
-                <span class="w-2.5 h-2.5 rounded-full bg-red-400 dark:bg-red-500 inline-block"></span> Ausencia
+            <span class="evt evt-ausencia inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium" style="color: var(--evt-fg); background: var(--evt-bg)">
+                <span class="w-2.5 h-2.5 rounded-full inline-block" style="background: var(--evt-bar)"></span> Ausencia
             </span>
-            <span class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400 text-xs font-medium">
-                <span class="w-2.5 h-2.5 rounded-full bg-slate-300 dark:bg-slate-600 inline-block"></span> No disponible
+            <span class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium" style="color: var(--p-text-muted-color); background: var(--p-content-hover-background)">
+                <span class="w-2.5 h-2.5 rounded-full inline-block agenda-swatch-unavailable"></span> No disponible
             </span>
         </div>
 
         <!-- Calendar container -->
-        <div class="flex-1 bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-[#E0F2FE] dark:border-slate-700 p-4 overflow-hidden transition-colors">
-            <FullCalendar :options="calendarOptions" class="h-full" />
+        <div class="flex-1 bg-[var(--p-content-background)] rounded-2xl shadow-sm border border-[var(--p-content-border-color)] p-4 overflow-hidden transition-colors">
+            <FullCalendar :options="calendarOptions" class="h-full">
+                <template #eventContent="arg">
+                    <AgendaEvent :arg="arg" />
+                </template>
+            </FullCalendar>
         </div>
 
         <!-- Modal: Nuevo turno -->
@@ -1050,8 +966,3 @@ onUnmounted(() => {
         </Dialog>
     </div>
 </template>
-
-<style scoped>
-/* Calendar Medical Clean theme is loaded from @/assets/calendar-medical.css */
-/* Only view-specific overrides go here */
-</style>
