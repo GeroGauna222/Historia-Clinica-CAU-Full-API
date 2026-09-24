@@ -6,7 +6,7 @@ import timeGridPlugin from '@fullcalendar/timegrid';
 import interactionPlugin from '@fullcalendar/interaction';
 import api from '@/api/axios';
 import { fechaBonitaCompleta } from '@/utils/formatDate';
-import '@/assets/calendar-medical.css';
+import '@/assets/calendar-theme.css';
 
 import Dialog from 'primevue/dialog';
 import Button from 'primevue/button';

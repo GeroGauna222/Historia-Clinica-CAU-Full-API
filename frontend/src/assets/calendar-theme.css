@@ -1,0 +1,358 @@
+/*
+ * Agenda calendar theme (FullCalendar 5.11 + AgendaEvent + tippy "agenda").
+ * Colors come only from PrimeVue --p-* tokens and --cau-status-* tokens (src/theme/status.css),
+ * so light and dark mode follow .app-dark automatically.
+ */
+
+/* ---------- FullCalendar chrome ---------- */
+.fc {
+    --fc-border-color: var(--p-content-border-color);
+    --fc-page-bg-color: var(--p-content-background);
+    --fc-neutral-bg-color: var(--p-app-subtle-background);
+    --fc-neutral-text-color: var(--p-text-muted-color);
+    --fc-today-bg-color: color-mix(in srgb, var(--p-primary-color) 6%, transparent);
+    --fc-non-business-color: color-mix(in srgb, var(--p-text-muted-color) 8%, transparent);
+    --fc-highlight-color: color-mix(in srgb, var(--p-primary-color) 14%, transparent);
+    --fc-now-indicator-color: var(--cau-status-sin-aviso-fg);
+    --fc-bg-event-opacity: 1;
+    --fc-more-link-bg-color: var(--p-highlight-background);
+    --fc-more-link-text-color: var(--p-highlight-color);
+    --fc-small-font-size: 0.75rem;
+    --fc-event-bg-color: var(--p-highlight-background);
+    --fc-event-border-color: var(--p-primary-color);
+    --fc-event-text-color: var(--p-text-color);
+    --fc-event-selected-overlay-color: color-mix(in srgb, var(--p-text-color) 12%, transparent);
+    --fc-button-text-color: var(--p-text-color);
+    --fc-button-bg-color: var(--p-content-background);
+    --fc-button-border-color: var(--p-content-border-color);
+    --fc-button-hover-bg-color: var(--p-content-hover-background);
+    --fc-button-hover-border-color: var(--p-content-border-color);
+    --fc-button-active-bg-color: var(--p-primary-color);
+    --fc-button-active-border-color: var(--p-primary-color);
+    color: var(--p-text-color);
+    font-size: 0.875rem;
+}
+
+.fc .fc-toolbar.fc-header-toolbar {
+    margin-bottom: 1rem;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.fc .fc-toolbar-title {
+    font-size: 1.125rem;
+    font-weight: 600;
+    text-transform: capitalize;
+    color: var(--p-text-color);
+}
+
+.fc .fc-button {
+    border-radius: 8px;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    padding: 0.375rem 0.75rem;
+    box-shadow: none;
+}
+
+.fc .fc-button-primary:not(:disabled).fc-button-active,
+.fc .fc-button-primary:not(:disabled):active {
+    color: var(--p-primary-contrast-color);
+}
+
+.fc .fc-button-primary:focus,
+.fc .fc-button-primary:not(:disabled).fc-button-active:focus,
+.fc .fc-button-primary:not(:disabled):active:focus {
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--p-primary-color) 35%, transparent);
+}
+
+.fc .fc-button-primary:disabled {
+    color: var(--p-text-muted-color);
+    opacity: 0.6;
+}
+
+.fc .fc-col-header-cell-cushion {
+    color: var(--p-text-muted-color);
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    padding: 6px 4px;
+}
+
+.fc .fc-timegrid-slot-label-cushion,
+.fc .fc-timegrid-axis-cushion {
+    color: var(--p-text-muted-color);
+    font-size: 0.75rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.fc .fc-daygrid-day-number {
+    color: var(--p-text-color);
+    font-size: 0.8125rem;
+}
+
+.fc .fc-day-today .fc-daygrid-day-number,
+.fc .fc-day-today .fc-col-header-cell-cushion {
+    color: var(--p-primary-color);
+    font-weight: 700;
+}
+
+/* ---------- Event status variables (set on the FullCalendar event root) ---------- */
+.evt {
+    --evt-fg: var(--p-primary-color);
+    --evt-bg: var(--p-highlight-background);
+    --evt-bar: var(--evt-fg);
+}
+
+.evt-presente {
+    --evt-fg: var(--cau-status-presente-fg);
+    --evt-bg: var(--cau-status-presente-bg);
+}
+
+.evt-con-aviso {
+    --evt-fg: var(--cau-status-con-aviso-fg);
+    --evt-bg: var(--cau-status-con-aviso-bg);
+}
+
+.evt-sin-aviso {
+    --evt-fg: var(--cau-status-sin-aviso-fg);
+    --evt-bg: var(--cau-status-sin-aviso-bg);
+}
+
+.evt-ausencia {
+    --evt-fg: var(--p-text-muted-color);
+    --evt-bg: var(--p-content-hover-background);
+    --evt-bar: var(--cau-status-sin-aviso-border);
+}
+
+/* The card draws the visuals; the FullCalendar root stays transparent. */
+.fc .fc-event.evt,
+.fc .fc-event.evt:hover {
+    background: transparent;
+    border-color: transparent;
+}
+
+.fc .fc-event.evt .fc-event-main {
+    padding: 0;
+    color: inherit;
+}
+
+/* The Vue slot mounts inside an artificial <span>; make it fill the event box. */
+.fc .fc-event.evt > span,
+.fc .fc-event.evt .fc-event-main > span,
+.fc .fc-bg-event.bg-hatch > span {
+    display: block;
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+}
+
+/* ---------- AgendaEvent card ---------- */
+.evt-card {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    height: 100%;
+    min-width: 0;
+    padding: 2px 6px 2px 8px;
+    border-left: 4px solid var(--evt-bar);
+    border-radius: 6px;
+    background: var(--evt-bg);
+    color: var(--p-text-color);
+    font-size: 0.75rem;
+    line-height: 1.25;
+    overflow: hidden;
+    cursor: pointer;
+}
+
+.evt-line {
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+    min-width: 0;
+    white-space: nowrap;
+}
+
+.evt-time {
+    flex: none;
+    color: var(--evt-fg);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.evt-icon {
+    flex: none;
+    color: var(--evt-fg);
+    font-size: 0.6875rem;
+}
+
+.evt-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 600;
+}
+
+.evt-name--struck {
+    text-decoration: line-through;
+    text-decoration-thickness: 1px;
+    text-decoration-color: color-mix(in srgb, var(--evt-fg) 60%, transparent);
+}
+
+.evt-detail {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--p-text-muted-color);
+}
+
+/* Month view: compact single line with a status dot. */
+.evt-card--month {
+    flex-direction: row;
+    align-items: center;
+    gap: 4px;
+    padding: 1px 4px;
+    border-left: 0;
+    background: transparent;
+}
+
+.evt-dot {
+    flex: none;
+    width: 8px;
+    height: 8px;
+    border-radius: 9999px;
+    background: var(--evt-bar);
+}
+
+.fc .fc-daygrid-dot-event.evt:hover {
+    background: var(--p-content-hover-background);
+}
+
+/* ---------- "+N" links and popover ---------- */
+.fc .fc-timegrid-more-link {
+    background: var(--fc-more-link-bg-color);
+    color: var(--fc-more-link-text-color);
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.fc .fc-daygrid-more-link {
+    color: var(--p-primary-color);
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.fc .fc-popover {
+    background: var(--p-overlay-popover-background, var(--p-content-background));
+    border: 1px solid var(--p-content-border-color);
+    border-radius: 10px;
+    box-shadow: 0 10px 30px color-mix(in srgb, var(--p-text-color) 18%, transparent);
+    overflow: hidden;
+    z-index: 20;
+}
+
+.fc .fc-popover-header {
+    background: var(--p-app-subtle-background);
+    color: var(--p-text-color);
+    font-weight: 600;
+    padding: 6px 10px;
+}
+
+.fc .fc-popover-close {
+    color: var(--p-text-muted-color);
+    opacity: 1;
+}
+
+.fc .fc-more-popover .fc-popover-body {
+    min-width: 240px;
+    max-height: 320px;
+    overflow-y: auto;
+    padding: 6px;
+}
+
+.fc .fc-more-popover .fc-daygrid-event.evt {
+    margin: 2px 0;
+}
+
+.fc .fc-more-popover .evt-card {
+    height: auto;
+}
+
+/* ---------- Background layers ---------- */
+.fc .fc-bg-event.bg-hatch {
+    opacity: 1;
+}
+
+.fc .fc-bg-event.bg-hatch-unavailable,
+.agenda-swatch-unavailable {
+    background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--p-text-muted-color) 16%, transparent) 0 6px, transparent 6px 12px);
+}
+
+.fc .fc-bg-event.bg-hatch-absence,
+.agenda-swatch-absence {
+    background: repeating-linear-gradient(
+        135deg,
+        color-mix(in srgb, var(--cau-status-sin-aviso-fg) 16%, transparent) 0 6px,
+        color-mix(in srgb, var(--cau-status-sin-aviso-fg) 5%, transparent) 6px 12px
+    );
+}
+
+.bg-hatch-label {
+    display: block;
+    padding: 4px 6px;
+    color: var(--cau-status-sin-aviso-fg);
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.bg-hatch-label:empty {
+    display: none;
+}
+
+/* ---------- Tooltip (tippy theme "agenda", appended to <body>) ---------- */
+.tippy-box[data-theme~='agenda'] {
+    background: var(--p-overlay-popover-background, var(--p-content-background));
+    color: var(--p-text-color);
+    border: 1px solid var(--p-content-border-color);
+    border-radius: 8px;
+    box-shadow: 0 8px 24px color-mix(in srgb, var(--p-text-color) 16%, transparent);
+    font-size: 0.8125rem;
+    line-height: 1.45;
+}
+
+.tippy-box[data-theme~='agenda'] > .tippy-content {
+    padding: 8px 10px;
+}
+
+.tippy-box[data-theme~='agenda'] > .tippy-arrow {
+    color: var(--p-overlay-popover-background, var(--p-content-background));
+}
+
+.tippy-box[data-theme~='agenda'] strong {
+    color: var(--p-text-color);
+}
+
+.agenda-tip-muted {
+    color: var(--p-text-muted-color);
+}
+
+.agenda-tip-status {
+    font-weight: 600;
+    color: var(--p-primary-color);
+}
+
+.agenda-tip-status--presente {
+    color: var(--cau-status-presente-fg);
+}
+
+.agenda-tip-status--con-aviso {
+    color: var(--cau-status-con-aviso-fg);
+}
+
+.agenda-tip-status--sin-aviso {
+    color: var(--cau-status-sin-aviso-fg);
+}

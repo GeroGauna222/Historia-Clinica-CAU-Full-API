@@ -9,7 +9,7 @@ import tippy from 'tippy.js';
 import 'tippy.js/dist/tippy.css';
 import api from '@/api/axios';
 import { fechaBonitaCompleta } from '@/utils/formatDate';
-import '@/assets/calendar-medical.css';
+import '@/assets/calendar-theme.css';
 
 import Dialog from 'primevue/dialog';
 import Button from 'primevue/button';

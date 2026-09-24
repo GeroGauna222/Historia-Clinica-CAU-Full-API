@@ -9,6 +9,7 @@ import timeGridPlugin from '@fullcalendar/timegrid';
 import interactionPlugin from '@fullcalendar/interaction';
 import tippy from 'tippy.js';
 import 'tippy.js/dist/tippy.css';
+import '@/assets/calendar-theme.css';
 import { eventClassNames, eventStatus, formatTime, isAusencia, isBackgroundEvent, statusLabel } from '@/components/agenda/agendaEventStyle';
 
 export const AGENDA_LOCALE = {
