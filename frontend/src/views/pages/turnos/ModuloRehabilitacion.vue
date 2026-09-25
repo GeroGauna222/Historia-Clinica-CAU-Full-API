@@ -208,7 +208,9 @@ function mapEvento(t) {
         start: t.start,
         end: t.end,
         extendedProps: {
-            tipo: 'turno_grupal',
+            // No grupal tipo here on purpose: Rehab cards show motivo on line 2 and no
+            // pi-users icon (spec 2.1/2.5). The group is identified only by the left bar
+            // color, via grupoColor below. grupoNombre still feeds the tooltip/detail modal.
             turnoId: t.id,
             grupo_id: t.grupo_id,
             grupoNombre: t.grupo_nombre,

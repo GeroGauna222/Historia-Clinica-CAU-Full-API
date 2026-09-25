@@ -42,6 +42,13 @@ describe('AgendaEvent', () => {
         expect(wrapper.find('.evt-detail').text()).toBe('Kinesiología');
     });
 
+    it('shows the motivo, not the group name or icon, for a Rehab-shaped event with a group color but no grupal tipo', () => {
+        const wrapper = mountEvent({ tipo: undefined, grupoNombre: 'Kinesiología', grupoColor: '#059669', description: 'Sesión de kinesio' });
+        expect(wrapper.find('.pi-users').exists()).toBe(false);
+        expect(wrapper.find('.evt-detail').text()).toBe('Sesión de kinesio');
+        expect(wrapper.find('.evt-card').element.style.getPropertyValue('--evt-bar')).toBe('#059669');
+    });
+
     it('includes the status label in the aria-label', () => {
         const wrapper = mountEvent({ estado_asistencia: 'presente' });
         const label = wrapper.find('.evt-card').attributes('aria-label');
