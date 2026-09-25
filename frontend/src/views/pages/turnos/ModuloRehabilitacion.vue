@@ -1,12 +1,10 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue';
 import FullCalendar from '@fullcalendar/vue3';
-import dayGridPlugin from '@fullcalendar/daygrid';
-import timeGridPlugin from '@fullcalendar/timegrid';
-import interactionPlugin from '@fullcalendar/interaction';
 import api from '@/api/axios';
 import { fechaBonitaCompleta } from '@/utils/formatDate';
-import '@/assets/calendar-theme.css';
+import AgendaEvent from '@/components/agenda/AgendaEvent.vue';
+import { useAgendaCalendar } from '@/composables/useAgendaCalendar';
 
 import Dialog from 'primevue/dialog';
 import Button from 'primevue/button';
@@ -118,16 +116,6 @@ const edit = reactive({
 const guardandoEdit = ref(false);
 const eliminando = ref(false);
 
-const esLocale = {
-    code: 'es',
-    week: { dow: 1, doy: 4 },
-    buttonText: { prev: 'Ant', next: 'Sig', today: 'Hoy', month: 'Mes', week: 'Semana', day: 'Dia', list: 'Agenda' },
-    weekText: 'Sm',
-    allDayText: 'Todo el dia',
-    moreLinkText: 'mas',
-    noEventsText: 'No hay eventos para mostrar'
-};
-
 function pad(n) {
     return String(n).padStart(2, '0');
 }
@@ -165,15 +153,7 @@ function canEdit() {
     return ['director', 'administrativo', 'area'].includes((rolUsuario.value || '').toLowerCase().trim());
 }
 
-const calendarOptions = reactive({
-    plugins: [dayGridPlugin, timeGridPlugin, interactionPlugin],
-    initialView: 'timeGridWeek',
-    locale: esLocale,
-    headerToolbar: { left: 'prev,next today', center: 'title', right: 'dayGridMonth,timeGridWeek,timeGridDay' },
-    slotMinTime: '07:00:00',
-    slotMaxTime: '22:00:00',
-    allDaySlot: false,
-    height: '100%',
+const calendarOptions = useAgendaCalendar({
     events: eventos,
     dateClick(info) {
         if (!canEdit()) return;
@@ -196,7 +176,7 @@ const calendarOptions = reactive({
         seleccionado.value = {
             id: info.event.extendedProps.turnoId || info.event.id,
             turnoId: info.event.extendedProps.turnoId,
-            grupo_nombre: info.event.extendedProps.grupo_nombre,
+            grupo_nombre: info.event.extendedProps.grupoNombre,
             paciente: info.event.extendedProps.paciente,
             dni: info.event.extendedProps.dni,
             cobertura: info.event.extendedProps.cobertura,
@@ -207,78 +187,32 @@ const calendarOptions = reactive({
             ausencia: info.event.extendedProps.ausencia,
             estado_asistencia: info.event.extendedProps.estado_asistencia || (info.event.extendedProps.ausencia ? info.event.extendedProps.ausencia : 'programado'),
             editable: Boolean(info.event.extendedProps.editable),
-            creadoPorNombre: info.event.extendedProps.creado_por_nombre,
-            creadoEn: info.event.extendedProps.creado_en,
+            creadoPorNombre: info.event.extendedProps.creadoPorNombre,
+            creadoEn: info.event.extendedProps.creadoEn,
             start: info.event.start,
             end: info.event.end
         };
         detalleVisible.value = true;
-    },
-    eventDidMount(info) {
-        const estadoAsistencia = info.event.extendedProps.estado_asistencia || (info.event.extendedProps.ausencia ? info.event.extendedProps.ausencia : 'programado');
-        if (estadoAsistencia === 'sin_aviso') {
-            info.el.style.setProperty('background-color', '#C0392B', 'important');
-            info.el.style.setProperty('border-color', '#C0392B', 'important');
-            info.el.style.setProperty('color', '#ffffff', 'important');
-            return;
-        } else if (estadoAsistencia === 'con_aviso') {
-            info.el.style.setProperty('background-color', '#E67E22', 'important');
-            info.el.style.setProperty('border-color', '#E67E22', 'important');
-            info.el.style.setProperty('color', '#ffffff', 'important');
-            return;
-        } else if (estadoAsistencia === 'presente') {
-            info.el.style.setProperty('background-color', '#059669', 'important');
-            info.el.style.setProperty('border-color', '#047857', 'important');
-            info.el.style.setProperty('color', '#ffffff', 'important');
-            return;
-        }
-
-        // calendar-medical.css fuerza el color de .evento-rehab con !important;
-        // se pisa con !important inline para respetar el color propio de cada grupo.
-        const color = info.event.extendedProps.color;
-        if (!color) return;
-        info.el.style.setProperty('background-color', hexToRgba(color, 0.12), 'important');
-        info.el.style.setProperty('border-color', color, 'important');
-        info.el.style.setProperty('color', color, 'important');
     }
 });
 
+// The one place a hex literal legitimately remains: a JS fallback value passed through
+// extendedProps.grupoColor, not a CSS/style literal, so it is outside the token guard's scope.
 const REHAB_COLOR_DEFAULT = '#059669';
 
-function hexToRgba(hex, alpha) {
-    const clean = (hex || '').replace('#', '');
-    if (!/^[0-9a-f]{6}$/i.test(clean)) return null;
-    const r = parseInt(clean.slice(0, 2), 16);
-    const g = parseInt(clean.slice(2, 4), 16);
-    const b = parseInt(clean.slice(4, 6), 16);
-    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
-
 function mapEvento(t) {
-    const color = t.color || REHAB_COLOR_DEFAULT;
     const estadoAsistencia = t.estado_asistencia || (t.ausencia ? t.ausencia : 'programado');
-    let title = `${t.grupo_nombre}: ${t.paciente}`;
-    if (estadoAsistencia === 'sin_aviso') {
-        title = `[Falta Sin Aviso] ${title}`;
-    } else if (estadoAsistencia === 'con_aviso') {
-        title = `[Falta Con Aviso] ${title}`;
-    } else if (estadoAsistencia === 'presente') {
-        title = `[Presente] ${title}`;
-    }
     return {
         id: `rehab-${t.id}`,
-        title,
+        title: t.paciente,
         start: t.start,
         end: t.end,
-        backgroundColor: estadoAsistencia === 'presente' ? '#059669' : hexToRgba(color, 0.12) || hexToRgba(REHAB_COLOR_DEFAULT, 0.12),
-        borderColor: estadoAsistencia === 'presente' ? '#047857' : color,
-        textColor: estadoAsistencia === 'presente' ? '#ffffff' : color,
-        classNames: ['evento-rehab'],
         extendedProps: {
+            tipo: 'turno_grupal',
             turnoId: t.id,
             grupo_id: t.grupo_id,
-            grupo_nombre: t.grupo_nombre,
-            color,
+            grupoNombre: t.grupo_nombre,
+            grupoColor: t.color || REHAB_COLOR_DEFAULT,
             paciente: t.paciente,
             dni: t.dni,
             cobertura: t.cobertura,
@@ -288,8 +222,8 @@ function mapEvento(t) {
             ausencia: t.ausencia,
             estado_asistencia: estadoAsistencia,
             paciente_id: t.paciente_id,
-            creado_por_nombre: t.creado_por_nombre,
-            creado_en: t.creado_en,
+            creadoPorNombre: t.creado_por_nombre,
+            creadoEn: t.creado_en,
             editable: Boolean(t.editable)
         }
     };
@@ -465,8 +399,12 @@ onMounted(async () => {
         </div>
 
         <!-- Calendar container -->
-        <div class="flex-1 bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-[#E0F2FE] dark:border-slate-700 p-4 overflow-hidden transition-colors">
-            <FullCalendar :options="calendarOptions" class="h-full" />
+        <div class="flex-1 bg-[var(--p-content-background)] rounded-2xl shadow-sm border border-[var(--p-content-border-color)] p-4 overflow-hidden transition-colors">
+            <FullCalendar :options="calendarOptions" class="h-full">
+                <template #eventContent="arg">
+                    <AgendaEvent :arg="arg" />
+                </template>
+            </FullCalendar>
         </div>
 
         <!-- Modal: Nuevo turno grupal rehab -->
@@ -726,7 +664,3 @@ onMounted(async () => {
         </Dialog>
     </div>
 </template>
-
-<style scoped>
-/* Calendar Medical Clean theme is loaded from @/assets/calendar-medical.css */
-</style>
