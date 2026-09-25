@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { isReactive } from 'vue';
+import { isReactive, watchEffect } from 'vue';
 
 vi.mock('tippy.js', () => ({ default: vi.fn() }));
 
@@ -54,11 +54,20 @@ describe('useAgendaCalendar', () => {
         expect(options.locale.code).toBe('es');
     });
 
-    it('returns a reactive object so views can rebind options', () => {
+    it('is reactive, so mutating an option is observed by effects (what lets FullCalendar/Vue rebind options)', () => {
         const options = useAgendaCalendar();
         expect(isReactive(options)).toBe(true);
-        options.slotDuration = '00:15:00';
-        expect(options.slotDuration).toBe('00:15:00');
+
+        let observed;
+        const stop = watchEffect(
+            () => {
+                observed = options.slotMinTime;
+            },
+            { flush: 'sync' }
+        );
+        options.slotMinTime = '08:00:00';
+        expect(observed).toBe('08:00:00');
+        stop();
     });
 
     it('delegates eventClassNames to the style helpers', () => {
