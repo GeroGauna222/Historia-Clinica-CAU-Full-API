@@ -130,7 +130,8 @@ def _alinear_turno_individual(usuario_id, fecha_inicio_raw):
         return None, None, None, "Formato de fecha invalido"
 
     duracion = _obtener_duracion_turno(usuario_id)
-    inicio_ajustado = _ceil_to_slot(inicio_original, duracion)
+    # Individual appointments keep the chosen start; only seconds are dropped.
+    inicio_ajustado = inicio_original.replace(second=0, microsecond=0)
     fin_ajustado = inicio_ajustado + timedelta(minutes=duracion)
     ajuste = _build_ajuste_payload(inicio_ajustado != inicio_original, inicio_original, inicio_ajustado, fin_ajustado)
     return inicio_ajustado, fin_ajustado, ajuste, None

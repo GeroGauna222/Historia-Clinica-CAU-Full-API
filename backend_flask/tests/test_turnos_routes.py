@@ -109,6 +109,17 @@ def test_medico_disponible_considera_solape_general_con_ausencias(monkeypatch):
     assert params_ausencias == (7, "2026-03-26T10:30:00", "2026-03-26T10:00:00")
 
 
+def test_alinear_turno_individual_no_corre_el_inicio(monkeypatch):
+    monkeypatch.setattr(turnos_routes, "_obtener_duracion_turno", lambda usuario_id: 20)
+
+    inicio, fin, ajuste, error = turnos_routes._alinear_turno_individual(7, "2026-03-20T08:30:00")
+
+    assert error is None
+    assert ajuste is None
+    assert inicio == datetime(2026, 3, 20, 8, 30)
+    assert fin == datetime(2026, 3, 20, 8, 50)
+
+
 def test_alinear_turno_grupal_respeta_media_hora():
     inicio, fin, ajuste, error = turnos_routes._alinear_turno_grupal("2026-03-20T08:30:00")
 
