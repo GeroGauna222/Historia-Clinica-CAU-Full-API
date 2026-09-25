@@ -664,11 +664,8 @@ onUnmounted(() => {
             <span class="evt evt-programado inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium" style="color: var(--evt-fg); background: var(--evt-bg)">
                 <span class="w-2.5 h-2.5 rounded-full inline-block" style="background: var(--evt-bar)"></span> Individual
             </span>
-            <span
-                class="evt evt-programado evt-grupal inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-dashed text-xs font-medium"
-                style="color: var(--evt-fg); background: color-mix(in srgb, var(--evt-bg) 50%, transparent); border-color: var(--evt-bar)"
-            >
-                <span class="w-2.5 h-2.5 rounded-full border-2 border-dashed inline-block" style="border-color: var(--evt-bar)"></span> Grupal
+            <span class="evt evt-programado inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium" style="color: var(--evt-fg); background: var(--evt-bg)">
+                <i class="pi pi-users" style="color: var(--evt-fg); font-size: 0.6875rem" aria-hidden="true"></i> Grupal
             </span>
             <span class="evt evt-ausencia inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium" style="color: var(--evt-fg); background: var(--evt-bg)">
                 <span class="w-2.5 h-2.5 rounded-full inline-block" style="background: var(--evt-bar)"></span> Ausencia
