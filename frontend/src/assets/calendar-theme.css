@@ -14,7 +14,6 @@
     --fc-non-business-color: color-mix(in srgb, var(--p-text-muted-color) 8%, transparent);
     --fc-highlight-color: color-mix(in srgb, var(--p-primary-color) 14%, transparent);
     --fc-now-indicator-color: var(--cau-status-sin-aviso-fg);
-    --fc-bg-event-opacity: 1;
     --fc-more-link-bg-color: var(--p-highlight-background);
     --fc-more-link-text-color: var(--p-highlight-color);
     --fc-small-font-size: 0.75rem;
@@ -102,6 +101,9 @@
     --evt-fg: var(--p-primary-color);
     --evt-bg: var(--p-highlight-background);
     --evt-bar: var(--evt-fg);
+    /* Month-view dot: always the status color, even when --evt-bar is overridden
+       inline with a group color (Rehab). Kept separate from --evt-bar on purpose. */
+    --evt-dot: var(--evt-fg);
 }
 
 .evt-presente {
@@ -123,6 +125,7 @@
     --evt-fg: var(--p-text-muted-color);
     --evt-bg: var(--p-content-hover-background);
     --evt-bar: var(--cau-status-sin-aviso-border);
+    --evt-dot: var(--cau-status-sin-aviso-border);
 }
 
 /* The card draws the visuals; the FullCalendar root stays transparent. */
@@ -222,7 +225,7 @@
     width: 8px;
     height: 8px;
     border-radius: 9999px;
-    background: var(--evt-bar);
+    background: var(--evt-dot);
 }
 
 .fc .fc-daygrid-dot-event.evt:hover {
@@ -248,9 +251,14 @@
     background: var(--p-overlay-popover-background, var(--p-content-background));
     border: 1px solid var(--p-content-border-color);
     border-radius: 10px;
-    box-shadow: 0 10px 30px color-mix(in srgb, var(--p-text-color) 18%, transparent);
+    box-shadow: 0 10px 30px color-mix(in srgb, black 18%, transparent);
     overflow: hidden;
     z-index: 20;
+}
+
+/* Dark surfaces already provide contrast; a shadow this size only needs to be a soft cue. */
+:root.app-dark .fc .fc-popover {
+    box-shadow: 0 10px 20px color-mix(in srgb, black 40%, transparent);
 }
 
 .fc .fc-popover-header {
@@ -319,9 +327,14 @@
     color: var(--p-text-color);
     border: 1px solid var(--p-content-border-color);
     border-radius: 8px;
-    box-shadow: 0 8px 24px color-mix(in srgb, var(--p-text-color) 16%, transparent);
+    box-shadow: 0 8px 24px color-mix(in srgb, black 16%, transparent);
     font-size: 0.8125rem;
     line-height: 1.45;
+}
+
+/* Dark surfaces already provide contrast; a shadow this size only needs to be a soft cue. */
+:root.app-dark .tippy-box[data-theme~='agenda'] {
+    box-shadow: 0 8px 16px color-mix(in srgb, black 35%, transparent);
 }
 
 .tippy-box[data-theme~='agenda'] > .tippy-content {
