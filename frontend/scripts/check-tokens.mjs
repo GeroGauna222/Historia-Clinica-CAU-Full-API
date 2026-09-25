@@ -6,7 +6,10 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 export const ROOTS = ['src/views', 'src/layout', 'src/components'];
 
-// Spec 2 (appointment calendar) files, until Spec 2 lands.
+// Spec 2 (appointment calendar) files. Their calendar core (options, event mapping,
+// legend, event rendering) now uses semantic tokens via useAgendaCalendar/AgendaEvent;
+// this allowlist remains only for other markup in these files (dialogs, headers, etc.)
+// that still has hardcoded hex Tailwind arbitrary values outside this change's scope.
 export const ALLOWLIST = new Set(['src/views/pages/historias/Turnos.vue', 'src/views/pages/turnos/CalendarioGrupo.vue', 'src/views/pages/turnos/ModuloRehabilitacion.vue']);
 
 const CLASS_RULES = [
