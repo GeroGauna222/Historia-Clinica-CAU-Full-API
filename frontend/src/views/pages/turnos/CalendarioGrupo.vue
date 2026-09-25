@@ -76,7 +76,7 @@ async function guardarAsistenciaTurno(estado) {
 }
 
 const modalNuevoVisible = ref(false);
-const DURACION_GRUPAL_DEFAULT = 20;
+const DURACION_GRUPAL_DEFAULT = 30;
 const DIAS_TANDA = [
     { value: 0, label: 'Lun' },
     { value: 1, label: 'Mar' },

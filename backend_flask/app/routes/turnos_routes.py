@@ -14,7 +14,7 @@ bp_turnos = Blueprint("turnos", __name__)
 TZ_ARG = timezone(timedelta(hours=-3))
 ROLES_TURNOS = ("director", "profesional", "administrativo", "area")
 ROLES_TURNOS_GRUPALES = ("director", "administrativo", "area")
-GROUP_SLOT_MINUTES = 20
+GROUP_SLOT_MINUTES = 30
 WEEKDAY_NAME_TO_INDEX = {
     "lunes": 0,
     "lun": 0,
