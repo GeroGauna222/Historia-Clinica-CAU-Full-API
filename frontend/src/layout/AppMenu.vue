@@ -46,6 +46,11 @@ const model = computed(() => {
             items: [{ label: 'Electronicas', icon: 'pi pi-fw pi-file-edit', to: '/recetas' }]
         },
         {
+            label: 'Presupuestos',
+            visible: ['director', 'administrativo'].includes(userStore.rol?.toLowerCase().trim()),
+            items: [{ label: 'Generador', icon: 'pi pi-fw pi-calculator', to: '/presupuestos' }]
+        },
+        {
             label: 'Turnos',
             items: [
                 { label: 'Agenda', icon: 'pi pi-fw pi-calendar', to: '/turnos' },

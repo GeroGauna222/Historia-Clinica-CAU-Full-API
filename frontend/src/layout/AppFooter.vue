@@ -46,4 +46,10 @@
     color: var(--p-primary-color);
     font-weight: 600;
 }
+
+@media print {
+    .app-footer {
+        display: none !important;
+    }
+}
 </style>

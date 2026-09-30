@@ -69,7 +69,14 @@ const router = createRouter({
                     component: () => import('@/views/pages/evolucion/EvolucionDetalle.vue'),
                     props: true
                 },
-                // 📌 Turnos
+                // 📌 Presupuestos (🔒 DIRECTOR Y ADMINISTRATIVO)
+                {
+                    path: 'presupuestos',
+                    name: 'presupuestos',
+                    component: () => import('@/views/pages/presupuestos/PresupuestoGenerator.vue'),
+                    meta: { roles: ['director', 'administrativo'] }
+                },
+                // 📌 Recetas
                 {
                     path: 'recetas',
                     name: 'recetasElectronicas',
