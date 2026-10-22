@@ -488,7 +488,7 @@ def test_crear_turno_registra_quien_lo_cargo_y_cuando(client, monkeypatch):
     # 42 (quien lo cargo), NO 7 (el dueño de la agenda).
     login_as(client, MockUser(user_id=42, rol="administrativo"))
 
-    fake_cursor = FakeCursor(fetchone_results=[None, None])
+    fake_cursor = FakeCursor(fetchone_results=[None, None, None])
     fake_connection = FakeConnection(fake_cursor)
     monkeypatch.setattr(turnos_routes, "get_connection", lambda: fake_connection)
     monkeypatch.setattr(turnos_routes, "medico_disponible", lambda *args, **kwargs: True)
@@ -510,10 +510,12 @@ def test_crear_turno_registra_quien_lo_cargo_y_cuando(client, monkeypatch):
     query, params = inserts[0]
     assert "creado_por" in query
     assert "creado_en" in query
+    assert "es_sobreturno" in query
+    assert params[6] == 0  # es_sobreturno
     # creado_por = usuario logueado (42), distinto del profesional del turno (7)
-    assert params[6] == 42
+    assert params[7] == 42
     assert params[1] == 7
-    assert isinstance(params[7], datetime)
+    assert isinstance(params[8], datetime)
 
 
 def test_crear_ausencia_registra_quien_la_cargo_y_cuando(client, monkeypatch):
@@ -707,4 +709,80 @@ def test_actualizar_asistencia_presente_y_presentes_hoy(client, monkeypatch):
     assert presentes[0]["id"] == 15
     assert presentes[0]["estado_asistencia"] == "presente"
     assert presentes[0]["paciente"] == "Carlos Gomez"
+
+
+def test_profesional_no_puede_crear_sobreturno(client, monkeypatch):
+    login_as(client, MockUser(user_id=7, rol="profesional"))
+
+    fake_cursor = FakeCursor()
+    fake_connection = FakeConnection(fake_cursor)
+    monkeypatch.setattr(turnos_routes, "get_connection", lambda: fake_connection)
+
+    response = client.post(
+        "/api/turnos",
+        json={
+            "paciente_id": 10,
+            "usuario_id": 7,
+            "fecha_inicio": "2026-03-20T10:00:00",
+            "motivo": "Consulta de urgencia",
+            "es_sobreturno": True,
+        },
+    )
+
+    assert response.status_code == 403
+    assert "no pueden crear sobreturnos" in response.get_json()["error"].lower()
+
+
+def test_administrativo_puede_crear_sobreturno_explicito(client, monkeypatch):
+    login_as(client, MockUser(user_id=42, rol="administrativo"))
+
+    fake_cursor = FakeCursor(fetchone_results=[{"duracion_turno": 20}, None, None])
+    fake_connection = FakeConnection(fake_cursor)
+    monkeypatch.setattr(turnos_routes, "get_connection", lambda: fake_connection)
+    monkeypatch.setattr(turnos_routes, "medico_disponible", lambda *args, **kwargs: True)
+
+    response = client.post(
+        "/api/turnos",
+        json={
+            "paciente_id": 10,
+            "usuario_id": 7,
+            "fecha_inicio": "2026-03-20T10:00:00",
+            "motivo": "Sobreturno urgente",
+            "es_sobreturno": True,
+        },
+    )
+
+    assert response.status_code == 201
+    inserts = [item for item in fake_cursor.executed if "INSERT INTO turnos" in item[0]]
+    assert len(inserts) == 1
+    _, params = inserts[0]
+    assert params[6] == 1  # es_sobreturno
+
+
+def test_administrativo_solape_se_marca_como_sobreturno(client, monkeypatch):
+    login_as(client, MockUser(user_id=42, rol="administrativo"))
+
+    # 1. duracion_turno, 2. solape {"ok": 1}, 3. paciente email, 4. profesional nombre
+    fake_cursor = FakeCursor(fetchone_results=[{"duracion_turno": 20}, {"ok": 1}, None, None])
+    fake_connection = FakeConnection(fake_cursor)
+    monkeypatch.setattr(turnos_routes, "get_connection", lambda: fake_connection)
+    monkeypatch.setattr(turnos_routes, "medico_disponible", lambda *args, **kwargs: True)
+
+    response = client.post(
+        "/api/turnos",
+        json={
+            "paciente_id": 10,
+            "usuario_id": 7,
+            "fecha_inicio": "2026-03-20T10:00:00",
+            "motivo": "Turno en horario ocupado",
+            "es_sobreturno": False,
+        },
+    )
+
+    assert response.status_code == 201
+    inserts = [item for item in fake_cursor.executed if "INSERT INTO turnos" in item[0]]
+    assert len(inserts) == 1
+    _, params = inserts[0]
+    assert params[6] == 1  # Detectado automáticamente como sobreturno
+
 

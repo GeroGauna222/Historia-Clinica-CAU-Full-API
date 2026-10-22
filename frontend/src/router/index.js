@@ -76,6 +76,13 @@ const router = createRouter({
                     component: () => import('@/views/pages/presupuestos/PresupuestoGenerator.vue'),
                     meta: { roles: ['director', 'administrativo'] }
                 },
+                // 📌 Facturación (🔒 DIRECTOR Y ADMINISTRATIVO)
+                {
+                    path: 'facturacion',
+                    name: 'facturacion',
+                    component: () => import('@/views/pages/facturacion/Facturacion.vue'),
+                    meta: { roles: ['director', 'administrativo'] }
+                },
                 // 📌 Recetas
                 {
                     path: 'recetas',

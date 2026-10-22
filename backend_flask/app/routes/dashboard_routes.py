@@ -35,7 +35,13 @@ def _to_json_value(value):
 def _normalizar_row(row):
     if not row:
         return row
-    return {key: _to_json_value(value) for key, value in row.items()}
+    result = {}
+    for key, value in row.items():
+        if key == "es_sobreturno":
+            result[key] = bool(value)
+        else:
+            result[key] = _to_json_value(value)
+    return result
 
 
 def _normalizar_rows(rows):
@@ -93,6 +99,8 @@ def _payload_base(rol):
         "turnos": [],
         "proximo_turno": None,
         "proximo_evento": None,
+        "turno_en_curso": None,
+        "atenciones_en_curso": [],
         "disponibilidad_hoy": [],
         "ausencias": [],
         "ausencias_bloqueos": [],
@@ -181,9 +189,12 @@ def get_dashboard():
     try:
         if rol in ROLES_PERSONALES:
             cursor.execute("""
-                SELECT t.id, t.fecha_inicio, t.fecha_fin, t.motivo,
+                SELECT t.id, t.fecha_inicio, t.fecha_fin, t.motivo, t.observaciones,
+                       t.estado_asistencia, t.ausencia, t.es_sobreturno,
                        p.id AS paciente_id,
-                       p.nombre AS paciente, p.apellido,
+                       p.nombre AS paciente, p.apellido, p.dni, p.nro_hc, p.cobertura,
+                       p.nro_certificado AS nro_afiliado, p.nro_certificado, p.fecha_nacimiento,
+                       p.telefono, p.celular,
                        u.nombre AS profesional
                 FROM turnos t
                 JOIN pacientes p ON p.id = t.paciente_id
@@ -195,10 +206,17 @@ def get_dashboard():
             data["turnos"] = _normalizar_rows(cursor.fetchall())
             data["turnos_hoy"] = len(data["turnos"])
 
+            turnos_presentes = [t for t in data["turnos"] if t.get("estado_asistencia") == "presente"]
+            data["turno_en_curso"] = turnos_presentes[-1] if turnos_presentes else None
+            data["atenciones_en_curso"] = turnos_presentes
+
             cursor.execute("""
-                SELECT t.id, t.fecha_inicio, t.fecha_fin, t.motivo,
+                SELECT t.id, t.fecha_inicio, t.fecha_fin, t.motivo, t.observaciones,
+                       t.estado_asistencia, t.ausencia, t.es_sobreturno,
                        p.id AS paciente_id,
-                       p.nombre AS paciente, p.apellido,
+                       p.nombre AS paciente, p.apellido, p.dni, p.nro_hc, p.cobertura,
+                       p.nro_certificado AS nro_afiliado, p.nro_certificado, p.fecha_nacimiento,
+                       p.telefono, p.celular,
                        u.nombre AS profesional
                 FROM turnos t
                 JOIN pacientes p ON p.id = t.paciente_id
@@ -247,16 +265,41 @@ def get_dashboard():
             """, (user_id, hoy))
             data["ausencias"] = _enriquecer_ausencias(cursor.fetchall())
 
+            superpuestos = []
+            turnos_list = data["turnos"]
+            for i in range(len(turnos_list)):
+                for j in range(i + 1, len(turnos_list)):
+                    t1 = turnos_list[i]
+                    t2 = turnos_list[j]
+                    if t1.get("fecha_inicio") < t2.get("fecha_fin") and t1.get("fecha_fin") > t2.get("fecha_inicio"):
+                        superpuestos.append({
+                            "turno_id": t1.get("id"),
+                            "turno_solapado_id": t2.get("id"),
+                            "fecha_inicio": t1.get("fecha_inicio"),
+                            "fecha_fin": t1.get("fecha_fin"),
+                            "fecha_inicio_solapada": t2.get("fecha_inicio"),
+                            "fecha_fin_solapada": t2.get("fecha_fin"),
+                            "usuario_id": user_id,
+                            "profesional": t1.get("profesional"),
+                            "paciente": f"{t1.get('paciente', '')} {t1.get('apellido', '')}".strip(),
+                            "paciente_solapado": f"{t2.get('paciente', '')} {t2.get('apellido', '')}".strip(),
+                        })
+            data["alertas"]["turnos_superpuestos"] = superpuestos
+
             data["resumen"] = {
                 "turnos_hoy": len(data["turnos"]),
                 "disponibilidad_hoy": len(data["disponibilidad_hoy"]),
+                "turnos_superpuestos": len(superpuestos),
             }
 
         elif rol in ROLES_ADMIN:
             cursor.execute("""
-                SELECT t.id, t.fecha_inicio, t.fecha_fin, t.motivo,
+                SELECT t.id, t.fecha_inicio, t.fecha_fin, t.motivo, t.observaciones,
+                       t.estado_asistencia, t.ausencia, t.es_sobreturno,
                        p.id AS paciente_id,
-                       p.nombre AS paciente, p.apellido,
+                       p.nombre AS paciente, p.apellido, p.dni, p.nro_hc, p.cobertura,
+                       p.nro_certificado AS nro_afiliado, p.nro_certificado, p.fecha_nacimiento,
+                       p.telefono, p.celular,
                        u.nombre AS profesional
                 FROM turnos t
                 JOIN pacientes p ON p.id = t.paciente_id
@@ -267,10 +310,17 @@ def get_dashboard():
             data["turnos"] = _normalizar_rows(cursor.fetchall())
             data["turnos_hoy"] = len(data["turnos"])
 
+            turnos_presentes = [t for t in data["turnos"] if t.get("estado_asistencia") == "presente"]
+            data["turno_en_curso"] = turnos_presentes[-1] if turnos_presentes else None
+            data["atenciones_en_curso"] = turnos_presentes
+
             cursor.execute("""
-                SELECT t.id, t.fecha_inicio, t.fecha_fin, t.motivo,
+                SELECT t.id, t.fecha_inicio, t.fecha_fin, t.motivo, t.observaciones,
+                       t.estado_asistencia, t.ausencia, t.es_sobreturno,
                        p.id AS paciente_id,
-                       p.nombre AS paciente, p.apellido,
+                       p.nombre AS paciente, p.apellido, p.dni, p.nro_hc, p.cobertura,
+                       p.nro_certificado AS nro_afiliado, p.nro_certificado, p.fecha_nacimiento,
+                       p.telefono, p.celular,
                        u.nombre AS profesional
                 FROM turnos t
                 JOIN pacientes p ON p.id = t.paciente_id

@@ -4,6 +4,7 @@ import { useUserStore } from '@/stores/user';
 import api from '@/api/axios';
 import DatePicker from 'primevue/datepicker';
 import Button from 'primevue/button';
+import Checkbox from 'primevue/checkbox';
 import ausenciasService from '@/service/ausenciasService';
 
 const userStore = useUserStore();
@@ -14,10 +15,16 @@ const pacienteSeleccionado = ref('');
 const usuarioId = ref('');
 const fecha = ref(null);
 const motivo = ref('');
+const esSobreturno = ref(false);
 const mensaje = ref('');
 const error = ref('');
 const profesionales = ref([]);
 const ausenciasProfesional = ref([]);
+
+const canCreateSobreturno = computed(() => {
+    const rol = (userStore.user?.rol || '').toLowerCase().trim();
+    return ['director', 'administrativo', 'area'].includes(rol);
+});
 
 // Campos para tanda
 const esTanda = ref(false);
@@ -215,6 +222,10 @@ async function crearTurno() {
         motivo: motivo.value
     };
 
+    if (canCreateSobreturno.value && esSobreturno.value) {
+        payload.es_sobreturno = true;
+    }
+
     if (esTanda.value) {
         payload.cantidad = cantidad.value;
         payload.dias_semana = diasSeleccionados.value;
@@ -229,6 +240,7 @@ async function crearTurno() {
         usuarioId.value = '';
         fecha.value = null;
         motivo.value = '';
+        esSobreturno.value = false;
         searchPaciente.value = '';
         pacienteSeleccionado.value = '';
         esTanda.value = false;
@@ -284,6 +296,13 @@ async function crearTurno() {
                 <div>
                     <label class="block mb-2 font-semibold text-color">Motivo</label>
                     <textarea v-model="motivo" rows="3" placeholder="Motivo del turno" class="w-full p-3 border rounded-xl shadow-sm focus:ring-2 focus:ring-blue-500"></textarea>
+                </div>
+
+                <div v-if="canCreateSobreturno">
+                    <label class="flex items-center gap-2.5 text-color font-semibold cursor-pointer">
+                        <Checkbox v-model="esSobreturno" :binary="true" />
+                        <span>Marcar como sobreturno oficial</span>
+                    </label>
                 </div>
 
                 <div class="mt-6 border-t pt-4">

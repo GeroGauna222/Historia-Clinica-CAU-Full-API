@@ -51,6 +51,11 @@ const model = computed(() => {
             items: [{ label: 'Generador', icon: 'pi pi-fw pi-calculator', to: '/presupuestos' }]
         },
         {
+            label: 'Facturacion',
+            visible: ['director', 'administrativo'].includes(userStore.rol?.toLowerCase().trim()),
+            items: [{ label: 'Planillas y Exportacion', icon: 'pi pi-fw pi-dollar', to: '/facturacion' }]
+        },
+        {
             label: 'Turnos',
             items: [
                 { label: 'Agenda', icon: 'pi pi-fw pi-calendar', to: '/turnos' },

@@ -99,7 +99,8 @@ const bloqueoForm = reactive({
     horaFin: '09:00',
     tipo_evento: 'Bloqueo',
     motivo: '',
-    usuario_id: ''
+    usuario_id: '',
+    es_sobreturno: false
 });
 
 const nuevoTurnoModalVisible = ref(false);
@@ -110,9 +111,12 @@ const nuevoTurnoTipoEvento = ref('Turno');
 const nuevoTurnoMotivo = ref('');
 const nuevoTurnoObservaciones = ref('');
 const nuevoTurnoFecha = ref('');
+const nuevoTurnoEsSobreturno = ref(false);
+const horarioOcupadoDetectado = ref(false);
 const nuevoTurnoGuardando = ref(false);
 
 const canSelectSubject = computed(() => ['director', 'administrativo'].includes((rolUsuario.value || '').toLowerCase().trim()));
+const canCreateSobreturno = computed(() => ['director', 'administrativo', 'area'].includes((rolUsuario.value || '').toLowerCase().trim()));
 const canDeleteAusencia = computed(() => {
     if (!turnoSeleccionado.value || turnoSeleccionado.value.tipo !== 'ausencia') return false;
     if (['director', 'administrativo'].includes((rolUsuario.value || '').toLowerCase().trim())) return true;
@@ -301,6 +305,7 @@ const calendarOptions = useAgendaCalendar({
             observaciones: e.extendedProps.observaciones,
             ausencia: e.extendedProps.ausencia,
             estado_asistencia: e.extendedProps.estado_asistencia || (e.extendedProps.ausencia ? e.extendedProps.ausencia : 'programado'),
+            es_sobreturno: Boolean(e.extendedProps.es_sobreturno),
             paciente_id: e.extendedProps.paciente_id,
             tipoEvento: e.extendedProps.tipoEvento || 'Bloqueo',
             ausenciaId: e.extendedProps.ausenciaId,
@@ -426,6 +431,7 @@ function adaptarEventoTurno(t) {
             observaciones: t.observaciones,
             ausencia: t.ausencia,
             estado_asistencia: estadoAsistencia,
+            es_sobreturno: Boolean(t.es_sobreturno),
             paciente_id: t.paciente_id,
             creadoPorNombre: t.creado_por_nombre,
             creadoEn: t.creado_en,
@@ -466,6 +472,7 @@ function abrirModalBloqueo(fechaBase = new Date()) {
     bloqueoForm.tipo_evento = 'Bloqueo';
     bloqueoForm.motivo = '';
     bloqueoForm.usuario_id = sujetoSeleccionadoId.value;
+    bloqueoForm.es_sobreturno = false;
     limpiarPacienteSeleccionado();
     bloqueoModalVisible.value = true;
 }
@@ -491,7 +498,16 @@ async function guardarBloqueo() {
                 toast.add({ severity: 'warn', summary: 'Paciente requerido', detail: 'Selecciona un paciente para crear un turno.', life: 3500 });
                 return;
             }
-            const resp = await api.post('/turnos', { paciente_id: pacienteSeleccionado.value.id, usuario_id: Number(bloqueoForm.usuario_id), fecha_inicio: fechaInicio, motivo: bloqueoForm.motivo }, { withCredentials: true });
+            const payload = {
+                paciente_id: pacienteSeleccionado.value.id,
+                usuario_id: Number(bloqueoForm.usuario_id),
+                fecha_inicio: fechaInicio,
+                motivo: bloqueoForm.motivo
+            };
+            if (canCreateSobreturno.value && bloqueoForm.es_sobreturno) {
+                payload.es_sobreturno = true;
+            }
+            const resp = await api.post('/turnos', payload, { withCredentials: true });
             if (resp.data?.ajuste_horario?.aplicado) {
                 toast.add({ severity: 'info', summary: 'Horario ajustado', detail: `Inicio ajustado a ${resp.data.ajuste_horario.inicio_ajustado}`, life: 4500 });
             }
@@ -511,6 +527,21 @@ function abrirModalNuevoTurno(date) {
     limpiarPacienteSeleccionado();
     nuevoTurnoMotivo.value = '';
     nuevoTurnoObservaciones.value = '';
+
+    const clickedTime = Math.floor(date.getTime() / 60000) * 60000;
+    const durMin = Number(duracionTurno.value) > 0 ? Number(duracionTurno.value) : 20;
+    const slotEndTime = clickedTime + durMin * 60 * 1000;
+
+    const haySolape = (eventos.value || []).some((ev) => {
+        const tipo = ev.extendedProps?.tipo;
+        if (tipo === 'indisponible_bg' || tipo === 'ausencia_bg') return false;
+        const evStart = Math.floor(new Date(ev.start).getTime() / 60000) * 60000;
+        const evEnd = Math.floor((ev.end ? new Date(ev.end).getTime() : evStart + durMin * 60 * 1000) / 60000) * 60000;
+        return evStart < slotEndTime && evEnd > clickedTime;
+    });
+
+    horarioOcupadoDetectado.value = haySolape;
+    nuevoTurnoEsSobreturno.value = haySolape && canCreateSobreturno.value;
     nuevoTurnoModalVisible.value = true;
 }
 
@@ -540,11 +571,17 @@ async function guardarNuevoTurno() {
                 toast.add({ severity: 'warn', summary: 'Paciente requerido', detail: 'Selecciona un paciente para crear un turno.', life: 3500 });
                 return;
             }
-            const resp = await api.post(
-                '/turnos',
-                { paciente_id: pacienteSeleccionado.value.id, usuario_id: Number(sujetoSeleccionadoId.value), fecha_inicio: nuevoTurnoFecha.value, motivo: nuevoTurnoMotivo.value, observaciones: nuevoTurnoObservaciones.value },
-                { withCredentials: true }
-            );
+            const payload = {
+                paciente_id: pacienteSeleccionado.value.id,
+                usuario_id: Number(sujetoSeleccionadoId.value),
+                fecha_inicio: nuevoTurnoFecha.value,
+                motivo: nuevoTurnoMotivo.value,
+                observaciones: nuevoTurnoObservaciones.value
+            };
+            if (canCreateSobreturno.value && nuevoTurnoEsSobreturno.value) {
+                payload.es_sobreturno = true;
+            }
+            const resp = await api.post('/turnos', payload, { withCredentials: true });
             if (resp.data?.ajuste_horario?.aplicado) {
                 toast.add({ severity: 'info', summary: 'Horario ajustado', detail: `Inicio ajustado a ${resp.data.ajuste_horario.inicio_ajustado}`, life: 4500 });
             }
@@ -590,11 +627,15 @@ function iniciarEdicion() {
 }
 
 async function guardarEdicion() {
-    const resp = await api.put(
-        `/turnos/${turnoSeleccionado.value.turnoId}`,
-        { fecha_inicio: `${fechaEdit.value}T${horaEdit.value}:00`, motivo: turnoSeleccionado.value.description, observaciones: turnoSeleccionado.value.observaciones },
-        { withCredentials: true }
-    );
+    const payload = {
+        fecha_inicio: `${fechaEdit.value}T${horaEdit.value}:00`,
+        motivo: turnoSeleccionado.value.description,
+        observaciones: turnoSeleccionado.value.observaciones
+    };
+    if (canCreateSobreturno.value && turnoSeleccionado.value.es_sobreturno !== undefined) {
+        payload.es_sobreturno = Boolean(turnoSeleccionado.value.es_sobreturno);
+    }
+    const resp = await api.put(`/turnos/${turnoSeleccionado.value.turnoId}`, payload, { withCredentials: true });
     if (resp.data?.ajuste_horario?.aplicado) {
         toast.add({ severity: 'info', summary: 'Horario ajustado', detail: `Inicio ajustado a ${resp.data.ajuste_horario.inicio_ajustado}`, life: 4500 });
     }
@@ -726,6 +767,20 @@ onUnmounted(() => {
                             >, <span class="text-red-600 font-semibold">{{ ausenciasConteoNuevoTurno.sin_aviso }} sin aviso</span>)
                         </div>
                     </div>
+                    <div v-if="horarioOcupadoDetectado" class="flex items-start gap-2 mt-2 px-3 py-2 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-200 text-xs border border-amber-200 dark:border-amber-800">
+                        <i class="pi pi-exclamation-triangle text-sm mt-0.5 shrink-0 text-amber-600 dark:text-amber-400"></i>
+                        <div>
+                            <strong class="font-semibold">Horario ocupado:</strong> Ya existe un turno o evento en este horario.
+                            <span v-if="canCreateSobreturno"> Se registrará como sobreturno oficial.</span>
+                            <span v-else> Los profesionales no tienen permitido agendar sobreturnos.</span>
+                        </div>
+                    </div>
+                    <div v-if="canCreateSobreturno" class="mt-2">
+                        <label class="flex items-center gap-2.5 cursor-pointer px-3 py-2 rounded-lg bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/40 hover:bg-amber-100/50 transition-colors">
+                            <Checkbox v-model="nuevoTurnoEsSobreturno" :binary="true" />
+                            <span class="text-sm font-medium text-amber-900 dark:text-amber-200 flex items-center gap-1.5"> <i class="pi pi-bolt text-amber-600 dark:text-amber-400"></i> Es sobreturno oficial </span>
+                        </label>
+                    </div>
                 </div>
                 <div>
                     <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200"> <i class="pi pi-comment mr-1.5 text-[#0891B2]"></i>{{ nuevoTurnoTipoEvento === 'Turno' ? 'Motivo' : 'Detalle' }} </label>
@@ -779,6 +834,12 @@ onUnmounted(() => {
                                 >{{ ausenciasConteoNuevoTurno.con_aviso }} con aviso</span
                             >, <span class="text-red-600 font-semibold">{{ ausenciasConteoNuevoTurno.sin_aviso }} sin aviso</span>)
                         </div>
+                    </div>
+                    <div v-if="canCreateSobreturno" class="mt-2">
+                        <label class="flex items-center gap-2.5 cursor-pointer px-3 py-2 rounded-lg bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/40 hover:bg-amber-100/50 transition-colors">
+                            <Checkbox v-model="bloqueoForm.es_sobreturno" :binary="true" />
+                            <span class="text-sm font-medium text-amber-900 dark:text-amber-200 flex items-center gap-1.5"> <i class="pi pi-bolt text-amber-600 dark:text-amber-400"></i> Es sobreturno oficial </span>
+                        </label>
                     </div>
                 </div>
                 <div>
@@ -859,6 +920,12 @@ onUnmounted(() => {
                         <label class="font-heading font-semibold text-sm block mb-1.5 text-[#134E4A] dark:text-slate-200">Observaciones</label>
                         <Textarea v-model="turnoSeleccionado.observaciones" rows="3" autoResize class="w-full" placeholder="Observaciones adicionales" />
                     </div>
+                    <div v-if="canCreateSobreturno" class="mt-2">
+                        <label class="flex items-center gap-2.5 cursor-pointer px-3 py-2 rounded-lg bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/40 hover:bg-amber-100/50 transition-colors">
+                            <Checkbox v-model="turnoSeleccionado.es_sobreturno" :binary="true" />
+                            <span class="text-sm font-medium text-amber-900 dark:text-amber-200 flex items-center gap-1.5"> <i class="pi pi-bolt text-amber-600 dark:text-amber-400"></i> Es sobreturno oficial </span>
+                        </label>
+                    </div>
                     <div class="flex justify-end gap-2 mt-5">
                         <Button label="Cancelar" text severity="secondary" class="!rounded-lg" @click="editando = false" />
                         <Button label="Guardar cambios" icon="pi pi-check" class="!rounded-lg !bg-[#0891B2] !border-[#0891B2]" @click="guardarEdicion" />
@@ -866,8 +933,9 @@ onUnmounted(() => {
                 </div>
                 <!-- Vista detalle -->
                 <div v-else>
-                    <div class="mb-4">
+                    <div class="mb-4 flex items-center gap-2">
                         <Tag :value="turnoSeleccionado.tipo === 'grupal' ? 'Grupal' : 'Individual'" :severity="turnoSeleccionado.tipo === 'grupal' ? 'info' : 'primary'" rounded class="!font-heading" />
+                        <Tag v-if="turnoSeleccionado.es_sobreturno" value="Sobreturno" severity="warn" icon="pi pi-bolt" rounded class="!font-heading" />
                     </div>
                     <div class="space-y-3 text-sm">
                         <div class="flex items-center gap-3 p-3 rounded-lg bg-[#F0FDFA] dark:bg-teal-900/15">

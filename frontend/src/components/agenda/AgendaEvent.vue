@@ -34,6 +34,7 @@ const label = computed(() => {
 });
 
 const struck = computed(() => !ausencia.value && status.value === 'sin-aviso');
+const esSobreturno = computed(() => !ausencia.value && !grupal.value && Boolean(extended.value.es_sobreturno));
 
 const cardStyle = computed(() => {
     const color = barColor(event.value);
@@ -48,12 +49,14 @@ const backgroundLabel = computed(() => (extended.value.tipo === 'ausencia_bg' ? 
     <div v-else-if="month" class="evt-card evt-card--month" :style="cardStyle" role="group" :aria-label="label">
         <span class="evt-dot" aria-hidden="true"></span>
         <span class="evt-time">{{ time }}</span>
+        <span v-if="esSobreturno" class="evt-badge-st" title="Sobreturno">ST</span>
         <i v-if="grupal" class="pi pi-users evt-icon" aria-hidden="true"></i>
         <span class="evt-name" :class="{ 'evt-name--struck': struck }">{{ name }}</span>
     </div>
     <div v-else class="evt-card" :style="cardStyle" role="group" :aria-label="label">
         <div class="evt-line">
             <span class="evt-time">{{ time }}</span>
+            <span v-if="esSobreturno" class="evt-badge-st" title="Sobreturno">ST</span>
             <i v-if="grupal" class="pi pi-users evt-icon" aria-hidden="true"></i>
             <span class="evt-name" :class="{ 'evt-name--struck': struck }">{{ name }}</span>
         </div>

@@ -210,6 +210,19 @@
     color: var(--p-text-muted-color);
 }
 
+.evt-badge-st {
+    flex: none;
+    font-size: 0.625rem;
+    font-weight: 700;
+    line-height: 1;
+    padding: 1px 4px;
+    border-radius: 4px;
+    background: var(--cau-status-con-aviso-bg, rgba(245, 158, 11, 0.15));
+    color: var(--cau-status-con-aviso-fg, #d97706);
+    border: 1px solid var(--cau-status-con-aviso-border, rgba(245, 158, 11, 0.3));
+    letter-spacing: 0.02em;
+}
+
 /* Month view: compact single line with a status dot. */
 .evt-card--month {
     flex-direction: row;

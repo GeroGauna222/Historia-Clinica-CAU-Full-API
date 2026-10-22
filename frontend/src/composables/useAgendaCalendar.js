@@ -48,11 +48,12 @@ export function buildTooltipContent(event) {
     const key = eventStatus(event);
     const grupoLine = p.grupoNombre ? `Grupo: ${p.grupoNombre}` : '';
     const profesional = p.profesional && p.profesional !== grupoLine ? p.profesional : '';
+    const sobreturnoBadge = p.es_sobreturno ? ' · <span class="agenda-tip-status agenda-tip-status--con-aviso">Sobreturno</span>' : '';
 
     return [
         `<strong>${escapeHtml(p.paciente || event.title)}</strong>`,
         p.dni ? `DNI ${escapeHtml(p.dni)}` : '',
-        `${timeRange(event)} · <span class="agenda-tip-status agenda-tip-status--${key}">${statusLabel(key)}</span>`,
+        `${timeRange(event)} · <span class="agenda-tip-status agenda-tip-status--${key}">${statusLabel(key)}</span>${sobreturnoBadge}`,
         muted(p.description),
         escapeHtml(profesional),
         escapeHtml(grupoLine)

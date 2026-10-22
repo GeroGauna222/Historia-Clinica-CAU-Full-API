@@ -85,4 +85,21 @@ describe('AgendaEvent', () => {
         expect(wrapper.find('.evt-card').exists()).toBe(false);
         expect(wrapper.find('.bg-hatch-label').text()).toBe('Ausencia');
     });
+
+    it('shows ST badge when event is a sobreturno', () => {
+        const wrapper = mountEvent({ es_sobreturno: true });
+        expect(wrapper.find('.evt-badge-st').exists()).toBe(true);
+        expect(wrapper.find('.evt-badge-st').text()).toBe('ST');
+    });
+
+    it('shows ST badge in month view when event is a sobreturno', () => {
+        const wrapper = mountEvent({ es_sobreturno: true }, { viewType: 'dayGridMonth' });
+        expect(wrapper.find('.evt-badge-st').exists()).toBe(true);
+        expect(wrapper.find('.evt-badge-st').text()).toBe('ST');
+    });
+
+    it('does not show ST badge when event is not a sobreturno', () => {
+        const wrapper = mountEvent({ es_sobreturno: false });
+        expect(wrapper.find('.evt-badge-st').exists()).toBe(false);
+    });
 });

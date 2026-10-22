@@ -382,7 +382,7 @@ def api_turnos():
         if current_user.rol in ["profesional", "area"]:
             cursor.execute(
                 """
-                SELECT t.id, t.paciente_id, t.fecha_inicio, t.fecha_fin, t.motivo, t.observaciones, t.ausencia, t.estado_asistencia,
+                SELECT t.id, t.paciente_id, t.fecha_inicio, t.fecha_fin, t.motivo, t.observaciones, t.ausencia, t.estado_asistencia, t.es_sobreturno,
                        TRIM(CONCAT(COALESCE(p.nombre, ''), ' ', COALESCE(p.apellido, ''))) AS paciente, p.dni, p.cobertura, p.nro_certificado, u.nombre AS profesional
                 FROM turnos t
                 JOIN pacientes p ON t.paciente_id = p.id
@@ -395,7 +395,7 @@ def api_turnos():
         else:
             cursor.execute(
                 """
-                SELECT t.id, t.paciente_id, t.fecha_inicio, t.fecha_fin, t.motivo, t.observaciones, t.ausencia, t.estado_asistencia,
+                SELECT t.id, t.paciente_id, t.fecha_inicio, t.fecha_fin, t.motivo, t.observaciones, t.ausencia, t.estado_asistencia, t.es_sobreturno,
                        TRIM(CONCAT(COALESCE(p.nombre, ''), ' ', COALESCE(p.apellido, ''))) AS paciente, p.dni, p.cobertura, p.nro_certificado, u.nombre AS profesional
                 FROM turnos t
                 JOIN pacientes p ON t.paciente_id = p.id
@@ -422,6 +422,7 @@ def api_turnos():
                 "observaciones": t["observaciones"],
                 "ausencia": t["ausencia"],
                 "estado_asistencia": t.get("estado_asistencia") or "programado",
+                "es_sobreturno": bool(t.get("es_sobreturno", 0)),
                 "paciente_id": t["paciente_id"],
                 "profesional": t["profesional"],
             }
@@ -438,6 +439,7 @@ def api_turnos():
     fecha_inicio_raw = data.get("fecha_inicio")
     motivo = data.get("motivo")
     observaciones = data.get("observaciones")
+    es_sobreturno = bool(data.get("es_sobreturno", False))
 
     if not (paciente_id and usuario_id and fecha_inicio_raw):
         return jsonify({"error": "Campos obligatorios faltantes"}), 400
@@ -450,6 +452,9 @@ def api_turnos():
     if current_user.rol == "profesional" and usuario_id != current_user.id:
         return jsonify({"error": "No puede asignar turnos a otros profesionales"}), 403
 
+    if current_user.rol == "profesional" and es_sobreturno:
+        return jsonify({"error": "Los profesionales no pueden crear sobreturnos"}), 403
+
     fecha_inicio_dt, fecha_fin_dt, ajuste, err = _alinear_turno_individual(usuario_id, fecha_inicio_raw)
     if err:
         return jsonify({"error": err}), 400
@@ -458,20 +463,33 @@ def api_turnos():
     fecha_fin = _to_db_iso(fecha_fin_dt)
 
     try:
+        if current_user.rol in ["administrativo", "area"] and not es_sobreturno:
+            cursor.execute(
+                """
+                SELECT 1 FROM turnos
+                WHERE usuario_id = %s
+                  AND (fecha_inicio < %s AND fecha_fin > %s)
+                LIMIT 1
+                """,
+                (usuario_id, fecha_fin, fecha_inicio),
+            )
+            if cursor.fetchone():
+                es_sobreturno = True
+
         if not medico_disponible(
             usuario_id,
             fecha_inicio,
             fecha_fin,
-            permitir_solape=current_user.rol in ["administrativo", "area"],
+            permitir_solape=es_sobreturno or current_user.rol in ["administrativo", "area"],
         ):
             return jsonify({"error": "El profesional no esta disponible en esa fecha u horario"}), 400
 
         cursor.execute(
             """
-            INSERT INTO turnos (paciente_id, usuario_id, fecha_inicio, fecha_fin, motivo, observaciones, creado_por, creado_en)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            INSERT INTO turnos (paciente_id, usuario_id, fecha_inicio, fecha_fin, motivo, observaciones, es_sobreturno, creado_por, creado_en)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
         """,
-            (paciente_id, usuario_id, fecha_inicio, fecha_fin, motivo, observaciones, current_user.id, datetime.now()),
+            (paciente_id, usuario_id, fecha_inicio, fecha_fin, motivo, observaciones, 1 if es_sobreturno else 0, current_user.id, datetime.now()),
         )
         conn.commit()
 
@@ -581,7 +599,7 @@ def editar_turno(id):
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
     try:
-        cursor.execute("SELECT usuario_id, fecha_inicio, fecha_fin, motivo, observaciones FROM turnos WHERE id=%s", (id,))
+        cursor.execute("SELECT usuario_id, fecha_inicio, fecha_fin, motivo, observaciones, es_sobreturno FROM turnos WHERE id=%s", (id,))
         turno = cursor.fetchone()
 
         if not turno:
@@ -589,6 +607,9 @@ def editar_turno(id):
 
         if current_user.rol == "profesional" and turno["usuario_id"] != current_user.id:
             return jsonify({"error": "No autorizado"}), 403
+
+        if current_user.rol == "profesional" and data.get("es_sobreturno"):
+            return jsonify({"error": "Los profesionales no pueden asignar sobreturnos"}), 403
 
         fecha_inicio_raw = data.get("fecha_inicio") or data.get("fecha")
         if not fecha_inicio_raw:
@@ -603,22 +624,43 @@ def editar_turno(id):
         motivo = data.get("motivo", turno.get("motivo"))
         observaciones = data.get("observaciones", turno.get("observaciones"))
 
+        cursor.execute(
+            """
+            SELECT 1 FROM turnos
+            WHERE usuario_id = %s
+              AND id <> %s
+              AND (fecha_inicio < %s AND fecha_fin > %s)
+            LIMIT 1
+            """,
+            (turno["usuario_id"], id, fecha_fin, fecha_inicio),
+        )
+        hay_solape = bool(cursor.fetchone())
+
+        if hay_solape:
+            if current_user.rol == "profesional":
+                return jsonify({"error": "El profesional no esta disponible en esa fecha u horario"}), 400
+            es_sobreturno = 1
+        elif "es_sobreturno" in data:
+            es_sobreturno = 1 if data.get("es_sobreturno") else 0
+        else:
+            es_sobreturno = turno.get("es_sobreturno", 0)
+
         if not medico_disponible(
             turno["usuario_id"],
             fecha_inicio,
             fecha_fin,
             turno_excluir_id=id,
-            permitir_solape=current_user.rol in ["administrativo", "area"],
+            permitir_solape=bool(es_sobreturno) or current_user.rol in ["administrativo", "area"],
         ):
             return jsonify({"error": "El profesional no esta disponible en esa fecha u horario"}), 400
 
         cursor.execute(
             """
             UPDATE turnos
-            SET fecha_inicio=%s, fecha_fin=%s, motivo=%s, observaciones=%s
+            SET fecha_inicio=%s, fecha_fin=%s, motivo=%s, observaciones=%s, es_sobreturno=%s
             WHERE id=%s
         """,
-            (fecha_inicio, fecha_fin, motivo, observaciones, id),
+            (fecha_inicio, fecha_fin, motivo, observaciones, es_sobreturno, id),
         )
         conn.commit()
 
@@ -741,6 +783,7 @@ def turnos_profesional(usuario_id):
             t.motivo,
             t.ausencia,
             t.estado_asistencia,
+            t.es_sobreturno,
             TRIM(CONCAT(COALESCE(p.nombre, ''), ' ', COALESCE(p.apellido, ''))) AS paciente,
             p.dni,
             p.cobertura,
@@ -772,6 +815,7 @@ def turnos_profesional(usuario_id):
                 t.motivo,
                 t.ausencia,
                 t.estado_asistencia,
+                0 AS es_sobreturno,
                 TRIM(CONCAT(COALESCE(p.nombre, ''), ' ', COALESCE(p.apellido, ''))) AS paciente,
                 p.dni,
                 p.cobertura,
@@ -807,6 +851,7 @@ def turnos_profesional(usuario_id):
             "description": t["motivo"],
             "ausencia": t["ausencia"],
             "estado_asistencia": t.get("estado_asistencia") or "programado",
+            "es_sobreturno": bool(t.get("es_sobreturno", 0)),
             "paciente_id": t["paciente_id"],
             "backgroundColor": t["color"],
             "borderColor": t["color"],
@@ -853,6 +898,7 @@ def turnos_profesional_completo():
                 t.observaciones,
                 t.ausencia,
                 t.estado_asistencia,
+                t.es_sobreturno,
                 uc.nombre AS creado_por_nombre,
                 t.creado_en,
                 '#1976D2' AS color,
@@ -876,6 +922,7 @@ def turnos_profesional_completo():
             t["end"] = _to_iso_arg(t["end"])
             t["creado_en"] = _to_iso_arg(t["creado_en"])
             t["turnoId"] = t["id"]
+            t["es_sobreturno"] = bool(t.get("es_sobreturno", 0))
         return jsonify(turnos)
 
     cursor.execute(
@@ -894,6 +941,7 @@ def turnos_profesional_completo():
             t.observaciones,
             t.ausencia,
             t.estado_asistencia,
+            t.es_sobreturno,
             uc.nombre AS creado_por_nombre,
             t.creado_en,
             '#1976D2' AS color,
@@ -928,6 +976,7 @@ def turnos_profesional_completo():
             tg.observaciones,
             tg.ausencia,
             tg.estado_asistencia,
+            0 AS es_sobreturno,
             ucg.nombre AS creado_por_nombre,
             tg.creado_en,
             gp.color AS color,
@@ -956,6 +1005,7 @@ def turnos_profesional_completo():
         t["end"] = _to_iso_arg(t["end"])
         t["creado_en"] = _to_iso_arg(t["creado_en"])
         t["turnoId"] = t["id"]
+        t["es_sobreturno"] = bool(t.get("es_sobreturno", 0))
         eventos.append(t)
 
     for g in grupales_proyectados:
@@ -964,6 +1014,7 @@ def turnos_profesional_completo():
         g["creado_en"] = _to_iso_arg(g["creado_en"])
         g["turnoId"] = g["id"]
         g["id"] = f"grupal-{g['id']}"
+        g["es_sobreturno"] = False
         eventos.append(g)
     return jsonify(eventos)
 
@@ -1421,6 +1472,7 @@ def api_turnos_presentes_hoy():
                     t.observaciones,
                     t.estado_asistencia,
                     t.ausencia,
+                    t.es_sobreturno,
                     t.usuario_id,
                     TRIM(CONCAT(COALESCE(p.nombre, ''), ' ', COALESCE(p.apellido, ''))) AS paciente,
                     p.dni,
@@ -1449,6 +1501,7 @@ def api_turnos_presentes_hoy():
                     t.observaciones,
                     t.estado_asistencia,
                     t.ausencia,
+                    t.es_sobreturno,
                     t.usuario_id,
                     TRIM(CONCAT(COALESCE(p.nombre, ''), ' ', COALESCE(p.apellido, ''))) AS paciente,
                     p.dni,
@@ -1468,6 +1521,7 @@ def api_turnos_presentes_hoy():
             t["start"] = _to_iso_arg(t["fecha_inicio"])
             t["end"] = _to_iso_arg(t["fecha_fin"])
             t["turnoId"] = t["id"]
+            t["es_sobreturno"] = bool(t.get("es_sobreturno", 0))
         return jsonify(turnos)
     finally:
         cursor.close()
@@ -1548,6 +1602,7 @@ def api_historial_turnos_paciente(paciente_id):
                 t.observaciones,
                 t.ausencia,
                 t.estado_asistencia,
+                t.es_sobreturno,
                 u.nombre AS profesional,
                 uc.nombre AS creado_por_nombre,
                 t.creado_en
@@ -1596,6 +1651,7 @@ def api_historial_turnos_paciente(paciente_id):
                 "observaciones": t["observaciones"],
                 "ausencia": t["ausencia"],
                 "estado_asistencia": t.get("estado_asistencia") or "programado",
+                "es_sobreturno": bool(t.get("es_sobreturno", 0)),
                 "profesional": t["profesional"],
                 "creado_por_nombre": t["creado_por_nombre"],
                 "creado_en": _to_iso_arg(t["creado_en"]),
@@ -1612,6 +1668,7 @@ def api_historial_turnos_paciente(paciente_id):
                 "observaciones": g["observaciones"],
                 "ausencia": g["ausencia"],
                 "estado_asistencia": g.get("estado_asistencia") or "programado",
+                "es_sobreturno": False,
                 "profesional": g["profesional"],
                 "creado_por_nombre": g["creado_por_nombre"],
                 "creado_en": _to_iso_arg(g["creado_en"]),

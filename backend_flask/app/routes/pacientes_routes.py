@@ -456,7 +456,8 @@ def api_listar_pacientes():
     cursor = conn.cursor(dictionary=True)
     try:
         cursor.execute("""
-            SELECT id, nro_hc, dni, nombre, apellido, fecha_nacimiento, sexo, telefono, email
+            SELECT id, nro_hc, dni, nombre, apellido, fecha_nacimiento, sexo, telefono, email,
+                   cobertura, nro_certificado, cert_discapacidad
             FROM pacientes
             ORDER BY apellido, nombre
         """)

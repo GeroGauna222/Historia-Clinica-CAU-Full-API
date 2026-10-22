@@ -152,6 +152,7 @@ from app.routes.comunicados_routes import bp_comunicados
 from app.routes.grupo_posteos_routes import bp_grupo_posteos
 from app.routes.health_routes import bp_health
 from app.routes.recetas_routes import bp_recetas
+from app.routes.facturacion_routes import bp_facturacion
 
 app.register_blueprint(bp_auth)
 app.register_blueprint(bp_usuarios)
@@ -167,6 +168,7 @@ app.register_blueprint(bp_grupo_posteos)
 app.register_blueprint(bp_blockchain)
 app.register_blueprint(bp_health)
 app.register_blueprint(bp_recetas)
+app.register_blueprint(bp_facturacion)
 
 # -------------------------
 # Servir fotos de usuario
