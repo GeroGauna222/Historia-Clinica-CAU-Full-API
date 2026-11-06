@@ -467,5 +467,33 @@ def test_dashboard_director_incluye_turnos_grupales(client, monkeypatch):
     assert data["atenciones_en_curso"][0]["id"] == "grupal-50"
 
 
+def test_primer_evento_soporta_datetime_y_str():
+    from app.routes.dashboard_routes import _primer_evento
+    from datetime import datetime
+
+    # Turno previamente normalizado (fecha_inicio es str)
+    turno = {
+        "id": 10,
+        "paciente": "Juan",
+        "apellido": "Perez",
+        "fecha_inicio": "2026-11-06T15:00:00",
+        "motivo": "Consulta general",
+    }
+    # Ausencia proveniente directa de MySQL (fecha_inicio es datetime)
+    ausencia = {
+        "id": 5,
+        "usuario_id": 2,
+        "fecha_inicio": datetime(2026, 11, 6, 12, 0, 0),
+        "motivo": "[Congreso] Pediatria",
+    }
+
+    evento = _primer_evento(turno, ausencia)
+    assert evento is not None
+    # La ausencia es a las 12:00, el turno a las 15:00 -> la ausencia debe ser el primer evento
+    assert evento["tipo"] == "Congreso"
+    assert evento["fecha_inicio"] == "2026-11-06T12:00:00"
+
+
+
 
 

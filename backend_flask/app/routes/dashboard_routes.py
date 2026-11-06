@@ -81,19 +81,21 @@ def _enriquecer_ausencias(rows):
 def _primer_evento(turno, ausencia):
     eventos = []
     if turno:
-        titulo = f"{turno.get('paciente', '')} {turno.get('apellido', '')}".strip()
-        if turno.get("es_grupal") and turno.get("grupo_nombre"):
-            titulo = f"[{turno.get('grupo_nombre')}] {titulo}"
+        t = _normalizar_row(turno)
+        titulo = f"{t.get('paciente', '')} {t.get('apellido', '')}".strip()
+        if t.get("es_grupal") and t.get("grupo_nombre"):
+            titulo = f"[{t.get('grupo_nombre')}] {titulo}"
         eventos.append({
-            **turno,
+            **t,
             "tipo": "Turno",
             "titulo": titulo,
-            "detalle": turno.get("motivo") or "",
+            "detalle": t.get("motivo") or "",
         })
     if ausencia:
-        tipo, detalle = _tipo_evento_ausencia(ausencia.get("motivo"))
+        a = _normalizar_row(ausencia)
+        tipo, detalle = _tipo_evento_ausencia(a.get("motivo"))
         eventos.append({
-            **ausencia,
+            **a,
             "tipo": tipo,
             "titulo": tipo,
             "detalle": detalle,
@@ -101,8 +103,8 @@ def _primer_evento(turno, ausencia):
         })
     if not eventos:
         return None
-    eventos.sort(key=lambda evento: evento.get("fecha_inicio"))
-    return _normalizar_row(eventos[0])
+    eventos.sort(key=lambda evento: str(evento.get("fecha_inicio") or ""))
+    return eventos[0]
 
 
 def _payload_base(rol):
@@ -184,7 +186,7 @@ def _agregar_comunicados(cursor, data, rol, user_id):
         """, (user_id,))
 
     comunicados.extend(_normalizar_rows(cursor.fetchall()))
-    comunicados.sort(key=lambda item: item.get("creado_en") or "", reverse=True)
+    comunicados.sort(key=lambda item: str(item.get("creado_en") or ""), reverse=True)
     data["comunicados"] = comunicados[:8]
 
 
