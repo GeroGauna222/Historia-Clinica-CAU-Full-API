@@ -28,6 +28,12 @@ const FINANCIADORES = [
         nombre: 'Corporación',
         subtitulo: 'Planilla con Fecha, Paciente, N° Afiliado, Razón, Sesiones, CUD e Importe',
         badge: 'Razón + Sesiones + CUD'
+    },
+    {
+        key: 'swiss_medical',
+        nombre: 'Swiss Medical (SMG)',
+        subtitulo: 'Planilla con Código, Descripción SMG, IVA, CUD y Autorización N°',
+        badge: 'IVA + Código/Desc + CUD'
     }
 ];
 
@@ -104,6 +110,7 @@ const formCarga = reactive({
     paciente_id: null,
     paciente_nombre: '',
     nro_afiliado: '',
+    iva: 'OBLIGATORIO',
     cud: 'NO',
     practica_id: '',
     practica_codigo: '',
@@ -115,7 +122,7 @@ const formCarga = reactive({
     tipo_matricula: 'P',
     nro_matricula: '441983',
     observaciones: '',
-    items: [{ fecha_realizacion: hoyISO(), autorizacion: '', cantidad: 1 }]
+    items: [{ fecha_realizacion: hoyISO(), autorizacion: '', cantidad: 1, es_asistencia_adicional: false }]
 });
 
 function seleccionarPrestadorDefault() {
@@ -170,7 +177,8 @@ function agregarFilaFecha() {
     formCarga.items.push({
         fecha_realizacion: ultimaFecha,
         autorizacion: '',
-        cantidad: 1
+        cantidad: 1,
+        es_asistencia_adicional: false
     });
 }
 
@@ -183,13 +191,14 @@ function limpiarFormularioCarga() {
     formCarga.paciente_id = null;
     formCarga.paciente_nombre = '';
     formCarga.nro_afiliado = '';
+    formCarga.iva = 'OBLIGATORIO';
     formCarga.cud = 'NO';
     formCarga.practica_id = '';
     formCarga.practica_codigo = '';
     formCarga.practica_descripcion = '';
     formCarga.importe = '';
     formCarga.observaciones = '';
-    formCarga.items = [{ fecha_realizacion: hoyISO(), autorizacion: '', cantidad: 1 }];
+    formCarga.items = [{ fecha_realizacion: hoyISO(), autorizacion: '', cantidad: 1, es_asistencia_adicional: false }];
     pacienteQuery.value = '';
     seleccionarPrestadorDefault();
 }
@@ -287,6 +296,7 @@ async function guardarNuevaCarga() {
             paciente_id: formCarga.paciente_id,
             paciente_nombre: formCarga.paciente_nombre.trim() || formCarga.nro_afiliado.trim(),
             nro_afiliado: formCarga.nro_afiliado.trim(),
+            iva: formCarga.iva || 'OBLIGATORIO',
             cud: formCarga.cud,
             practica_id: formCarga.practica_id || null,
             practica_codigo: formCarga.practica_codigo.trim(),
@@ -316,7 +326,7 @@ async function guardarNuevaCarga() {
         }
 
         // Mantener el paciente o limpiar las fechas para seguir cargando ágilmente
-        formCarga.items = [{ fecha_realizacion: primeraFecha || hoyISO(), autorizacion: '', cantidad: 1 }];
+        formCarga.items = [{ fecha_realizacion: primeraFecha || hoyISO(), autorizacion: '', cantidad: 1, es_asistencia_adicional: false }];
         await cargarRegistros();
     } catch (err) {
         const detail = err?.response?.data?.error || 'No se pudo registrar la prestación.';
@@ -331,6 +341,7 @@ function precargarDesdeFila(reg) {
     formCarga.paciente_id = reg.paciente_id;
     formCarga.paciente_nombre = reg.paciente_nombre;
     formCarga.nro_afiliado = reg.nro_afiliado;
+    formCarga.iva = reg.iva || 'OBLIGATORIO';
     formCarga.cud = reg.cud || 'NO';
     formCarga.practica_id = reg.practica_id || '';
     formCarga.practica_codigo = reg.practica_codigo;
@@ -342,7 +353,7 @@ function precargarDesdeFila(reg) {
     formCarga.tipo_matricula = reg.tipo_matricula || 'P';
     formCarga.nro_matricula = reg.nro_matricula || '441983';
     pacienteQuery.value = `${reg.paciente_nombre} (${reg.nro_afiliado})`;
-    formCarga.items = [{ fecha_realizacion: reg.fecha_realizacion || hoyISO(), autorizacion: '', cantidad: reg.cantidad || 1 }];
+    formCarga.items = [{ fecha_realizacion: reg.fecha_realizacion || hoyISO(), autorizacion: '', cantidad: reg.cantidad || 1, es_asistencia_adicional: false }];
     toast.add({
         severity: 'info',
         summary: 'Datos copiados al formulario',
@@ -358,8 +369,10 @@ const editRegistroForm = reactive({
     fecha_realizacion: '',
     paciente_nombre: '',
     nro_afiliado: '',
+    iva: 'OBLIGATORIO',
     cud: 'NO',
     cantidad: 1,
+    es_asistencia_adicional: false,
     practica_id: '',
     practica_codigo: '',
     practica_descripcion: '',
@@ -377,8 +390,10 @@ function abrirEditarRegistro(reg) {
         fecha_realizacion: reg.fecha_realizacion,
         paciente_nombre: reg.paciente_nombre,
         nro_afiliado: reg.nro_afiliado,
+        iva: reg.iva || 'OBLIGATORIO',
         cud: reg.cud || 'NO',
         cantidad: reg.cantidad || 1,
+        es_asistencia_adicional: Boolean(reg.es_asistencia_adicional),
         practica_id: reg.practica_id || '',
         practica_codigo: reg.practica_codigo,
         practica_descripcion: reg.practica_descripcion,
@@ -450,10 +465,11 @@ async function recalcularPreciosDelPeriodo() {
     }
 }
 
-async function descargarExportacion(formato) {
+async function descargarExportacion(formato, subtipo = null) {
     exportando.value = true;
     try {
         const params = { ...construirParamsFiltro(), formato };
+        if (subtipo) params.subtipo = subtipo;
         const response = await facturacionService.exportarFacturacion(params);
         const blob = new Blob([response.data], {
             type: formato === 'xlsx' ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' : 'text/csv;charset=utf-8;'
@@ -461,16 +477,18 @@ async function descargarExportacion(formato) {
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         const sufijo = filtro.modoFecha === 'mes' && filtro.mes ? filtro.mes : filtro.modoFecha === 'rango' ? `${filtro.fecha_desde || 'inicio'}_a_${filtro.fecha_hasta || 'fin'}` : 'completo';
+        const subtipoSufijo = subtipo ? `_${subtipo}` : '';
         a.href = url;
-        a.download = `facturacion_${financiadorActivo.value}_${sufijo}.${formato}`;
+        a.download = `facturacion_${financiadorActivo.value}${subtipoSufijo}_${sufijo}.${formato}`;
         document.body.appendChild(a);
         a.click();
         a.remove();
         window.URL.revokeObjectURL(url);
+        const subtipoLabel = subtipo ? ` (${subtipo.replace('_', ' ')})` : '';
         toast.add({
             severity: 'success',
             summary: 'Archivo descargado',
-            detail: `Exportación ${formato.toUpperCase()} generada correctamente.`,
+            detail: `Exportación ${formato.toUpperCase()}${subtipoLabel} generada correctamente.`,
             life: 3000
         });
     } catch (err) {
@@ -693,13 +711,22 @@ onMounted(async () => {
                 <div class="flex flex-wrap items-center gap-2">
                     <Button label="Catálogo de Prácticas" icon="pi pi-list" severity="secondary" outlined size="small" @click="modalCatalogoPracticas = true" />
                     <Button v-if="financiadorActivo === 'medicus'" label="Datos de Prestadores" icon="pi pi-building" severity="secondary" outlined size="small" @click="modalPrestadores = true" />
-                    <Button label="Exportar CSV" icon="pi pi-file" severity="secondary" size="small" :loading="exportando" @click="descargarExportacion('csv')" />
-                    <Button label="Exportar Excel (.xlsx)" icon="pi pi-file-excel" severity="success" size="small" :loading="exportando" @click="descargarExportacion('xlsx')" />
+                    <template v-if="financiadorActivo === 'swiss_medical'">
+                        <Button label="Discapacidad (CUD=SI) Excel" icon="pi pi-file-excel" severity="success" size="small" :loading="exportando" @click="descargarExportacion('xlsx', 'discapacidad')" />
+                        <Button label="Discapacidad CSV" icon="pi pi-file" severity="secondary" size="small" :loading="exportando" @click="descargarExportacion('csv', 'discapacidad')" />
+                        <Button label="Sin Discapacidad Excel" icon="pi pi-file-excel" severity="success" size="small" outlined :loading="exportando" @click="descargarExportacion('xlsx', 'sin_discapacidad')" />
+                        <Button label="Sin Discapacidad CSV" icon="pi pi-file" severity="secondary" size="small" outlined :loading="exportando" @click="descargarExportacion('csv', 'sin_discapacidad')" />
+                        <Button label="Planilla Completa" icon="pi pi-download" severity="info" size="small" text :loading="exportando" title="Exportar todos los bloques en un solo archivo" @click="descargarExportacion('xlsx', 'completo')" />
+                    </template>
+                    <template v-else>
+                        <Button label="Exportar CSV" icon="pi pi-file" severity="secondary" size="small" :loading="exportando" @click="descargarExportacion('csv')" />
+                        <Button label="Exportar Excel (.xlsx)" icon="pi pi-file-excel" severity="success" size="small" :loading="exportando" @click="descargarExportacion('xlsx')" />
+                    </template>
                 </div>
             </div>
 
             <!-- Pestañas de Obra Social -->
-            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-5">
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-5">
                 <button
                     v-for="fin in FINANCIADORES"
                     :key="fin.key"
@@ -759,9 +786,18 @@ onMounted(async () => {
                 </div>
 
                 <!-- N° de Afiliado / Cobertura -->
-                <div class="md:col-span-3">
+                <div :class="financiadorActivo === 'swiss_medical' ? 'md:col-span-2' : 'md:col-span-3'">
                     <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">N° de Afiliado / Cobertura <span class="text-red-500">*</span></label>
                     <InputText v-model="formCarga.nro_afiliado" placeholder="Ej: 11197918006 o 110718/00" class="w-full font-mono" />
+                </div>
+
+                <!-- Condición IVA (Swiss Medical) -->
+                <div v-if="financiadorActivo === 'swiss_medical'" class="md:col-span-1">
+                    <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">IVA</label>
+                    <select v-model="formCarga.iva" class="p-inputtext p-component w-full h-10 text-sm font-semibold">
+                        <option value="OBLIGATORIO">OBLIG.</option>
+                        <option value="ADHERENTE">ADH.</option>
+                    </select>
                 </div>
 
                 <!-- CUD -->
@@ -778,14 +814,16 @@ onMounted(async () => {
                     <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Práctica / Prestación (Catálogo) <span class="text-red-500">*</span></label>
                     <select v-model="formCarga.practica_id" @change="onChangePracticaCarga" class="p-inputtext p-component w-full h-10 text-sm">
                         <option value="">— Seleccionar práctica de {{ infoFinanciador.nombre }} —</option>
-                        <option v-for="pr in practicasFinanciador" :key="pr.id" :value="pr.id">{{ pr.financiador === 'medicus' ? `${pr.codigo} — ${pr.descripcion}` : pr.descripcion }} ($ {{ formatearMoneda(pr.importe) }})</option>
+                        <option v-for="pr in practicasFinanciador" :key="pr.id" :value="pr.id">
+                            {{ pr.financiador === 'medicus' || pr.financiador === 'swiss_medical' ? `${pr.codigo} — ${pr.descripcion}` : pr.descripcion }} ($ {{ formatearMoneda(pr.importe) }})
+                        </option>
                     </select>
                 </div>
 
                 <!-- Código / Texto a exportar -->
                 <div class="md:col-span-3">
                     <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                        {{ financiadorActivo === 'medicus' ? 'Código a Homologar' : financiadorActivo === 'ospoce' ? 'Práctica a Exportar' : 'Razón a Exportar' }}
+                        {{ financiadorActivo === 'medicus' ? 'Código a Homologar' : financiadorActivo === 'swiss_medical' ? 'Código SMG' : financiadorActivo === 'ospoce' ? 'Práctica a Exportar' : 'Razón a Exportar' }}
                     </label>
                     <InputText v-model="formCarga.practica_codigo" placeholder="Código o práctica" class="w-full font-mono" />
                 </div>
@@ -848,6 +886,13 @@ onMounted(async () => {
                         </div>
                         <div class="sm:col-span-1 flex justify-end pt-4">
                             <Button v-if="formCarga.items.length > 1" icon="pi pi-trash" severity="danger" text rounded size="small" @click="quitarFilaFecha(idx)" />
+                        </div>
+                        <div v-if="financiadorActivo === 'swiss_medical'" class="sm:col-span-12 flex items-center gap-2 pt-0.5">
+                            <label class="inline-flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300 cursor-pointer">
+                                <input type="checkbox" v-model="item.es_asistencia_adicional" />
+                                <span class="font-medium text-amber-700 dark:text-amber-400">Asistencia de módulo mensual (*)</span>
+                                <span class="text-slate-500 text-[11px]">— Se exporta con valor "*" y no duplica el importe del módulo</span>
+                            </label>
                         </div>
                     </div>
                 </div>
@@ -941,11 +986,14 @@ onMounted(async () => {
                             <th class="p-3">Fecha</th>
                             <th class="p-3">Paciente</th>
                             <th class="p-3">N° Afiliado</th>
-                            <th class="p-3">{{ financiadorActivo === 'medicus' ? 'Prestación (Código + Descripción)' : financiadorActivo === 'ospoce' ? 'Práctica' : 'Razón' }}</th>
+                            <th v-if="financiadorActivo === 'swiss_medical'" class="p-3">IVA</th>
+                            <th class="p-3">
+                                {{ financiadorActivo === 'medicus' ? 'Prestación (Código + Descripción)' : financiadorActivo === 'swiss_medical' ? 'Prestación (Código + Descripción SMG)' : financiadorActivo === 'ospoce' ? 'Práctica' : 'Razón' }}
+                            </th>
                             <th v-if="financiadorActivo === 'medicus'" class="p-3">Efector / Matrícula</th>
                             <th v-if="financiadorActivo !== 'corporacion'" class="p-3">{{ financiadorActivo === 'medicus' ? 'ID Conectividad' : 'Autorización' }}</th>
-                            <th v-if="financiadorActivo === 'corporacion'" class="p-3 text-center">Sesiones</th>
-                            <th v-if="financiadorActivo === 'corporacion'" class="p-3 text-center">CUD</th>
+                            <th v-if="financiadorActivo === 'corporacion' || financiadorActivo === 'swiss_medical'" class="p-3 text-center">Sesiones</th>
+                            <th v-if="financiadorActivo === 'corporacion' || financiadorActivo === 'swiss_medical'" class="p-3 text-center">CUD</th>
                             <th class="p-3 text-right">{{ financiadorActivo === 'medicus' ? 'Honorarios' : 'Importe' }}</th>
                             <th class="p-3 text-right">Acciones</th>
                         </tr>
@@ -964,9 +1012,14 @@ onMounted(async () => {
                             <td class="p-3 font-mono text-xs whitespace-nowrap">{{ reg.fecha_realizacion }}</td>
                             <td class="p-3 font-medium text-slate-900 dark:text-white">{{ reg.paciente_nombre }}</td>
                             <td class="p-3 font-mono text-xs">{{ reg.nro_afiliado }}</td>
+                            <td v-if="financiadorActivo === 'swiss_medical'" class="p-3">
+                                <span class="px-2 py-0.5 rounded text-[11px] font-bold" :class="reg.iva === 'ADHERENTE' ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-700'">
+                                    {{ reg.iva || 'OBLIGATORIO' }}
+                                </span>
+                            </td>
                             <td class="p-3">
-                                <span v-if="financiadorActivo === 'medicus'" class="font-mono font-bold text-teal-700 dark:text-teal-400 mr-1.5">{{ reg.practica_codigo }}</span>
-                                <span class="text-xs text-slate-700 dark:text-slate-300">{{ financiadorActivo === 'medicus' ? reg.practica_descripcion : reg.practica_codigo }}</span>
+                                <span v-if="financiadorActivo === 'medicus' || financiadorActivo === 'swiss_medical'" class="font-mono font-bold text-teal-700 dark:text-teal-400 mr-1.5">{{ reg.practica_codigo }}</span>
+                                <span class="text-xs text-slate-700 dark:text-slate-300">{{ financiadorActivo === 'medicus' || financiadorActivo === 'swiss_medical' ? reg.practica_descripcion : reg.practica_codigo }}</span>
                             </td>
                             <td v-if="financiadorActivo === 'medicus'" class="p-3 font-mono text-xs text-slate-600 dark:text-slate-400">
                                 {{ reg.lugar_realizacion_efector || 'E171513' }} · {{ reg.tipo_matricula || 'P' }}-{{ reg.nro_matricula || '441983' }}
@@ -974,15 +1027,18 @@ onMounted(async () => {
                             <td v-if="financiadorActivo !== 'corporacion'" class="p-3 font-mono text-xs">
                                 {{ reg.autorizacion || '—' }}
                             </td>
-                            <td v-if="financiadorActivo === 'corporacion'" class="p-3 text-center font-mono text-xs">
+                            <td v-if="financiadorActivo === 'corporacion' || financiadorActivo === 'swiss_medical'" class="p-3 text-center font-mono text-xs">
                                 {{ reg.cantidad }}
                             </td>
-                            <td v-if="financiadorActivo === 'corporacion'" class="p-3 text-center">
+                            <td v-if="financiadorActivo === 'corporacion' || financiadorActivo === 'swiss_medical'" class="p-3 text-center">
                                 <span class="px-2 py-0.5 rounded text-xs font-bold" :class="reg.cud === 'SI' ? 'bg-teal-100 text-teal-800' : 'bg-slate-100 text-slate-700'">
                                     {{ reg.cud }}
                                 </span>
                             </td>
-                            <td class="p-3 text-right font-mono font-semibold text-slate-900 dark:text-white whitespace-nowrap">$ {{ formatearMoneda(reg.importe) }}</td>
+                            <td class="p-3 text-right font-mono font-semibold text-slate-900 dark:text-white whitespace-nowrap">
+                                <span v-if="reg.es_asistencia_adicional" class="font-mono font-bold text-amber-600 text-base" title="Asistencia de módulo (*)">*</span>
+                                <span v-else>$ {{ formatearMoneda(reg.importe) }}</span>
+                            </td>
                             <td class="p-3 text-right whitespace-nowrap">
                                 <Button icon="pi pi-copy" text rounded size="small" severity="secondary" title="Copiar paciente y práctica para otra fecha" @click="precargarDesdeFila(reg)" />
                                 <Button icon="pi pi-pencil" text rounded size="small" severity="info" title="Editar fila" @click="abrirEditarRegistro(reg)" />
@@ -992,7 +1048,9 @@ onMounted(async () => {
                     </tbody>
                     <tfoot v-if="registros.length > 0">
                         <tr class="bg-slate-50 dark:bg-slate-800/80 font-bold">
-                            <td :colspan="financiadorActivo === 'medicus' ? 7 : financiadorActivo === 'corporacion' ? 7 : 6" class="p-3 text-right uppercase text-xs text-slate-500">Total ({{ resumen.total_registros }} prestaciones):</td>
+                            <td :colspan="financiadorActivo === 'swiss_medical' ? 8 : financiadorActivo === 'medicus' ? 7 : financiadorActivo === 'corporacion' ? 7 : 6" class="p-3 text-right uppercase text-xs text-slate-500">
+                                Total ({{ resumen.total_registros }} prestaciones):
+                            </td>
                             <td class="p-3 text-right font-mono text-base text-teal-700 dark:text-teal-400 whitespace-nowrap">$ {{ formatearMoneda(resumen.total_importe) }}</td>
                             <td></td>
                         </tr>
@@ -1047,6 +1105,19 @@ onMounted(async () => {
                             <option value="SI">SI</option>
                         </select>
                     </div>
+                </div>
+                <div v-if="financiadorActivo === 'swiss_medical'">
+                    <label class="block text-xs font-semibold mb-1">Condición IVA</label>
+                    <select v-model="editRegistroForm.iva" class="p-inputtext p-component w-full h-10 text-sm">
+                        <option value="OBLIGATORIO">OBLIGATORIO</option>
+                        <option value="ADHERENTE">ADHERENTE</option>
+                    </select>
+                </div>
+                <div v-if="financiadorActivo === 'swiss_medical'" class="flex items-center pt-6">
+                    <label class="inline-flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300 cursor-pointer">
+                        <input type="checkbox" v-model="editRegistroForm.es_asistencia_adicional" />
+                        <span class="font-bold text-amber-700 dark:text-amber-400">Asistencia adicional (*)</span>
+                    </label>
                 </div>
                 <template v-if="financiadorActivo === 'medicus'">
                     <div>

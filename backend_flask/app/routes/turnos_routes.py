@@ -913,17 +913,64 @@ def turnos_profesional_completo():
             ORDER BY t.fecha_inicio ASC
         """
         )
-        turnos = cursor.fetchall()
+        individuales = cursor.fetchall()
+
+        cursor.execute(
+            """
+            SELECT
+                tg.id,
+                tg.paciente_id AS paciente_id,
+                tg.fecha_inicio AS start,
+                tg.fecha_fin AS end,
+                TRIM(CONCAT(COALESCE(p.nombre, ''), ' ', COALESCE(p.apellido, ''))) AS paciente,
+                p.dni,
+                p.cobertura,
+                p.nro_certificado,
+                CONCAT('Grupo: ', gp.nombre) AS profesional,
+                tg.motivo AS description,
+                tg.observaciones,
+                tg.ausencia,
+                tg.estado_asistencia,
+                0 AS es_sobreturno,
+                ucg.nombre AS creado_por_nombre,
+                tg.creado_en,
+                gp.color AS color,
+                'grupal' AS tipo,
+                gp.id AS grupo_id,
+                gp.nombre AS grupo_nombre,
+                0 AS editable
+            FROM turnos_grupales tg
+            JOIN grupos_profesionales gp ON gp.id = tg.grupo_id
+            JOIN pacientes p ON p.id = tg.paciente_id
+            LEFT JOIN usuarios ucg ON ucg.id = tg.creado_por
+            ORDER BY tg.fecha_inicio ASC
+        """
+        )
+        grupales = cursor.fetchall()
+
         cursor.close()
         conn.close()
 
-        for t in turnos:
+        eventos = []
+        for t in individuales:
             t["start"] = _to_iso_arg(t["start"])
             t["end"] = _to_iso_arg(t["end"])
             t["creado_en"] = _to_iso_arg(t["creado_en"])
             t["turnoId"] = t["id"]
             t["es_sobreturno"] = bool(t.get("es_sobreturno", 0))
-        return jsonify(turnos)
+            eventos.append(t)
+
+        for g in grupales:
+            g["start"] = _to_iso_arg(g["start"])
+            g["end"] = _to_iso_arg(g["end"])
+            g["creado_en"] = _to_iso_arg(g["creado_en"])
+            g["turnoId"] = g["id"]
+            g["id"] = f"grupal-{g['id']}"
+            g["es_sobreturno"] = False
+            eventos.append(g)
+
+        eventos.sort(key=lambda x: x.get("start") or "")
+        return jsonify(eventos)
 
     cursor.execute(
         """
@@ -1395,7 +1442,21 @@ def api_actualizar_ausencia_turno(id):
         cursor.execute("SELECT usuario_id FROM turnos WHERE id = %s", (id,))
         turno = cursor.fetchone()
         if not turno:
-            return jsonify({"error": "Turno no encontrado"}), 404
+            cursor.execute("SELECT id FROM turnos_grupales WHERE id = %s", (id,))
+            turno_grupal = cursor.fetchone()
+            if not turno_grupal:
+                return jsonify({"error": "Turno no encontrado"}), 404
+
+            cursor.execute(
+                "UPDATE turnos_grupales SET ausencia = %s, estado_asistencia = %s WHERE id = %s",
+                (ausencia, estado_asistencia, id)
+            )
+            conn.commit()
+            return jsonify({
+                "mensaje": "Asistencia de turno grupal actualizada correctamente",
+                "estado_asistencia": estado_asistencia,
+                "ausencia": ausencia
+            })
 
         if current_user.rol == "profesional" and turno["usuario_id"] != current_user.id:
             return jsonify({"error": "No autorizado"}), 403
@@ -1478,16 +1539,46 @@ def api_turnos_presentes_hoy():
                     p.dni,
                     p.cobertura,
                     p.nro_certificado,
-                    u.nombre AS profesional
+                    u.nombre AS profesional,
+                    0 AS es_grupal,
+                    NULL AS grupo_id,
+                    NULL AS grupo_nombre
                 FROM turnos t
                 JOIN pacientes p ON t.paciente_id = p.id
                 JOIN usuarios u ON t.usuario_id = u.id
                 WHERE t.usuario_id = %s
                   AND t.estado_asistencia = 'presente'
                   AND DATE(t.fecha_inicio) = CURDATE()
-                ORDER BY t.fecha_inicio ASC
+                UNION ALL
+                SELECT
+                    tg.id,
+                    tg.paciente_id,
+                    tg.fecha_inicio,
+                    tg.fecha_fin,
+                    tg.motivo,
+                    tg.observaciones,
+                    tg.estado_asistencia,
+                    tg.ausencia,
+                    0 AS es_sobreturno,
+                    gm.usuario_id AS usuario_id,
+                    TRIM(CONCAT(COALESCE(p.nombre, ''), ' ', COALESCE(p.apellido, ''))) AS paciente,
+                    p.dni,
+                    p.cobertura,
+                    p.nro_certificado,
+                    CONCAT('Grupo: ', gp.nombre) AS profesional,
+                    1 AS es_grupal,
+                    gp.id AS grupo_id,
+                    gp.nombre AS grupo_nombre
+                FROM turnos_grupales tg
+                JOIN grupos_profesionales gp ON gp.id = tg.grupo_id
+                JOIN grupo_miembros gm ON gm.grupo_id = tg.grupo_id
+                JOIN pacientes p ON tg.paciente_id = p.id
+                WHERE gm.usuario_id = %s
+                  AND tg.estado_asistencia = 'presente'
+                  AND DATE(tg.fecha_inicio) = CURDATE()
+                ORDER BY fecha_inicio ASC
                 """,
-                (current_user.id,),
+                (current_user.id, current_user.id),
             )
         else:
             cursor.execute(
@@ -1507,13 +1598,41 @@ def api_turnos_presentes_hoy():
                     p.dni,
                     p.cobertura,
                     p.nro_certificado,
-                    u.nombre AS profesional
+                    u.nombre AS profesional,
+                    0 AS es_grupal,
+                    NULL AS grupo_id,
+                    NULL AS grupo_nombre
                 FROM turnos t
                 JOIN pacientes p ON t.paciente_id = p.id
                 JOIN usuarios u ON t.usuario_id = u.id
                 WHERE t.estado_asistencia = 'presente'
                   AND DATE(t.fecha_inicio) = CURDATE()
-                ORDER BY t.fecha_inicio ASC
+                UNION ALL
+                SELECT
+                    tg.id,
+                    tg.paciente_id,
+                    tg.fecha_inicio,
+                    tg.fecha_fin,
+                    tg.motivo,
+                    tg.observaciones,
+                    tg.estado_asistencia,
+                    tg.ausencia,
+                    0 AS es_sobreturno,
+                    NULL AS usuario_id,
+                    TRIM(CONCAT(COALESCE(p.nombre, ''), ' ', COALESCE(p.apellido, ''))) AS paciente,
+                    p.dni,
+                    p.cobertura,
+                    p.nro_certificado,
+                    CONCAT('Grupo: ', gp.nombre) AS profesional,
+                    1 AS es_grupal,
+                    gp.id AS grupo_id,
+                    gp.nombre AS grupo_nombre
+                FROM turnos_grupales tg
+                JOIN grupos_profesionales gp ON gp.id = tg.grupo_id
+                JOIN pacientes p ON tg.paciente_id = p.id
+                WHERE tg.estado_asistencia = 'presente'
+                  AND DATE(tg.fecha_inicio) = CURDATE()
+                ORDER BY fecha_inicio ASC
                 """
             )
         turnos = cursor.fetchall()
@@ -1521,7 +1640,11 @@ def api_turnos_presentes_hoy():
             t["start"] = _to_iso_arg(t["fecha_inicio"])
             t["end"] = _to_iso_arg(t["fecha_fin"])
             t["turnoId"] = t["id"]
-            t["es_sobreturno"] = bool(t.get("es_sobreturno", 0))
+            if t.get("es_grupal"):
+                t["id"] = f"grupal-{t['id']}"
+                t["es_sobreturno"] = False
+            else:
+                t["es_sobreturno"] = bool(t.get("es_sobreturno", 0))
         return jsonify(turnos)
     finally:
         cursor.close()

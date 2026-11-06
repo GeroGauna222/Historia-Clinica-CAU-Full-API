@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pytest
 
@@ -784,5 +784,94 @@ def test_administrativo_solape_se_marca_como_sobreturno(client, monkeypatch):
     assert len(inserts) == 1
     _, params = inserts[0]
     assert params[6] == 1  # Detectado automáticamente como sobreturno
+
+
+def test_actualizar_asistencia_turno_fallback_grupal(client, monkeypatch):
+    login_as(client, MockUser(user_id=1, rol="director"))
+
+    # fetchone 1: SELECT from turnos -> None (not an individual appointment)
+    # fetchone 2: SELECT from turnos_grupales -> found {"id": 99}
+    fake_cursor = FakeCursor(fetchone_results=[None, {"id": 99}])
+    fake_connection = FakeConnection(fake_cursor)
+    monkeypatch.setattr(turnos_routes, "get_connection", lambda: fake_connection)
+
+    response = client.patch(
+        "/api/turnos/99/asistencia",
+        json={"estado_asistencia": "presente"},
+    )
+    assert response.status_code == 200
+    res_data = response.get_json()
+    assert res_data["estado_asistencia"] == "presente"
+    assert "turno grupal" in res_data["mensaje"].lower()
+
+    updates = [item for item in fake_cursor.executed if "UPDATE turnos_grupales SET" in item[0]]
+    assert len(updates) == 1
+    _, params = updates[0]
+    assert params == (None, "presente", 99)
+
+
+def test_turnos_profesional_completo_director_incluye_grupales(client, monkeypatch):
+    login_as(client, MockUser(user_id=1, rol="director"))
+
+    now = datetime.now()
+    individual = {
+        "id": 1,
+        "paciente_id": 10,
+        "start": now,
+        "end": now + timedelta(minutes=20),
+        "paciente": "Ana Gomez",
+        "dni": "123",
+        "cobertura": "OSDE",
+        "nro_certificado": "999",
+        "profesional": "Dr Perez",
+        "description": "Consulta",
+        "observaciones": None,
+        "ausencia": None,
+        "estado_asistencia": "programado",
+        "es_sobreturno": 0,
+        "creado_por_nombre": "Admin",
+        "creado_en": now,
+        "color": "#1976D2",
+        "tipo": "individual",
+        "grupo_id": None,
+        "grupo_nombre": None,
+        "editable": 1,
+    }
+    grupal = {
+        "id": 2,
+        "paciente_id": 20,
+        "start": now + timedelta(hours=1),
+        "end": now + timedelta(hours=1, minutes=45),
+        "paciente": "Beto Diaz",
+        "dni": "456",
+        "cobertura": "PAMI",
+        "nro_certificado": "888",
+        "profesional": "Grupo: Taller",
+        "description": "Taller",
+        "observaciones": None,
+        "ausencia": None,
+        "estado_asistencia": "programado",
+        "es_sobreturno": 0,
+        "creado_por_nombre": "Admin",
+        "creado_en": now,
+        "color": "#00936B",
+        "tipo": "grupal",
+        "grupo_id": 5,
+        "grupo_nombre": "Taller",
+        "editable": 0,
+    }
+
+    fake_cursor = FakeCursor(fetchall_results=[[individual], [grupal]])
+    fake_connection = FakeConnection(fake_cursor)
+    monkeypatch.setattr(turnos_routes, "get_connection", lambda: fake_connection)
+
+    response = client.get("/api/turnos/profesional/completo")
+    assert response.status_code == 200
+    data = response.get_json()
+    assert len(data) == 2
+    ids = [item["id"] for item in data]
+    assert 1 in ids
+    assert "grupal-2" in ids
+
 
 

@@ -140,6 +140,7 @@ const iconoWidget = computed(() => {
                                     En atención
                                 </span>
                                 <Tag v-if="atencion.es_sobreturno" value="Sobreturno" severity="warn" rounded class="text-[10px] font-bold" />
+                                <Tag v-if="atencion.es_grupal" :value="atencion.grupo_nombre ? 'Grupal: ' + atencion.grupo_nombre : 'Grupal'" severity="secondary" rounded class="text-[10px] font-bold" />
                                 <span v-if="atencion.profesional" class="text-xs font-semibold px-2 py-0.5 rounded-full bg-card text-color border border-surface flex items-center gap-1">
                                     <i class="pi pi-user-md text-primary text-xs"></i>
                                     {{ atencion.profesional }}
@@ -232,6 +233,7 @@ const iconoWidget = computed(() => {
                                 En atención ahora
                             </span>
                             <Tag v-if="turnoEnCurso.es_sobreturno" value="Sobreturno" severity="warn" rounded class="text-[11px] font-bold" />
+                            <Tag v-if="turnoEnCurso.es_grupal" :value="turnoEnCurso.grupo_nombre ? 'Grupal: ' + turnoEnCurso.grupo_nombre : 'Grupal'" severity="secondary" rounded class="text-[11px] font-bold" />
                         </div>
                         <span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-card text-color border border-surface flex items-center gap-1.5 shadow-sm">
                             <i class="pi pi-clock text-status-presente-fg"></i>
@@ -298,6 +300,7 @@ const iconoWidget = computed(() => {
                             <div class="flex items-center gap-2">
                                 <Tag value="Próximo Turno" severity="info" rounded class="font-semibold" />
                                 <Tag v-if="proximoEvento.es_sobreturno" value="Sobreturno" severity="warn" rounded class="text-[11px] font-bold" />
+                                <Tag v-if="proximoEvento.es_grupal" :value="proximoEvento.grupo_nombre ? 'Grupal: ' + proximoEvento.grupo_nombre : 'Grupal'" severity="secondary" rounded class="text-[11px] font-bold" />
                             </div>
                             <span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-card text-color border border-surface flex items-center gap-1.5 shadow-sm">
                                 <i class="pi pi-clock text-primary"></i>
@@ -334,12 +337,36 @@ const iconoWidget = computed(() => {
                         <!-- Acciones rápidas para el próximo turno -->
                         <div class="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-surface">
                             <div class="flex items-center gap-2">
-                                <Button v-if="!esAdmin" label="Marcar Presente" icon="pi pi-check" severity="success" rounded class="font-semibold" @click="emit('cambiarAsistencia', { turnoId: proximoEvento.id, estado: 'presente' })" />
+                                <Button
+                                    v-if="!esAdmin"
+                                    label="Marcar Presente"
+                                    icon="pi pi-check"
+                                    severity="success"
+                                    rounded
+                                    class="font-semibold"
+                                    @click="emit('cambiarAsistencia', { turnoId: proximoEvento.turnoId || proximoEvento.id, estado: 'presente', esGrupal: proximoEvento.es_grupal })"
+                                />
                                 <Button label="Ver Historia" icon="pi pi-folder-open" severity="info" outlined rounded :disabled="!proximoEvento.paciente_id" @click="emit('verHistoria', proximoEvento)" />
                             </div>
                             <div v-if="!esAdmin" class="flex items-center gap-1">
-                                <Button label="Con aviso" size="small" severity="warn" text rounded v-tooltip.top="'Paciente avisó que no viene'" @click="emit('cambiarAsistencia', { turnoId: proximoEvento.id, estado: 'con_aviso' })" />
-                                <Button label="Sin aviso" size="small" severity="danger" text rounded v-tooltip.top="'Paciente ausente sin aviso'" @click="emit('cambiarAsistencia', { turnoId: proximoEvento.id, estado: 'sin_aviso' })" />
+                                <Button
+                                    label="Con aviso"
+                                    size="small"
+                                    severity="warn"
+                                    text
+                                    rounded
+                                    v-tooltip.top="'Paciente avisó que no viene'"
+                                    @click="emit('cambiarAsistencia', { turnoId: proximoEvento.turnoId || proximoEvento.id, estado: 'con_aviso', esGrupal: proximoEvento.es_grupal })"
+                                />
+                                <Button
+                                    label="Sin aviso"
+                                    size="small"
+                                    severity="danger"
+                                    text
+                                    rounded
+                                    v-tooltip.top="'Paciente ausente sin aviso'"
+                                    @click="emit('cambiarAsistencia', { turnoId: proximoEvento.turnoId || proximoEvento.id, estado: 'sin_aviso', esGrupal: proximoEvento.es_grupal })"
+                                />
                             </div>
                         </div>
                     </template>

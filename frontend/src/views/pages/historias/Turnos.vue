@@ -57,7 +57,9 @@ async function guardarAsistenciaTurno(estado) {
     if (!turnoSeleccionado.value) return;
     guardandoAusencia.value = true;
     try {
-        const url = `/turnos/${turnoSeleccionado.value.turnoId}/asistencia`;
+        const esGrupal = turnoSeleccionado.value.tipo === 'grupal';
+        const idReal = turnoSeleccionado.value.turnoId || (String(turnoSeleccionado.value.id).startsWith('grupal-') ? String(turnoSeleccionado.value.id).replace('grupal-', '') : turnoSeleccionado.value.id);
+        const url = esGrupal ? `/turnos/grupales/${idReal}/asistencia` : `/turnos/${idReal}/asistencia`;
         await api.patch(url, { estado_asistencia: estado }, { withCredentials: true });
         turnoSeleccionado.value.estado_asistencia = estado;
         turnoSeleccionado.value.ausencia = estado === 'con_aviso' || estado === 'sin_aviso' ? estado : null;

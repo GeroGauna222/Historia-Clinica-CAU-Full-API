@@ -52,7 +52,16 @@ const atencionesEnCurso = computed(() => {
     if (dashboard.value?.atenciones_en_curso && dashboard.value.atenciones_en_curso.length > 0) {
         return dashboard.value.atenciones_en_curso;
     }
-    return turnosHoy.value.filter((t) => t.estado_asistencia === 'presente');
+    const presentes = turnosHoy.value.filter((t) => t.estado_asistencia === 'presente');
+    if (!esDirector.value) {
+        return presentes.slice(-1);
+    }
+    const ultimosPorProf = {};
+    for (const t of presentes) {
+        const key = t.es_grupal ? `grupo-${t.grupo_id}` : t.usuario_id ? `usuario-${t.usuario_id}` : t.profesional || t.id;
+        ultimosPorProf[key] = t;
+    }
+    return Object.values(ultimosPorProf);
 });
 const turnoEnCurso = computed(() => dashboard.value?.turno_en_curso || atencionesEnCurso.value.slice(-1)[0] || null);
 const disponibilidadHoy = computed(() => dashboard.value?.disponibilidad_hoy || []);
@@ -116,11 +125,14 @@ const filaTurnoClass = (data) => {
     return '';
 };
 
-const actualizarAsistencia = async ({ turnoId, estado }) => {
+const actualizarAsistencia = async ({ turnoId, estado, esGrupal = false }) => {
     try {
-        await api.patch(`/turnos/${turnoId}/asistencia`, { estado_asistencia: estado }, { withCredentials: true });
+        const idStr = String(turnoId);
+        const idReal = idStr.startsWith('grupal-') ? idStr.replace('grupal-', '') : turnoId;
+        const url = esGrupal || idStr.startsWith('grupal-') ? `/turnos/grupales/${idReal}/asistencia` : `/turnos/${idReal}/asistencia`;
+        await api.patch(url, { estado_asistencia: estado }, { withCredentials: true });
 
-        const target = turnosHoy.value.find((item) => item.id === turnoId);
+        const target = turnosHoy.value.find((item) => item.id === turnoId || item.turnoId === idReal);
         if (target) {
             target.estado_asistencia = estado;
             target.ausencia = ['con_aviso', 'sin_aviso'].includes(estado) ? estado : null;
@@ -281,6 +293,7 @@ const cerrarAlertaHoy = () => {
                                         <div class="flex items-center gap-2">
                                             <span class="font-bold text-color truncate"> {{ slotProps.data.paciente }} {{ slotProps.data.apellido }} </span>
                                             <Tag v-if="slotProps.data.es_sobreturno" value="Sobreturno" severity="warn" class="!text-[10px] !py-0 !px-1.5 font-bold" rounded />
+                                            <Tag v-if="slotProps.data.es_grupal" :value="slotProps.data.grupo_nombre ? 'Grupal: ' + slotProps.data.grupo_nombre : 'Grupal'" severity="secondary" class="!text-[10px] !py-0 !px-1.5 font-bold" rounded />
                                         </div>
                                         <div class="flex flex-wrap items-center gap-1.5 text-xs text-muted-color mt-0.5">
                                             <span v-if="slotProps.data.nro_hc" class="font-semibold text-color">HC: {{ slotProps.data.nro_hc }}</span>
@@ -307,7 +320,7 @@ const cerrarAlertaHoy = () => {
                                             size="small"
                                             severity="success"
                                             v-tooltip.top="'Marcar presente'"
-                                            @click="actualizarAsistencia({ turnoId: slotProps.data.id, estado: 'presente' })"
+                                            @click="actualizarAsistencia({ turnoId: slotProps.data.turnoId || slotProps.data.id, estado: 'presente', esGrupal: slotProps.data.es_grupal })"
                                         />
                                         <Button icon="pi pi-folder-open" rounded outlined size="small" severity="info" v-tooltip.top="'Ver historia clínica'" :disabled="!slotProps.data.paciente_id" @click="verHistoria(slotProps.data)" />
                                     </div>

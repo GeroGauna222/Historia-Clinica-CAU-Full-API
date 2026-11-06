@@ -37,7 +37,7 @@ def _normalizar_row(row):
         return row
     result = {}
     for key, value in row.items():
-        if key == "es_sobreturno":
+        if key in ("es_sobreturno", "es_grupal"):
             result[key] = bool(value)
         else:
             result[key] = _to_json_value(value)
@@ -46,6 +46,17 @@ def _normalizar_row(row):
 
 def _normalizar_rows(rows):
     return [_normalizar_row(row) for row in rows or []]
+
+
+def _formatear_turnos(rows):
+    formateados = []
+    for r in _normalizar_rows(rows):
+        r["turnoId"] = r["id"]
+        if r.get("es_grupal"):
+            r["id"] = f"grupal-{r['id']}"
+            r["es_sobreturno"] = False
+        formateados.append(r)
+    return formateados
 
 
 def _tipo_evento_ausencia(motivo):
@@ -70,10 +81,13 @@ def _enriquecer_ausencias(rows):
 def _primer_evento(turno, ausencia):
     eventos = []
     if turno:
+        titulo = f"{turno.get('paciente', '')} {turno.get('apellido', '')}".strip()
+        if turno.get("es_grupal") and turno.get("grupo_nombre"):
+            titulo = f"[{turno.get('grupo_nombre')}] {titulo}"
         eventos.append({
             **turno,
             "tipo": "Turno",
-            "titulo": f"{turno.get('paciente', '')} {turno.get('apellido', '')}".strip(),
+            "titulo": titulo,
             "detalle": turno.get("motivo") or "",
         })
     if ausencia:
@@ -195,38 +209,90 @@ def get_dashboard():
                        p.nombre AS paciente, p.apellido, p.dni, p.nro_hc, p.cobertura,
                        p.nro_certificado AS nro_afiliado, p.nro_certificado, p.fecha_nacimiento,
                        p.telefono, p.celular,
-                       u.nombre AS profesional
+                       u.id AS usuario_id,
+                       u.nombre AS profesional,
+                       0 AS es_grupal,
+                       NULL AS grupo_id,
+                       NULL AS grupo_nombre
                 FROM turnos t
                 JOIN pacientes p ON p.id = t.paciente_id
                 JOIN usuarios u ON u.id = t.usuario_id
                 WHERE DATE(t.fecha_inicio) = %s
                   AND t.usuario_id = %s
-                ORDER BY t.fecha_inicio ASC
-            """, (hoy, user_id))
-            data["turnos"] = _normalizar_rows(cursor.fetchall())
-            data["turnos_hoy"] = len(data["turnos"])
-
-            turnos_presentes = [t for t in data["turnos"] if t.get("estado_asistencia") == "presente"]
-            data["turno_en_curso"] = turnos_presentes[-1] if turnos_presentes else None
-            data["atenciones_en_curso"] = turnos_presentes
-
-            cursor.execute("""
-                SELECT t.id, t.fecha_inicio, t.fecha_fin, t.motivo, t.observaciones,
-                       t.estado_asistencia, t.ausencia, t.es_sobreturno,
+                UNION ALL
+                SELECT tg.id, tg.fecha_inicio, tg.fecha_fin, tg.motivo, tg.observaciones,
+                       tg.estado_asistencia, tg.ausencia, 0 AS es_sobreturno,
                        p.id AS paciente_id,
                        p.nombre AS paciente, p.apellido, p.dni, p.nro_hc, p.cobertura,
                        p.nro_certificado AS nro_afiliado, p.nro_certificado, p.fecha_nacimiento,
                        p.telefono, p.celular,
-                       u.nombre AS profesional
-                FROM turnos t
-                JOIN pacientes p ON p.id = t.paciente_id
-                JOIN usuarios u ON u.id = t.usuario_id
-                WHERE t.usuario_id = %s
-                  AND t.fecha_inicio > NOW()
-                ORDER BY t.fecha_inicio ASC
+                       gm.usuario_id AS usuario_id,
+                       CONCAT('Grupo: ', gp.nombre) AS profesional,
+                       1 AS es_grupal,
+                       gp.id AS grupo_id,
+                       gp.nombre AS grupo_nombre
+                FROM turnos_grupales tg
+                JOIN grupos_profesionales gp ON gp.id = tg.grupo_id
+                JOIN grupo_miembros gm ON gm.grupo_id = tg.grupo_id
+                JOIN pacientes p ON p.id = tg.paciente_id
+                WHERE DATE(tg.fecha_inicio) = %s
+                  AND gm.usuario_id = %s
+                ORDER BY fecha_inicio ASC
+            """, (hoy, user_id, hoy, user_id))
+            data["turnos"] = _formatear_turnos(cursor.fetchall())
+            data["turnos_hoy"] = len(data["turnos"])
+
+            turnos_presentes = [t for t in data["turnos"] if t.get("estado_asistencia") == "presente"]
+            data["turno_en_curso"] = turnos_presentes[-1] if turnos_presentes else None
+            data["atenciones_en_curso"] = [turnos_presentes[-1]] if turnos_presentes else []
+
+            cursor.execute("""
+                SELECT * FROM (
+                    SELECT t.id, t.fecha_inicio, t.fecha_fin, t.motivo, t.observaciones,
+                           t.estado_asistencia, t.ausencia, t.es_sobreturno,
+                           p.id AS paciente_id,
+                           p.nombre AS paciente, p.apellido, p.dni, p.nro_hc, p.cobertura,
+                           p.nro_certificado AS nro_afiliado, p.nro_certificado, p.fecha_nacimiento,
+                           p.telefono, p.celular,
+                           u.id AS usuario_id,
+                           u.nombre AS profesional,
+                           0 AS es_grupal,
+                           NULL AS grupo_id,
+                           NULL AS grupo_nombre
+                    FROM turnos t
+                    JOIN pacientes p ON p.id = t.paciente_id
+                    JOIN usuarios u ON u.id = t.usuario_id
+                    WHERE t.usuario_id = %s
+                      AND t.fecha_inicio > NOW()
+                    UNION ALL
+                    SELECT tg.id, tg.fecha_inicio, tg.fecha_fin, tg.motivo, tg.observaciones,
+                           tg.estado_asistencia, tg.ausencia, 0 AS es_sobreturno,
+                           p.id AS paciente_id,
+                           p.nombre AS paciente, p.apellido, p.dni, p.nro_hc, p.cobertura,
+                           p.nro_certificado AS nro_afiliado, p.nro_certificado, p.fecha_nacimiento,
+                           p.telefono, p.celular,
+                           gm.usuario_id AS usuario_id,
+                           CONCAT('Grupo: ', gp.nombre) AS profesional,
+                           1 AS es_grupal,
+                           gp.id AS grupo_id,
+                           gp.nombre AS grupo_nombre
+                    FROM turnos_grupales tg
+                    JOIN grupos_profesionales gp ON gp.id = tg.grupo_id
+                    JOIN grupo_miembros gm ON gm.grupo_id = tg.grupo_id
+                    JOIN pacientes p ON p.id = tg.paciente_id
+                    WHERE gm.usuario_id = %s
+                      AND tg.fecha_inicio > NOW()
+                ) sub
+                ORDER BY fecha_inicio ASC
                 LIMIT 1
-            """, (user_id,))
+            """, (user_id, user_id))
             proximo_turno = cursor.fetchone()
+            if proximo_turno:
+                proximo_turno = _normalizar_row(proximo_turno)
+                proximo_turno["turnoId"] = proximo_turno["id"]
+                if proximo_turno.get("es_grupal"):
+                    proximo_turno["id"] = f"grupal-{proximo_turno['id']}"
+                    proximo_turno["es_sobreturno"] = False
 
             cursor.execute("""
                 SELECT a.id, a.usuario_id, a.fecha_inicio, a.fecha_fin, a.motivo,
@@ -240,7 +306,7 @@ def get_dashboard():
             """, (user_id,))
             proxima_ausencia = cursor.fetchone()
 
-            data["proximo_turno"] = _normalizar_row(proximo_turno)
+            data["proximo_turno"] = proximo_turno
             data["proximo_evento"] = _primer_evento(proximo_turno, proxima_ausencia)
 
             cursor.execute("""
@@ -300,36 +366,92 @@ def get_dashboard():
                        p.nombre AS paciente, p.apellido, p.dni, p.nro_hc, p.cobertura,
                        p.nro_certificado AS nro_afiliado, p.nro_certificado, p.fecha_nacimiento,
                        p.telefono, p.celular,
-                       u.nombre AS profesional
+                       u.id AS usuario_id,
+                       u.nombre AS profesional,
+                       0 AS es_grupal,
+                       NULL AS grupo_id,
+                       NULL AS grupo_nombre
                 FROM turnos t
                 JOIN pacientes p ON p.id = t.paciente_id
                 JOIN usuarios u ON u.id = t.usuario_id
                 WHERE DATE(t.fecha_inicio) = %s
-                ORDER BY t.fecha_inicio ASC
-            """, (hoy,))
-            data["turnos"] = _normalizar_rows(cursor.fetchall())
-            data["turnos_hoy"] = len(data["turnos"])
-
-            turnos_presentes = [t for t in data["turnos"] if t.get("estado_asistencia") == "presente"]
-            data["turno_en_curso"] = turnos_presentes[-1] if turnos_presentes else None
-            data["atenciones_en_curso"] = turnos_presentes
-
-            cursor.execute("""
-                SELECT t.id, t.fecha_inicio, t.fecha_fin, t.motivo, t.observaciones,
-                       t.estado_asistencia, t.ausencia, t.es_sobreturno,
+                UNION ALL
+                SELECT tg.id, tg.fecha_inicio, tg.fecha_fin, tg.motivo, tg.observaciones,
+                       tg.estado_asistencia, tg.ausencia, 0 AS es_sobreturno,
                        p.id AS paciente_id,
                        p.nombre AS paciente, p.apellido, p.dni, p.nro_hc, p.cobertura,
                        p.nro_certificado AS nro_afiliado, p.nro_certificado, p.fecha_nacimiento,
                        p.telefono, p.celular,
-                       u.nombre AS profesional
-                FROM turnos t
-                JOIN pacientes p ON p.id = t.paciente_id
-                JOIN usuarios u ON u.id = t.usuario_id
-                WHERE t.fecha_inicio > NOW()
-                ORDER BY t.fecha_inicio ASC
+                       NULL AS usuario_id,
+                       CONCAT('Grupo: ', gp.nombre) AS profesional,
+                       1 AS es_grupal,
+                       gp.id AS grupo_id,
+                       gp.nombre AS grupo_nombre
+                FROM turnos_grupales tg
+                JOIN grupos_profesionales gp ON gp.id = tg.grupo_id
+                JOIN pacientes p ON p.id = tg.paciente_id
+                WHERE DATE(tg.fecha_inicio) = %s
+                ORDER BY fecha_inicio ASC
+            """, (hoy, hoy))
+            data["turnos"] = _formatear_turnos(cursor.fetchall())
+            data["turnos_hoy"] = len(data["turnos"])
+
+            turnos_presentes = [t for t in data["turnos"] if t.get("estado_asistencia") == "presente"]
+            data["turno_en_curso"] = turnos_presentes[-1] if turnos_presentes else None
+
+            ultimos_por_profesional = {}
+            for t in turnos_presentes:
+                if t.get("es_grupal"):
+                    prof_key = f"grupo-{t.get('grupo_id')}"
+                else:
+                    prof_key = f"usuario-{t.get('usuario_id')}" if t.get("usuario_id") else (t.get("profesional") or t.get("id"))
+                ultimos_por_profesional[prof_key] = t
+            data["atenciones_en_curso"] = list(ultimos_por_profesional.values())
+
+            cursor.execute("""
+                SELECT * FROM (
+                    SELECT t.id, t.fecha_inicio, t.fecha_fin, t.motivo, t.observaciones,
+                           t.estado_asistencia, t.ausencia, t.es_sobreturno,
+                           p.id AS paciente_id,
+                           p.nombre AS paciente, p.apellido, p.dni, p.nro_hc, p.cobertura,
+                           p.nro_certificado AS nro_afiliado, p.nro_certificado, p.fecha_nacimiento,
+                           p.telefono, p.celular,
+                           u.id AS usuario_id,
+                           u.nombre AS profesional,
+                           0 AS es_grupal,
+                           NULL AS grupo_id,
+                           NULL AS grupo_nombre
+                    FROM turnos t
+                    JOIN pacientes p ON p.id = t.paciente_id
+                    JOIN usuarios u ON u.id = t.usuario_id
+                    WHERE t.fecha_inicio > NOW()
+                    UNION ALL
+                    SELECT tg.id, tg.fecha_inicio, tg.fecha_fin, tg.motivo, tg.observaciones,
+                           tg.estado_asistencia, tg.ausencia, 0 AS es_sobreturno,
+                           p.id AS paciente_id,
+                           p.nombre AS paciente, p.apellido, p.dni, p.nro_hc, p.cobertura,
+                           p.nro_certificado AS nro_afiliado, p.nro_certificado, p.fecha_nacimiento,
+                           p.telefono, p.celular,
+                           NULL AS usuario_id,
+                           CONCAT('Grupo: ', gp.nombre) AS profesional,
+                           1 AS es_grupal,
+                           gp.id AS grupo_id,
+                           gp.nombre AS grupo_nombre
+                    FROM turnos_grupales tg
+                    JOIN grupos_profesionales gp ON gp.id = tg.grupo_id
+                    JOIN pacientes p ON p.id = tg.paciente_id
+                    WHERE tg.fecha_inicio > NOW()
+                ) sub
+                ORDER BY fecha_inicio ASC
                 LIMIT 1
             """)
             proximo_turno = cursor.fetchone()
+            if proximo_turno:
+                proximo_turno = _normalizar_row(proximo_turno)
+                proximo_turno["turnoId"] = proximo_turno["id"]
+                if proximo_turno.get("es_grupal"):
+                    proximo_turno["id"] = f"grupal-{proximo_turno['id']}"
+                    proximo_turno["es_sobreturno"] = False
 
             cursor.execute("""
                 SELECT a.id, a.usuario_id, a.fecha_inicio, a.fecha_fin, a.motivo,
@@ -342,7 +464,7 @@ def get_dashboard():
             """)
             proxima_ausencia = cursor.fetchone()
 
-            data["proximo_turno"] = _normalizar_row(proximo_turno)
+            data["proximo_turno"] = proximo_turno
             data["proximo_evento"] = _primer_evento(proximo_turno, proxima_ausencia)
 
             cursor.execute("""
@@ -454,20 +576,32 @@ def get_dashboard_semanal():
         if rol in ["profesional", "area"]:
             cursor.execute("""
                 SELECT DATE(fecha_inicio) AS dia, COUNT(*) AS total
-                FROM turnos
-                WHERE usuario_id = %s
-                AND DATE(fecha_inicio) BETWEEN %s AND %s
+                FROM (
+                    SELECT fecha_inicio FROM turnos
+                    WHERE usuario_id = %s
+                      AND DATE(fecha_inicio) BETWEEN %s AND %s
+                    UNION ALL
+                    SELECT tg.fecha_inicio FROM turnos_grupales tg
+                    JOIN grupo_miembros gm ON gm.grupo_id = tg.grupo_id
+                    WHERE gm.usuario_id = %s
+                      AND DATE(tg.fecha_inicio) BETWEEN %s AND %s
+                ) sub
                 GROUP BY DATE(fecha_inicio)
                 ORDER BY dia ASC
-            """, (user_id, hoy, hasta_7_dias))
+            """, (user_id, hoy, hasta_7_dias, user_id, hoy, hasta_7_dias))
         else:
             cursor.execute("""
                 SELECT DATE(fecha_inicio) AS dia, COUNT(*) AS total
-                FROM turnos
-                WHERE DATE(fecha_inicio) BETWEEN %s AND %s
+                FROM (
+                    SELECT fecha_inicio FROM turnos
+                    WHERE DATE(fecha_inicio) BETWEEN %s AND %s
+                    UNION ALL
+                    SELECT fecha_inicio FROM turnos_grupales
+                    WHERE DATE(fecha_inicio) BETWEEN %s AND %s
+                ) sub
                 GROUP BY DATE(fecha_inicio)
                 ORDER BY dia ASC
-            """, (hoy, hasta_7_dias))
+            """, (hoy, hasta_7_dias, hoy, hasta_7_dias))
 
         turnos = cursor.fetchall()
 

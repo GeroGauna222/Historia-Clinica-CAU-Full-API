@@ -329,4 +329,143 @@ def test_dashboard_profesional_calcula_turnos_superpuestos(client, monkeypatch):
     assert data["alertas"]["turnos_superpuestos"][0]["turno_solapado_id"] == 202
 
 
+def test_dashboard_director_una_atencion_por_profesional_si_hay_multiples_presentes(client, monkeypatch):
+    hoy = datetime.now()
+    inicio1 = hoy.replace(hour=9, minute=0, second=0, microsecond=0)
+    fin1 = inicio1 + timedelta(minutes=30)
+    inicio2 = hoy.replace(hour=10, minute=0, second=0, microsecond=0)
+    fin2 = inicio2 + timedelta(minutes=30)
+
+    turnos_db = [
+        {
+            "id": 301,
+            "usuario_id": 10,
+            "fecha_inicio": inicio1,
+            "fecha_fin": fin1,
+            "motivo": "Control inicial",
+            "observaciones": None,
+            "estado_asistencia": "presente",
+            "ausencia": None,
+            "es_sobreturno": 0,
+            "paciente_id": 1,
+            "paciente": "Juan",
+            "apellido": "Perez",
+            "dni": "11111111",
+            "nro_hc": "HC-1",
+            "cobertura": "OSDE",
+            "profesional": "Dr Gomez",
+            "es_grupal": 0,
+            "grupo_id": None,
+            "grupo_nombre": None,
+        },
+        {
+            "id": 302,
+            "usuario_id": 10,
+            "fecha_inicio": inicio2,
+            "fecha_fin": fin2,
+            "motivo": "Control siguiente",
+            "observaciones": None,
+            "estado_asistencia": "presente",
+            "ausencia": None,
+            "es_sobreturno": 0,
+            "paciente_id": 2,
+            "paciente": "Carlos",
+            "apellido": "Lopez",
+            "dni": "22222222",
+            "nro_hc": "HC-2",
+            "cobertura": "PAMI",
+            "profesional": "Dr Gomez",
+            "es_grupal": 0,
+            "grupo_id": None,
+            "grupo_nombre": None,
+        },
+    ]
+
+    fake_cursor = FakeCursor(
+        fetchone_results=[None, None],
+        fetchall_results=[
+            turnos_db,
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+        ],
+    )
+    monkeypatch.setattr(dashboard_routes, "get_connection", lambda: FakeConnection(fake_cursor))
+    login_as(client, MockUser(1, "director", nombre="Director General"))
+
+    response = client.get("/api/dashboard")
+    assert response.status_code == 200
+    data = response.get_json()
+
+    # Even though Dr Gomez has 2 turnos marked presente, director only gets the latest active attention for Dr Gomez
+    assert len(data["atenciones_en_curso"]) == 1
+    assert data["atenciones_en_curso"][0]["id"] == 302
+    assert data["atenciones_en_curso"][0]["profesional"] == "Dr Gomez"
+    assert data["turno_en_curso"]["id"] == 302
+
+
+def test_dashboard_director_incluye_turnos_grupales(client, monkeypatch):
+    hoy = datetime.now()
+    inicio = hoy.replace(hour=11, minute=0, second=0, microsecond=0)
+    fin = inicio + timedelta(minutes=45)
+
+    turnos_db = [
+        {
+            "id": 50,
+            "usuario_id": None,
+            "fecha_inicio": inicio,
+            "fecha_fin": fin,
+            "motivo": "Taller postural",
+            "observaciones": None,
+            "estado_asistencia": "presente",
+            "ausencia": None,
+            "es_sobreturno": 0,
+            "paciente_id": 5,
+            "paciente": "Marta",
+            "apellido": "Rios",
+            "dni": "33333333",
+            "nro_hc": "HC-5",
+            "cobertura": "Particular",
+            "profesional": "Grupo: Kinesiología",
+            "es_grupal": 1,
+            "grupo_id": 3,
+            "grupo_nombre": "Kinesiología",
+        }
+    ]
+
+    fake_cursor = FakeCursor(
+        fetchone_results=[None, None],
+        fetchall_results=[
+            turnos_db,
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+        ],
+    )
+    monkeypatch.setattr(dashboard_routes, "get_connection", lambda: FakeConnection(fake_cursor))
+    login_as(client, MockUser(1, "director", nombre="Director General"))
+
+    response = client.get("/api/dashboard")
+    assert response.status_code == 200
+    data = response.get_json()
+
+    assert len(data["turnos"]) == 1
+    turno = data["turnos"][0]
+    assert turno["id"] == "grupal-50"
+    assert turno["turnoId"] == 50
+    assert turno["es_grupal"] is True
+    assert turno["es_sobreturno"] is False
+    assert turno["grupo_nombre"] == "Kinesiología"
+
+    assert len(data["atenciones_en_curso"]) == 1
+    assert data["atenciones_en_curso"][0]["id"] == "grupal-50"
+
+
+
 

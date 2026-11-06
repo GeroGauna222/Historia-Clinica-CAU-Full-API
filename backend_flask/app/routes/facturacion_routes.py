@@ -1,3 +1,4 @@
+import re
 import csv
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
@@ -14,7 +15,7 @@ from app.utils.permisos import requiere_rol
 
 bp_facturacion = Blueprint("facturacion", __name__, url_prefix="/api/facturacion")
 
-FINANCIADORES_VALIDOS = {"medicus", "ospoce", "corporacion"}
+FINANCIADORES_VALIDOS = {"medicus", "ospoce", "corporacion", "swiss_medical"}
 
 MESES_ES = {
     1: "Enero",
@@ -81,6 +82,30 @@ CORPORACION_CSV_HEADERS = [
     "IMPORTE",
 ]
 
+SWISS_DISCAPACIDAD_HEADERS = [
+    "FECHA",
+    "PACIENTE",
+    "N° AFILIADO",
+    "IVA",
+    "PRESTACION ",
+    "DESCRIPCIÓN SMG",
+    "SESIONES",
+    "CUD",
+    "AUTORIZACION N°",
+    "VALOR",
+]
+
+SWISS_GENERAL_HEADERS = [
+    "FECHA ",
+    "PACIENTE",
+    "N° AFILIADO",
+    "IVA",
+    "PRESTACION ",
+    "DESCRIPCIÓN SMG",
+    "N° AUT.",
+    "VALOR",
+]
+
 _SCHEMA_ENSURED = False
 
 INITIAL_PRACTICAS_SEED = [
@@ -121,6 +146,28 @@ INITIAL_PRACTICAS_SEED = [
     ("corporacion", "Consulta", "CONSULTA TRAUMATOLOGIA", "CONSULTA TRAUMATOLOGIA", "6365.40", 0),
     ("corporacion", "Rehabilitación", "TECNICAS DE EJERCICIOS POSTURALES", "TECNICAS DE EJERCICIOS POSTURALES", "6365.40", 0),
     ("corporacion", "Módulos de rehabilitación", "HOSPITAL DE DIA JORNADA SIMPLE", "HOSPITAL DE DIA JORNADA SIMPLE", "22278.90", 0),
+    ("swiss_medical", "Discapacidad", "25040101", "Kinesiología para DISCAPACIDAD", "19972.09", 1),
+    ("swiss_medical", "Discapacidad", "25040104", "Terapia Ocupacional DISCAPACIDAD", "19972.09", 1),
+    ("swiss_medical", "Discapacidad", "25040110", "Rehabilitación - Modulo Integral Simple (semanal)", "105701.06", 1),
+    ("swiss_medical", "Discapacidad", "25040112", "Rehabilitación - Hosp de Día Jornada Simple (mensual)", "631882.70", 1),
+    ("swiss_medical", "Discapacidad", "45020101", "Fonoaudiología para DISCAPACIDAD", "19972.08", 1),
+    ("swiss_medical", "Discapacidad", "45030101", "Psicoterapia para DISCAPACIDAD", "19972.08", 1),
+    ("swiss_medical", "Discapacidad", "45030102", "Psicopedagogía para DISCAPACIDAD", "19972.08", 1),
+    ("swiss_medical", "Prestaciones CAU", "43330102", "Hospital de día Jornada Simple (+ de 2 veces por semana)", "12071.46", 1),
+    ("swiss_medical", "Prestaciones CAU", "12180101", "Infiltración con Toxina Botulinica", "33213.85", 1),
+    ("swiss_medical", "Consultas", "42011200", "Consulta Traumatología", "8720.09", 1),
+    ("swiss_medical", "Consultas", "42012500", "Consulta Fisiatría", "8720.09", 1),
+    ("swiss_medical", "Consultas", "42012900", "Consulta Neuropediatría", "8720.09", 1),
+    ("swiss_medical", "Consultas", "42013000", "Consulta Oftalmología", "8720.09", 1),
+    ("swiss_medical", "Consultas", "42011700", "Consulta Cardiología", "13259.56", 1),
+    ("swiss_medical", "Consultas", "42012201", "Consulta Ginecología", "13564.20", 1),
+    ("swiss_medical", "Prácticas", "25010212", "Módulo Fisio-Kinesio-Laser-Magnetoterapia", "5651.99", 1),
+    ("swiss_medical", "Prácticas", "25010230", "Técnicas de corrección postural", "9899.46", 1),
+    ("swiss_medical", "Prácticas", "150106", "Citologia exfoliativa oncologica.", "5093.26", 1),
+    ("swiss_medical", "Prácticas", "170101", "Electrocardiograma en consultorio -con o sin prueba de esfuerzo-.", "6314.12", 1),
+    ("swiss_medical", "Prácticas", "17011801", "Holter de presión o Presurometría", "18188.66", 1),
+    ("swiss_medical", "Prácticas", "17011805", "Holter 3 canales", "20967.65", 1),
+    ("swiss_medical", "Prácticas", "18010303", "Ecodoppler color", "37884.55", 1),
 ]
 
 
@@ -180,8 +227,10 @@ def _ensure_facturacion_schema(conn):
                 nro_afiliado VARCHAR(100) NOT NULL,
                 tipo_doc_afiliado VARCHAR(20) DEFAULT NULL,
                 nro_doc_afiliado VARCHAR(30) DEFAULT NULL,
+                iva VARCHAR(20) NOT NULL DEFAULT 'OBLIGATORIO',
                 cud ENUM('SI', 'NO') NOT NULL DEFAULT 'NO',
                 cantidad INT NOT NULL DEFAULT 1,
+                es_asistencia_adicional TINYINT(1) NOT NULL DEFAULT 0,
                 practica_id INT DEFAULT NULL,
                 practica_codigo VARCHAR(100) NOT NULL,
                 practica_descripcion VARCHAR(255) NOT NULL,
@@ -222,6 +271,15 @@ def _ensure_facturacion_schema(conn):
                 ("medicus", "CENTRO ASISTENCIAL UNIVERSITARIO (OSUNSAM)", "A", "E171513", "P", "441983", 1),
             )
 
+        # Verificar y agregar columnas iva y es_asistencia_adicional si faltan
+        cursor.execute("SHOW COLUMNS FROM facturacion_registros LIKE 'iva'")
+        if not cursor.fetchone():
+            cursor.execute("ALTER TABLE facturacion_registros ADD COLUMN iva VARCHAR(20) NOT NULL DEFAULT 'OBLIGATORIO'")
+
+        cursor.execute("SHOW COLUMNS FROM facturacion_registros LIKE 'es_asistencia_adicional'")
+        if not cursor.fetchone():
+            cursor.execute("ALTER TABLE facturacion_registros ADD COLUMN es_asistencia_adicional TINYINT(1) NOT NULL DEFAULT 0")
+
         cursor.execute("SELECT COUNT(*) FROM facturacion_practicas")
         if (cursor.fetchone() or [0])[0] == 0:
             cursor.executemany(
@@ -232,6 +290,18 @@ def _ensure_facturacion_schema(conn):
                 """,
                 INITIAL_PRACTICAS_SEED,
             )
+        else:
+            # Asegurar que Swiss Medical este cargado
+            cursor.execute("SELECT COUNT(*) FROM facturacion_practicas WHERE financiador = 'swiss_medical'")
+            if (cursor.fetchone() or [0])[0] == 0:
+                cursor.executemany(
+                    """
+                    INSERT INTO facturacion_practicas
+                        (financiador, categoria, codigo, descripcion, importe, requiere_autorizacion)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    """,
+                    [p for p in INITIAL_PRACTICAS_SEED if p[0] == "swiss_medical"],
+                )
 
         conn.commit()
         _SCHEMA_ENSURED = True
@@ -268,6 +338,29 @@ def _parse_date(value):
             return datetime.strptime(raw, "%d/%m/%Y").strftime("%Y-%m-%d")
         except ValueError:
             return None
+
+
+def _normalize_iva(value):
+    if not value:
+        return "OBLIGATORIO"
+    s = str(value).strip().upper()
+    if "ADH" in s:
+        return "ADHERENTE"
+    return "OBLIGATORIO"
+
+
+def _format_date_ar(value):
+    if not value:
+        return ""
+    if hasattr(value, "strftime"):
+        return value.strftime("%d/%m/%Y")
+    s = str(value).strip()
+    if "T" in s:
+        s = s.split("T", 1)[0]
+    parts = s.split("-")
+    if len(parts) == 3 and len(parts[0]) == 4:
+        return f"{parts[2]}/{parts[1]}/{parts[0]}"
+    return s
 
 
 def _normalize_cud(value):
@@ -321,8 +414,10 @@ def _serialize_registro(row):
         "nro_afiliado": row.get("nro_afiliado") or "",
         "tipo_doc_afiliado": row.get("tipo_doc_afiliado") or "",
         "nro_doc_afiliado": row.get("nro_doc_afiliado") or "",
+        "iva": row.get("iva") or "OBLIGATORIO",
         "cud": row.get("cud") or "NO",
         "cantidad": int(row.get("cantidad") or 1),
+        "es_asistencia_adicional": bool(row.get("es_asistencia_adicional", 0)),
         "practica_id": row.get("practica_id"),
         "practica_codigo": row.get("practica_codigo") or "",
         "practica_descripcion": row.get("practica_descripcion") or "",
@@ -849,7 +944,7 @@ def listar_registros():
         rows = cursor.fetchall()
         registros = [_serialize_registro(r) for r in rows]
 
-        total_importe = sum((Decimal(str(r["importe"] or 0)) for r in rows), Decimal("0.00"))
+        total_importe = sum((Decimal(str(r["importe"] or 0)) for r in rows if not r.get("es_asistencia_adicional")), Decimal("0.00"))
         total_sesiones = sum((int(r.get("cantidad") or 1) for r in rows), 0)
 
         return jsonify({
@@ -873,7 +968,7 @@ def crear_registros():
     data = request.get_json(silent=True) or {}
     financiador = (data.get("financiador") or "").strip().lower()
     if financiador not in FINANCIADORES_VALIDOS:
-        return jsonify({"error": "Seleccione un financiador válido (Medicus, OSPOCE o Corporación)."}), 400
+        return jsonify({"error": "Seleccione un financiador válido (Medicus, OSPOCE, Corporación o Swiss Medical)."}), 400
 
     paciente_id = data.get("paciente_id")
     if paciente_id is not None and str(paciente_id).strip() != "":
@@ -924,8 +1019,9 @@ def crear_registros():
 
     if not nro_afiliado:
         return jsonify({"error": "El N° de Afiliado / Cobertura es obligatorio."}), 400
-    if financiador in ("ospoce", "corporacion") and not paciente_nombre:
+    if financiador in ("ospoce", "corporacion", "swiss_medical") and not paciente_nombre:
         return jsonify({"error": "El nombre del paciente es obligatorio."}), 400
+    iva_general = _normalize_iva(data.get("iva"))
     if not practica_codigo:
         return jsonify({"error": "Seleccione una práctica del catálogo."}), 400
     if importe_base is None or importe_base < 0:
@@ -957,9 +1053,15 @@ def crear_registros():
         except (TypeError, ValueError):
             cantidad = 1
 
-        imp_item = _parse_decimal(item.get("importe"), importe_base)
-        if imp_item is None or imp_item < 0:
-            imp_item = importe_base
+        es_adicional = 1 if (item.get("es_asistencia_adicional") or data.get("es_asistencia_adicional")) else 0
+        item_iva = _normalize_iva(item.get("iva") or iva_general)
+
+        if es_adicional:
+            imp_item = Decimal("0.00")
+        else:
+            imp_item = _parse_decimal(item.get("importe"), importe_base)
+            if imp_item is None or imp_item < 0:
+                imp_item = importe_base
 
         autorizacion = (item.get("autorizacion") if "autorizacion" in item else data.get("autorizacion")) or ""
         autorizacion = str(autorizacion).strip() or None
@@ -973,8 +1075,10 @@ def crear_registros():
                 nro_afiliado,
                 tipo_doc_afiliado,
                 nro_doc_afiliado,
+                item_iva,
                 cud,
                 cantidad,
+                es_adicional,
                 practica_id,
                 practica_codigo,
                 practica_descripcion,
@@ -1002,16 +1106,18 @@ def crear_registros():
             """
             INSERT INTO facturacion_registros (
                 financiador, fecha_realizacion, paciente_id, paciente_nombre, nro_afiliado,
-                tipo_doc_afiliado, nro_doc_afiliado, cud, cantidad, practica_id,
-                practica_codigo, practica_descripcion, importe, gastos, autorizacion,
-                prestador_id, contexto, internacion, orden, grupo,
-                lugar_realizacion_efector, tipo_matricula, nro_matricula, observaciones, creado_por
+                tipo_doc_afiliado, nro_doc_afiliado, iva, cud, cantidad,
+                es_asistencia_adicional, practica_id, practica_codigo, practica_descripcion,
+                importe, gastos, autorizacion, prestador_id, contexto, internacion,
+                orden, grupo, lugar_realizacion_efector, tipo_matricula, nro_matricula,
+                observaciones, creado_por
             ) VALUES (
                 %s, %s, %s, %s, %s,
                 %s, %s, %s, %s, %s,
+                %s, %s, %s, %s,
+                %s, %s, %s, %s, %s, %s,
                 %s, %s, %s, %s, %s,
-                %s, %s, %s, %s, %s,
-                %s, %s, %s, %s, %s
+                %s, %s
             )
             """,
             filas_a_insertar,
@@ -1070,6 +1176,12 @@ def actualizar_registro(registro_id):
         if not nro_afiliado:
             return jsonify({"error": "El N° de Afiliado no puede quedar vacío."}), 400
 
+        iva = _normalize_iva(data.get("iva") if "iva" in data else actual.get("iva"))
+        es_adicional = (
+            (1 if data.get("es_asistencia_adicional") else 0)
+            if "es_asistencia_adicional" in data
+            else (1 if actual.get("es_asistencia_adicional") else 0)
+        )
         cud = _normalize_cud(data.get("cud")) if "cud" in data else (actual.get("cud") or "NO")
         try:
             cantidad = int(data.get("cantidad", actual.get("cantidad") or 1))
@@ -1097,13 +1209,16 @@ def actualizar_registro(registro_id):
             if "practica_descripcion" in data
             else actual.get("practica_descripcion") or practica_codigo
         )
-        importe = (
-            _parse_decimal(data.get("importe"))
-            if "importe" in data
-            else Decimal(str(actual.get("importe") or 0))
-        )
-        if importe is None or importe < 0:
-            return jsonify({"error": "Importe inválido."}), 400
+        if es_adicional:
+            importe = Decimal("0.00")
+        else:
+            importe = (
+                _parse_decimal(data.get("importe"))
+                if "importe" in data
+                else Decimal(str(actual.get("importe") or 0))
+            )
+            if importe is None or importe < 0:
+                return jsonify({"error": "Importe inválido."}), 400
 
         autorizacion = (
             (str(data.get("autorizacion") or "").strip() or None)
@@ -1140,8 +1255,10 @@ def actualizar_registro(registro_id):
                 paciente_id = %s,
                 paciente_nombre = %s,
                 nro_afiliado = %s,
+                iva = %s,
                 cud = %s,
                 cantidad = %s,
+                es_asistencia_adicional = %s,
                 practica_id = %s,
                 practica_codigo = %s,
                 practica_descripcion = %s,
@@ -1160,8 +1277,10 @@ def actualizar_registro(registro_id):
                 paciente_id,
                 paciente_nombre or nro_afiliado,
                 nro_afiliado,
+                iva,
                 cud,
                 cantidad,
+                es_adicional,
                 practica_id,
                 practica_codigo,
                 practica_descripcion,
@@ -1249,7 +1368,7 @@ def recalcular_precios_periodo():
         if not where_sql:
             return jsonify({"error": "Indique un financiador y período para recalcular precios."}), 400
 
-        cursor.execute(f"SELECT id, financiador, practica_id, practica_codigo FROM facturacion_registros {where_sql}", tuple(params))
+        cursor.execute(f"SELECT id, financiador, practica_id, practica_codigo, es_asistencia_adicional FROM facturacion_registros {where_sql}", tuple(params))
         registros = cursor.fetchall()
         if not registros:
             return jsonify({"message": "No hay registros en el período seleccionado.", "actualizados": 0})
@@ -1261,6 +1380,8 @@ def recalcular_precios_periodo():
 
         actualizados = 0
         for reg in registros:
+            if reg.get("es_asistencia_adicional"):
+                continue
             nuevo_importe = None
             if reg.get("practica_id") and reg["practica_id"] in por_id:
                 nuevo_importe = por_id[reg["practica_id"]]
@@ -1330,7 +1451,7 @@ def _format_decimal_export(val):
     return s
 
 
-def _build_export_matrix(financiador, registros, periodo_label):
+def _build_export_matrix(financiador, registros, periodo_label, subtipo=None, practicas_map=None, practicas_codigo_map=None):
     """
     Construye la matriz de filas (cada celda es (valor, tipo_celda))
     donde tipo_celda in ('str', 'num', 'header', 'title', 'total').
@@ -1444,6 +1565,138 @@ def _build_export_matrix(financiador, registros, periodo_label):
             ("TOTAL", "total"),
             (float(total.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)), "total_num"),
         ])
+
+    elif financiador == "swiss_medical":
+        # Extraer anio de periodo_label
+        match_year = re.search(r"\b(20\d\d)\b", str(periodo_label or ""))
+        anio_label = match_year.group(1) if match_year else str(datetime.now().year)
+
+        def obtener_cat(r):
+            p_id = r.get("practica_id")
+            if p_id and practicas_map and p_id in practicas_map:
+                return (practicas_map[p_id] or "").strip()
+            key = (r.get("financiador"), r.get("practica_codigo"))
+            if practicas_codigo_map and key in practicas_codigo_map:
+                return (practicas_codigo_map[key] or "").strip()
+            cod = (r.get("practica_codigo") or "").strip()
+            desc = (r.get("practica_descripcion") or "").strip().upper()
+            if cod.startswith("4201") or "CONSULTA" in desc:
+                return "Consultas"
+            if (
+                cod in ("25010212", "25010230", "150106", "170101", "17011801", "17011805", "18010303")
+                or "PRACTICA" in desc
+                or "POSTURAL" in desc
+                or "ELECTROCARDIOGRAMA" in desc
+                or "HOLTER" in desc
+                or "ECODOPPLER" in desc
+            ):
+                return "Prácticas"
+            if r.get("cud") == "SI" or cod.startswith("250401") or cod.startswith("450"):
+                return "Discapacidad"
+            return "Prestaciones CAU"
+
+        registros_con_cat = [(r, obtener_cat(r)) for r in registros]
+
+        def armar_fila_prestaciones(r):
+            fecha_str = _format_date_ar(r.get("fecha_realizacion"))
+            es_adic = bool(r.get("es_asistencia_adicional"))
+            if es_adic:
+                val_cell = ("*", "str")
+            else:
+                imp_num = float(Decimal(str(r.get("importe") or 0)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+                val_cell = (imp_num, "num")
+
+            return [
+                (fecha_str or "", "str"),
+                (r.get("paciente_nombre") or "", "str"),
+                (r.get("nro_afiliado") or "", "str"),
+                (r.get("iva") or "OBLIGATORIO", "str"),
+                (r.get("practica_codigo") or "", "str"),
+                (r.get("practica_descripcion") or "", "str"),
+                (int(r.get("cantidad") or 1), "num"),
+                (r.get("cud") or "NO", "str"),
+                (r.get("autorizacion") or "", "str"),
+                val_cell,
+            ]
+
+        def armar_fila_general(r):
+            fecha_str = _format_date_ar(r.get("fecha_realizacion"))
+            es_adic = bool(r.get("es_asistencia_adicional"))
+            if es_adic:
+                val_cell = ("*", "str")
+            else:
+                imp_num = float(Decimal(str(r.get("importe") or 0)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+                val_cell = (imp_num, "num")
+
+            return [
+                (fecha_str or "", "str"),
+                (r.get("paciente_nombre") or "", "str"),
+                (r.get("nro_afiliado") or "", "str"),
+                (r.get("iva") or "OBLIGATORIO", "str"),
+                (r.get("practica_codigo") or "", "str"),
+                (r.get("practica_descripcion") or "", "str"),
+                (r.get("autorizacion") or "", "str"),
+                val_cell,
+                ("", "str"),
+                ("", "str"),
+            ]
+
+        if subtipo == "discapacidad":
+            filas_disc = [r for r, _ in registros_con_cat if r.get("cud") == "SI"]
+            rows.append([(f"PRESTACIONES CAU {anio_label}", "title")] + [("", "str")] * 9)
+            rows.append([(h, "header") for h in SWISS_DISCAPACIDAD_HEADERS])
+            for r in filas_disc:
+                rows.append(armar_fila_prestaciones(r))
+
+        elif subtipo == "sin_discapacidad":
+            # Bloque 1: Prestaciones CAU (CUD == NO y no Consultas/Practicas)
+            filas_cau = [r for r, cat in registros_con_cat if cat not in ("Consultas", "Prácticas") and r.get("cud") != "SI"]
+            rows.append([(f"PRESTACIONES CAU {anio_label}", "title")] + [("", "str")] * 9)
+            rows.append([(h, "header") for h in SWISS_DISCAPACIDAD_HEADERS])
+            for r in filas_cau:
+                rows.append(armar_fila_prestaciones(r))
+
+            rows.append([("", "str")] * 10)
+
+            # Bloque 2: Consultas
+            filas_cons = [r for r, cat in registros_con_cat if cat == "Consultas"]
+            rows.append([("CONSULTAS ", "title")] + [("", "str")] * 9)
+            rows.append([(h, "header") for h in SWISS_GENERAL_HEADERS] + [("", "str"), ("", "str")])
+            for r in filas_cons:
+                rows.append(armar_fila_general(r))
+
+            rows.append([("", "str")] * 10)
+
+            # Bloque 3: Practicas
+            filas_prac = [r for r, cat in registros_con_cat if cat == "Prácticas"]
+            rows.append([("PARCTICAS", "title")] + [("", "str")] * 9)
+            rows.append([(h, "header") for h in SWISS_GENERAL_HEADERS] + [("", "str"), ("", "str")])
+            for r in filas_prac:
+                rows.append(armar_fila_general(r))
+
+        else:
+            # Completo (todas las prestaciones CAU juntas + Consultas + Practicas)
+            filas_cau = [r for r, cat in registros_con_cat if cat not in ("Consultas", "Prácticas")]
+            rows.append([(f"PRESTACIONES CAU {anio_label}", "title")] + [("", "str")] * 9)
+            rows.append([(h, "header") for h in SWISS_DISCAPACIDAD_HEADERS])
+            for r in filas_cau:
+                rows.append(armar_fila_prestaciones(r))
+
+            rows.append([("", "str")] * 10)
+
+            filas_cons = [r for r, cat in registros_con_cat if cat == "Consultas"]
+            rows.append([("CONSULTAS ", "title")] + [("", "str")] * 9)
+            rows.append([(h, "header") for h in SWISS_GENERAL_HEADERS] + [("", "str"), ("", "str")])
+            for r in filas_cons:
+                rows.append(armar_fila_general(r))
+
+            rows.append([("", "str")] * 10)
+
+            filas_prac = [r for r, cat in registros_con_cat if cat == "Prácticas"]
+            rows.append([("PARCTICAS", "title")] + [("", "str")] * 9)
+            rows.append([(h, "header") for h in SWISS_GENERAL_HEADERS] + [("", "str"), ("", "str")])
+            for r in filas_prac:
+                rows.append(armar_fila_general(r))
 
     return rows
 
@@ -1611,14 +1864,29 @@ def exportar_facturacion():
         rows = cursor.fetchall()
         registros = [_serialize_registro(r) for r in rows]
         periodo_label = _format_periodo_label(request.args)
-        matrix = _build_export_matrix(financiador, registros, periodo_label)
+        subtipo = (request.args.get("subtipo") or "").strip().lower() or None
+
+        cursor.execute("SELECT id, financiador, codigo, categoria FROM facturacion_practicas")
+        p_rows = cursor.fetchall()
+        practicas_map = {p["id"]: p.get("categoria") for p in p_rows}
+        practicas_codigo_map = {(p["financiador"], p["codigo"]): p.get("categoria") for p in p_rows}
+
+        matrix = _build_export_matrix(
+            financiador,
+            registros,
+            periodo_label,
+            subtipo=subtipo,
+            practicas_map=practicas_map,
+            practicas_codigo_map=practicas_codigo_map,
+        )
 
         safe_period = (
             request.args.get("mes")
             or f"{request.args.get('fecha_desde', '')}_{request.args.get('fecha_hasta', '')}".strip("_")
             or datetime.now().strftime("%Y-%m")
         )
-        filename_base = f"facturacion_{financiador}_{safe_period}"
+        subtipo_suffix = f"_{subtipo}" if subtipo else ""
+        filename_base = f"facturacion_{financiador}{subtipo_suffix}_{safe_period}"
 
         if formato == "xlsx":
             xlsx_stream = _generate_xlsx_bytes(matrix, sheet_name=f"{financiador.capitalize()} {safe_period}")
