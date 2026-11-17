@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 from conftest import FakeConnection, FakeCursor, MockUser, login_as
 from app.routes import dashboard_routes
@@ -98,7 +98,7 @@ def test_dashboard_admin_incluye_alertas_operativas(client, monkeypatch):
     assert data["ausencias_bloqueos"][0]["tipo_evento"] == "Reunion"
 
 
-def test_dashboard_profesional_destaca_paciente_en_curso_presente(client, monkeypatch):
+def test_dashboard_profesional_destaca_paciente_en_atencion(client, monkeypatch):
     hoy = datetime.now()
     inicio1 = hoy.replace(hour=9, minute=0, second=0, microsecond=0)
     fin1 = inicio1 + timedelta(minutes=30)
@@ -338,7 +338,7 @@ def test_dashboard_profesional_calcula_turnos_superpuestos(client, monkeypatch):
     assert data["alertas"]["turnos_superpuestos"][0]["turno_solapado_id"] == 202
 
 
-def test_dashboard_director_una_atencion_por_profesional_si_hay_multiples_presentes(client, monkeypatch):
+def test_dashboard_director_atendido_no_cuenta_en_curso_aunque_siga_presente(client, monkeypatch):
     hoy = datetime.now()
     inicio1 = hoy.replace(hour=9, minute=0, second=0, microsecond=0)
     fin1 = inicio1 + timedelta(minutes=30)
@@ -415,7 +415,7 @@ def test_dashboard_director_una_atencion_por_profesional_si_hay_multiples_presen
     assert response.status_code == 200
     data = response.get_json()
 
-    # Even though Dr Gomez has 2 turnos marked presente, director only gets the latest active attention for Dr Gomez
+    # El turno 301 sigue 'presente' pero ya fue atendido (atencion_fin): solo el 302, en atencion, cuenta como en curso
     assert len(data["atenciones_en_curso"]) == 1
     assert data["atenciones_en_curso"][0]["id"] == 302
     assert data["atenciones_en_curso"][0]["profesional"] == "Dr Gomez"
@@ -604,6 +604,13 @@ def test_dashboard_profesional_turnos_llevan_estado_atencion_y_no_filtran_ahora_
     assert data["turno_en_curso"]["id"] == 2
     assert data["turno_en_curso"]["estado_atencion"] == "en_atencion"
 
+    query, params = fake_cursor.executed[0]
+    assert query.count("atencion_inicio") == 2
+    assert query.count("atencion_fin") == 2
+    assert query.count("NOW() AS ahora_db") == 2
+    assert "t.atencion_inicio" in query and "tg.atencion_inicio" in query
+    assert params == (date.today(), 5, date.today(), 5)
+
 
 def test_dashboard_director_en_curso_sale_de_turnos_en_atencion(client, monkeypatch):
     base = datetime.now().replace(hour=9, minute=0, second=0, microsecond=0)
@@ -634,6 +641,13 @@ def test_dashboard_director_en_curso_sale_de_turnos_en_atencion(client, monkeypa
     assert [t["id"] for t in data["atenciones_en_curso"]] == [2]
     assert data["turno_en_curso"]["id"] == 2
 
+    query, params = fake_cursor.executed[0]
+    assert query.count("atencion_inicio") == 2
+    assert query.count("atencion_fin") == 2
+    assert query.count("NOW() AS ahora_db") == 2
+    assert "t.atencion_inicio" in query and "tg.atencion_inicio" in query
+    assert params == (date.today(), date.today())
+
 
 def test_dashboard_director_grupal_cerrado_no_figura_en_curso(client, monkeypatch):
     inicio = datetime.now().replace(hour=11, minute=0, second=0, microsecond=0)
@@ -655,3 +669,56 @@ def test_dashboard_director_grupal_cerrado_no_figura_en_curso(client, monkeypatc
     assert data["turnos"][0]["estado_atencion"] == "atendido"
     assert data["atenciones_en_curso"] == []
     assert data["turno_en_curso"] is None
+
+
+def test_dashboard_profesional_grupal_e_individual_en_atencion_ordenados(client, monkeypatch):
+    base = datetime.now().replace(hour=9, minute=0, second=0, microsecond=0)
+    ahora = base + timedelta(hours=2)
+    filas = [
+        _turno_fila(1, base, "presente", usuario_id=5,
+                    atencion_inicio=ahora - timedelta(minutes=20), atencion_fin=None, ahora_db=ahora),
+        _turno_fila(50, base + timedelta(hours=1), "presente", usuario_id=5, profesional="Grupo: Kine",
+                    es_grupal=1, grupo_id=3, grupo_nombre="Kine",
+                    fecha_fin=base + timedelta(hours=3),
+                    atencion_inicio=ahora - timedelta(minutes=5), atencion_fin=None, ahora_db=ahora),
+    ]
+    fake_cursor = FakeCursor(
+        fetchone_results=[None, None],
+        fetchall_results=[filas, [], [], [], []],
+    )
+    monkeypatch.setattr(dashboard_routes, "get_connection", lambda: FakeConnection(fake_cursor))
+    login_as(client, MockUser(5, "profesional", nombre="Lic Gomez"))
+
+    response = client.get("/api/dashboard")
+
+    assert response.status_code == 200
+    data = response.get_json()
+    assert [t["id"] for t in data["atenciones_en_curso"]] == [1, "grupal-50"]
+    assert data["turno_en_curso"]["id"] == "grupal-50"
+    assert data["turno_en_curso"]["estado_atencion"] == "en_atencion"
+
+
+def test_dashboard_profesional_dos_grupales_del_mismo_grupo_en_atencion_no_se_deduplican(client, monkeypatch):
+    base = datetime.now().replace(hour=9, minute=0, second=0, microsecond=0)
+    ahora = base + timedelta(hours=1, minutes=30)
+    comunes = dict(usuario_id=5, profesional="Grupo: Kine", es_grupal=1, grupo_id=3, grupo_nombre="Kine",
+                   fecha_fin=base + timedelta(hours=3), atencion_fin=None, ahora_db=ahora)
+    filas = [
+        _turno_fila(50, base + timedelta(hours=1), "presente",
+                    atencion_inicio=ahora - timedelta(minutes=10), **comunes),
+        _turno_fila(51, base + timedelta(hours=1), "presente",
+                    atencion_inicio=ahora - timedelta(minutes=2), **comunes),
+    ]
+    fake_cursor = FakeCursor(
+        fetchone_results=[None, None],
+        fetchall_results=[filas, [], [], [], []],
+    )
+    monkeypatch.setattr(dashboard_routes, "get_connection", lambda: FakeConnection(fake_cursor))
+    login_as(client, MockUser(5, "profesional", nombre="Lic Gomez"))
+
+    response = client.get("/api/dashboard")
+
+    assert response.status_code == 200
+    data = response.get_json()
+    assert [t["id"] for t in data["atenciones_en_curso"]] == ["grupal-50", "grupal-51"]
+    assert data["turno_en_curso"]["id"] == "grupal-51"

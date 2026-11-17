@@ -61,6 +61,7 @@ def _formatear_turnos(rows):
 
 
 def _atenciones_en_curso(turnos):
+    # Recibe turnos ya formateados (atencion_inicio en ISO): por eso se ordena por string.
     en_atencion = [t for t in turnos if t.get("estado_atencion") == "en_atencion"]
     return sorted(en_atencion, key=lambda t: str(t.get("atencion_inicio") or ""))
 
