@@ -120,8 +120,8 @@ const iconoWidget = computed(() => {
                     <span>{{ tituloWidget }}</span>
                 </h2>
                 <div class="flex items-center gap-2">
-                    <Tag v-if="esDirector && atencionesActivas.length > 0" :value="atencionesActivas.length + (atencionesActivas.length === 1 ? ' en atención' : ' en atención')" severity="success" rounded class="animate-pulse font-semibold" />
-                    <Tag v-else-if="esDirector" value="Sin atenciones activas" severity="secondary" rounded class="text-xs" />
+                    <Tag v-if="esDirector && atencionesActivas.length > 0" :value="atencionesActivas.length + ' en atención'" severity="success" rounded class="animate-pulse font-semibold" />
+                    <Tag v-else-if="esDirector" value="Sin pacientes en atención" severity="secondary" rounded class="text-xs" />
                     <Tag v-else-if="turnoEnCurso" value="En atención" severity="success" rounded class="animate-pulse font-semibold" />
                     <Button label="Ver agenda" icon="pi pi-arrow-right" iconPos="right" text size="small" @click="emit('verAgenda')" />
                 </div>
