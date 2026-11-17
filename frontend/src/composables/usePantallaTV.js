@@ -52,6 +52,9 @@ export function usePantallaTV() {
     let ultimaRespuesta = Date.now();
     let timer = null;
     let enCurso = false;
+    // Arranca en true para poder llamar a `ciclo()` sin `iniciar()`; `detener()` lo apaga y un ciclo en vuelo
+    // que resuelve después ya no toca estado, clave ni sonido.
+    let activo = true;
 
     function reiniciarEstado() {
         estado.value = 'iniciando';
@@ -64,15 +67,25 @@ export function usePantallaTV() {
     async function ciclo() {
         if (enCurso) return;
         enCurso = true;
+        let pidiendoVinculacion = false;
         try {
             let clave = leerClave() || claveMemoria;
             if (!clave) {
+                pidiendoVinculacion = true;
                 const { data } = await conLimite(pantallaService.solicitarVinculacion());
+                if (!activo) return;
+                if (typeof data?.clave !== 'string' || !data.clave) throw new Error('respuesta inesperada');
                 clave = data.clave;
                 claveMemoria = clave;
                 guardarClave(clave);
+                pidiendoVinculacion = false;
             }
             const { data } = await conLimite(pantallaService.obtenerLlamados(clave));
+            if (!activo) return;
+            // Una respuesta con forma inesperada cuenta como "sin respuesta": no toca las tarjetas y
+            // alimenta el aviso de reconexión a los 30 s (el error no trae `response`, así que no es 401/429).
+            const ok = (data?.estado === 'pendiente' && typeof data.codigo === 'string') || (data?.estado === 'vinculada' && Array.isArray(data.tarjetas));
+            if (!ok) throw new Error('respuesta inesperada');
             ultimaRespuesta = Date.now();
             reconectando.value = false;
 
@@ -85,17 +98,24 @@ export function usePantallaTV() {
             }
             estado.value = 'vinculada';
             codigo.value = '';
-            tarjetas.value = data.tarjetas || [];
+            tarjetas.value = data.tarjetas;
             const r = detectarLlamadosNuevos(vistos, tarjetas.value);
             vistos = r.vistos;
             if (r.nuevos && sonidoActivo.value) reproducirAvisoSonoro();
         } catch (e) {
+            if (!activo) return;
             const status = e?.response?.status;
             if (status === 401) {
+                // El servidor respondió: no es un corte de red.
+                ultimaRespuesta = Date.now();
+                reconectando.value = false;
                 borrarClave();
                 claveMemoria = null;
                 reiniciarEstado(); // el próximo ciclo pide un código nuevo
-            } else if (status === 429) {
+            } else if (status === 429 && pidiendoVinculacion) {
+                // Solo el límite de vinculaciones muestra el aviso; un 429 al consultar es un fallo transitorio.
+                ultimaRespuesta = Date.now();
+                reconectando.value = false;
                 estado.value = 'limite';
             } else if (Date.now() - ultimaRespuesta > SIN_RESPUESTA_MS) {
                 reconectando.value = true;
@@ -111,12 +131,15 @@ export function usePantallaTV() {
     }
 
     function iniciar() {
+        if (timer) return; // ya iniciado: evita un setInterval huérfano
+        activo = true;
         ultimaRespuesta = Date.now();
         ciclo();
         timer = setInterval(ciclo, INTERVALO_MS);
     }
 
     function detener() {
+        activo = false;
         if (timer) clearInterval(timer);
         timer = null;
     }
