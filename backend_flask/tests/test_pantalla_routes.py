@@ -615,7 +615,7 @@ CLAVE_TV = "clave-secreta-del-televisor"
 HEADERS_TV = {"X-Pantalla-Clave": CLAVE_TV}
 
 SQL_LIMPIAR_VENCIDOS = "DELETE FROM pantallas WHERE vinculada_en IS NULL AND codigo_expira < NOW()"
-SQL_CONTAR_PENDIENTES = "SELECT COUNT(*) AS n FROM pantallas WHERE vinculada_en IS NULL AND revocada_en IS NULL"
+SQL_CONTAR_PENDIENTES = "SELECT COUNT(*) AS n FROM pantallas WHERE vinculada_en IS NULL AND codigo_expira >= NOW()"
 SQL_INSERTAR_PANTALLA = (
     "INSERT INTO pantallas (codigo, codigo_expira, clave_hash) "
     "VALUES (%s, DATE_ADD(NOW(), INTERVAL %s MINUTE), %s)"
@@ -624,7 +624,10 @@ SQL_BUSCAR_POR_CLAVE = (
     "SELECT id, codigo, vinculada_en, revocada_en, TIMESTAMPDIFF(SECOND, NOW(), codigo_expira) AS segundos_restantes "
     "FROM pantallas WHERE clave_hash = %s"
 )
-SQL_REGISTRAR_ACCESO = "UPDATE pantallas SET ultimo_acceso = NOW() WHERE id = %s"
+SQL_REGISTRAR_ACCESO = (
+    "UPDATE pantallas SET ultimo_acceso = NOW() "
+    "WHERE id = %s AND (ultimo_acceso IS NULL OR ultimo_acceso < NOW() - INTERVAL 1 MINUTE)"
+)
 SQL_VINCULAR = (
     "UPDATE pantallas SET nombre = %s, vinculada_en = NOW(), vinculada_por = %s, codigo = NULL, codigo_expira = NULL "
     "WHERE codigo = %s AND vinculada_en IS NULL AND revocada_en IS NULL AND codigo_expira >= NOW()"
@@ -767,6 +770,17 @@ def test_llamados_clave_desconocida_devuelve_401(client, monkeypatch):
     assert cursor.closed and conn.closed
 
 
+def test_llamados_401_de_clave_desconocida_y_de_revocada_son_identicos(client, monkeypatch):
+    # El cuerpo no debe permitir distinguir una clave que no existe de una revocada.
+    preparar(monkeypatch, fetchone=[None])
+    desconocida = client.get("/api/pantalla/llamados", headers=HEADERS_TV)
+    preparar(monkeypatch, fetchone=[fila_pantalla(revocada_en=AHORA)])
+    revocada = client.get("/api/pantalla/llamados", headers=HEADERS_TV)
+    assert desconocida.status_code == revocada.status_code == 401
+    assert desconocida.get_data() == revocada.get_data()
+    assert desconocida.get_json() == revocada.get_json()
+
+
 def test_llamados_busca_por_hash_y_nunca_manda_la_clave_a_la_base(client, monkeypatch):
     cursor, _ = preparar(monkeypatch, fetchone=[None])
     client.get("/api/pantalla/llamados", headers={"X-Pantalla-Clave": f"  {CLAVE_TV}  "})
@@ -857,6 +871,40 @@ def test_llamados_cierra_cursor_y_conexion_si_fallan_las_tarjetas(client, monkey
     with pytest.raises(RuntimeError):
         client.get("/api/pantalla/llamados", headers=HEADERS_TV)
     assert cursor.closed and conn.closed
+
+
+# ---------- Cache-Control: no-store
+
+def test_vinculacion_201_con_la_clave_no_se_cachea(client, monkeypatch):
+    preparar(monkeypatch, fetchone=[{"n": 0}])
+    r = client.post("/api/pantalla/vinculacion")
+    assert r.status_code == 201 and "clave" in r.get_json()
+    assert r.headers["Cache-Control"] == "no-store"
+
+
+def test_vinculacion_429_no_se_cachea(client, monkeypatch):
+    preparar(monkeypatch, fetchone=[{"n": MAX_CODIGOS_PENDIENTES}])
+    r = client.post("/api/pantalla/vinculacion")
+    assert r.status_code == 429 and r.headers["Cache-Control"] == "no-store"
+
+
+@pytest.mark.parametrize(
+    "fila, headers, estado",
+    [
+        (fila_pantalla(), HEADERS_TV, 200),
+        (fila_pantalla(codigo="K7M2QX", vinculada_en=None, segundos_restantes=400), HEADERS_TV, 200),
+        (fila_pantalla(codigo="K7M2QX", vinculada_en=None, segundos_restantes=-5), HEADERS_TV, 401),
+        (fila_pantalla(revocada_en=AHORA), HEADERS_TV, 401),
+        (None, HEADERS_TV, 401),
+        (None, {}, 401),
+    ],
+    ids=["vinculada", "pendiente", "vencido", "revocada", "desconocida", "sin-clave"],
+)
+def test_llamados_nunca_se_cachea(client, monkeypatch, fila, headers, estado):
+    preparar(monkeypatch, fetchone=[fila], fetchall=[ENTIDADES, []])
+    r = client.get("/api/pantalla/llamados", headers=headers)
+    assert r.status_code == estado
+    assert r.headers["Cache-Control"] == "no-store"
 
 
 # ---------- /api/pantalla/televisores (solo director)

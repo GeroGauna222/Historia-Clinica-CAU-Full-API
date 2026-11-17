@@ -413,6 +413,7 @@ CREATE TABLE pantallas (
     creado_en DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY uq_pantallas_codigo (codigo),
     UNIQUE KEY uq_pantallas_clave_hash (clave_hash),
+    INDEX idx_pantallas_pendientes (vinculada_en, codigo_expira),
     FOREIGN KEY (vinculada_por) REFERENCES usuarios(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

@@ -53,6 +53,7 @@ def test_schema_pantalla_de_llamados_en_init_y_migracion():
         assert "CREATE TABLE" in sql and "pantallas" in sql
         assert "clave_hash CHAR(64) NOT NULL" in sql
         assert "idx_turnos_fecha_inicio (fecha_inicio)" in sql
+        assert "INDEX idx_pantallas_pendientes (vinculada_en, codigo_expira)" in sql
 
     statements = split_statements(migration_sql)
     # 4 ALTER (usuarios, grupos_profesionales, turnos, turnos_grupales) + 1 CREATE TABLE

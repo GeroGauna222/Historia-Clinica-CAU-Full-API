@@ -17,6 +17,13 @@ from app.utils.permisos import requiere_rol
 
 bp_pantalla = Blueprint("pantalla", __name__)
 
+
+@bp_pantalla.after_request
+def _sin_cache(respuesta):
+    # Estas respuestas llevan la clave del televisor o datos de pacientes: ningún navegador ni proxy debe guardarlas.
+    respuesta.headers["Cache-Control"] = "no-store"
+    return respuesta
+
 ROLES_CONFIG_PANTALLA = ("director", "administrativo")
 MAX_SIGUIENTES = 3
 CABECERA_CLAVE = "X-Pantalla-Clave"
@@ -218,7 +225,7 @@ def solicitar_vinculacion():
     cursor = conn.cursor(dictionary=True)
     try:
         cursor.execute("DELETE FROM pantallas WHERE vinculada_en IS NULL AND codigo_expira < NOW()")
-        cursor.execute("SELECT COUNT(*) AS n FROM pantallas WHERE vinculada_en IS NULL AND revocada_en IS NULL")
+        cursor.execute("SELECT COUNT(*) AS n FROM pantallas WHERE vinculada_en IS NULL AND codigo_expira >= NOW()")
         if cursor.fetchone()["n"] >= MAX_CODIGOS_PENDIENTES:
             conn.commit()  # conserva la limpieza de vencidos
             return jsonify({"error": "Hay demasiados pedidos pendientes. Probá en unos minutos."}), 429
@@ -280,7 +287,14 @@ def llamados():
                 {"estado": "pendiente", "codigo": fila["codigo"], "expira_en_segundos": fila["segundos_restantes"]}
             )
 
-        cursor.execute("UPDATE pantallas SET ultimo_acceso = NOW() WHERE id = %s", (fila["id"],))
+        # Como mucho una escritura por minuto y televisor, aunque consulte cada pocos segundos.
+        cursor.execute(
+            """
+            UPDATE pantallas SET ultimo_acceso = NOW()
+            WHERE id = %s AND (ultimo_acceso IS NULL OR ultimo_acceso < NOW() - INTERVAL 1 MINUTE)
+            """,
+            (fila["id"],),
+        )
         conn.commit()  # cierra la escritura antes de leer las tarjetas
         return jsonify({"estado": "vinculada", "tarjetas": construir_tarjetas(cursor)})
     except Exception:
