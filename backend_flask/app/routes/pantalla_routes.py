@@ -1,10 +1,16 @@
 from flask import Blueprint, jsonify, request
-from flask_login import login_required
+from flask_login import current_user, login_required
+from mysql.connector import IntegrityError
 
 from app.database import get_connection
 from app.utils.pantalla import (
+    MAX_CODIGOS_PENDIENTES,
+    MINUTOS_VIGENCIA_CODIGO,
     abreviar_pacientes,
     anotar_estado_atencion,
+    generar_clave,
+    generar_codigo,
+    hash_clave,
     normalizar_consultorio,
 )
 from app.utils.permisos import requiere_rol
@@ -13,6 +19,9 @@ bp_pantalla = Blueprint("pantalla", __name__)
 
 ROLES_CONFIG_PANTALLA = ("director", "administrativo")
 MAX_SIGUIENTES = 3
+CABECERA_CLAVE = "X-Pantalla-Clave"
+MAX_INTENTOS_CODIGO = 5
+MAX_LARGO_NOMBRE_TELEVISOR = 100
 TABLAS_VISIBLES = {"usuario": "usuarios", "grupo": "grupos_profesionales"}
 
 SQL_ENTIDADES_VISIBLES = """
@@ -192,6 +201,184 @@ def actualizar_visible(tipo, entidad_id):
         )
         conn.commit()
         return jsonify({"consultorio": consultorio, "mostrar_en_pantalla": visible})
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        cursor.close()
+        conn.close()
+
+
+# ---------- Sin sesión (ADR 0001) ----------
+# Únicos endpoints que no usan Flask-Login. Devuelven solo lo que ya muestran las tarjetas.
+
+@bp_pantalla.route("/api/pantalla/vinculacion", methods=["POST"])
+def solicitar_vinculacion():
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("DELETE FROM pantallas WHERE vinculada_en IS NULL AND codigo_expira < NOW()")
+        cursor.execute("SELECT COUNT(*) AS n FROM pantallas WHERE vinculada_en IS NULL AND revocada_en IS NULL")
+        if cursor.fetchone()["n"] >= MAX_CODIGOS_PENDIENTES:
+            conn.commit()  # conserva la limpieza de vencidos
+            return jsonify({"error": "Hay demasiados pedidos pendientes. Probá en unos minutos."}), 429
+
+        clave = generar_clave()
+        clave_hash = hash_clave(clave)  # a la base solo llega el hash
+        for _ in range(MAX_INTENTOS_CODIGO):
+            codigo = generar_codigo()
+            try:
+                cursor.execute(
+                    """
+                    INSERT INTO pantallas (codigo, codigo_expira, clave_hash)
+                    VALUES (%s, DATE_ADD(NOW(), INTERVAL %s MINUTE), %s)
+                    """,
+                    (codigo, MINUTOS_VIGENCIA_CODIGO, clave_hash),
+                )
+            except IntegrityError:
+                continue  # código repetido: probar otro
+            conn.commit()
+            return (
+                jsonify({"codigo": codigo, "clave": clave, "expira_en_segundos": MINUTOS_VIGENCIA_CODIGO * 60}),
+                201,
+            )
+        conn.rollback()
+        return jsonify({"error": "No se pudo generar un código. Reintentá."}), 503
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        cursor.close()
+        conn.close()
+
+
+@bp_pantalla.route("/api/pantalla/llamados", methods=["GET"])
+def llamados():
+    clave = request.headers.get(CABECERA_CLAVE, "").strip()
+    if not clave:
+        return jsonify({"error": "No autorizado"}), 401
+
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(
+            """
+            SELECT id, codigo, vinculada_en, revocada_en,
+                   TIMESTAMPDIFF(SECOND, NOW(), codigo_expira) AS segundos_restantes
+            FROM pantallas WHERE clave_hash = %s
+            """,
+            (hash_clave(clave),),
+        )
+        fila = cursor.fetchone()
+        if not fila or fila["revocada_en"]:
+            return jsonify({"error": "No autorizado"}), 401
+
+        if not fila["vinculada_en"]:
+            if fila["segundos_restantes"] is None or fila["segundos_restantes"] <= 0:
+                return jsonify({"error": "Código vencido"}), 401
+            return jsonify(
+                {"estado": "pendiente", "codigo": fila["codigo"], "expira_en_segundos": fila["segundos_restantes"]}
+            )
+
+        cursor.execute("UPDATE pantallas SET ultimo_acceso = NOW() WHERE id = %s", (fila["id"],))
+        conn.commit()  # cierra la escritura antes de leer las tarjetas
+        return jsonify({"estado": "vinculada", "tarjetas": construir_tarjetas(cursor)})
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        cursor.close()
+        conn.close()
+
+
+# ---------- Con sesión: televisores (solo director) ----------
+
+@bp_pantalla.route("/api/pantalla/televisores", methods=["GET"])
+@login_required
+@requiere_rol("director")
+def listar_televisores():
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(
+            """
+            SELECT id, nombre, vinculada_en, ultimo_acceso
+            FROM pantallas
+            WHERE vinculada_en IS NOT NULL AND revocada_en IS NULL
+            ORDER BY vinculada_en DESC, id DESC
+            """
+        )
+        return jsonify(
+            [
+                {
+                    "id": r["id"],
+                    "nombre": r["nombre"],
+                    "vinculada_en": _iso(r["vinculada_en"]),
+                    "ultimo_acceso": _iso(r["ultimo_acceso"]),
+                }
+                for r in cursor.fetchall()
+            ]
+        )
+    finally:
+        cursor.close()
+        conn.close()
+
+
+@bp_pantalla.route("/api/pantalla/televisores", methods=["POST"])
+@login_required
+@requiere_rol("director")
+def vincular_televisor():
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "El cuerpo de la solicitud debe ser un objeto JSON"}), 400
+    codigo, nombre = data.get("codigo"), data.get("nombre")
+    codigo = codigo.strip().upper() if isinstance(codigo, str) else ""
+    nombre = nombre.strip() if isinstance(nombre, str) else ""
+    if not codigo or not nombre:
+        return jsonify({"error": "Código y nombre son obligatorios"}), 400
+    if len(nombre) > MAX_LARGO_NOMBRE_TELEVISOR:
+        return jsonify({"error": f"El nombre no puede superar los {MAX_LARGO_NOMBRE_TELEVISOR} caracteres"}), 400
+
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(
+            """
+            UPDATE pantallas
+            SET nombre = %s, vinculada_en = NOW(), vinculada_por = %s, codigo = NULL, codigo_expira = NULL
+            WHERE codigo = %s AND vinculada_en IS NULL AND revocada_en IS NULL AND codigo_expira >= NOW()
+            """,
+            (nombre, current_user.id, codigo),
+        )
+        if cursor.rowcount == 0:
+            conn.rollback()
+            return jsonify({"error": "Código inválido o vencido"}), 400
+        conn.commit()
+        return jsonify({"message": "Televisor vinculado"})
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        cursor.close()
+        conn.close()
+
+
+@bp_pantalla.route("/api/pantalla/televisores/<int:tv_id>", methods=["DELETE"])
+@login_required
+@requiere_rol("director")
+def desvincular_televisor(tv_id):
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(
+            "UPDATE pantallas SET revocada_en = NOW() WHERE id = %s AND vinculada_en IS NOT NULL AND revocada_en IS NULL",
+            (tv_id,),
+        )
+        if cursor.rowcount == 0:
+            conn.rollback()
+            return jsonify({"error": "Televisor no encontrado"}), 404
+        conn.commit()
+        return jsonify({"message": "Televisor desvinculado"})
     except Exception:
         conn.rollback()
         raise

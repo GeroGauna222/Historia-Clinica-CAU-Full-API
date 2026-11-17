@@ -3,10 +3,12 @@ import re
 from datetime import datetime, timedelta
 
 import pytest
+from mysql.connector import IntegrityError
 
 from conftest import FakeConnection, FakeCursor, MockUser, login_as
 
 from app.routes import pantalla_routes
+from app.utils.pantalla import MAX_CODIGOS_PENDIENTES, MINUTOS_VIGENCIA_CODIGO, hash_clave
 
 AHORA = datetime(2026, 11, 16, 10, 40)
 
@@ -605,3 +607,415 @@ def test_endpoints_sin_sesion_devuelven_401(client, monkeypatch, metodo, url):
     kwargs = {"json": {"mostrar_en_pantalla": True}} if metodo == "patch" else {}
     assert getattr(client, metodo)(url, **kwargs).status_code == 401
     assert cursor.executed == [] and not conn.committed
+
+
+# ---------------------------------------------------------------- vinculación y llamados (ADR 0001)
+
+CLAVE_TV = "clave-secreta-del-televisor"
+HEADERS_TV = {"X-Pantalla-Clave": CLAVE_TV}
+
+SQL_LIMPIAR_VENCIDOS = "DELETE FROM pantallas WHERE vinculada_en IS NULL AND codigo_expira < NOW()"
+SQL_CONTAR_PENDIENTES = "SELECT COUNT(*) AS n FROM pantallas WHERE vinculada_en IS NULL AND revocada_en IS NULL"
+SQL_INSERTAR_PANTALLA = (
+    "INSERT INTO pantallas (codigo, codigo_expira, clave_hash) "
+    "VALUES (%s, DATE_ADD(NOW(), INTERVAL %s MINUTE), %s)"
+)
+SQL_BUSCAR_POR_CLAVE = (
+    "SELECT id, codigo, vinculada_en, revocada_en, TIMESTAMPDIFF(SECOND, NOW(), codigo_expira) AS segundos_restantes "
+    "FROM pantallas WHERE clave_hash = %s"
+)
+SQL_REGISTRAR_ACCESO = "UPDATE pantallas SET ultimo_acceso = NOW() WHERE id = %s"
+SQL_VINCULAR = (
+    "UPDATE pantallas SET nombre = %s, vinculada_en = NOW(), vinculada_por = %s, codigo = NULL, codigo_expira = NULL "
+    "WHERE codigo = %s AND vinculada_en IS NULL AND revocada_en IS NULL AND codigo_expira >= NOW()"
+)
+SQL_DESVINCULAR = (
+    "UPDATE pantallas SET revocada_en = NOW() "
+    "WHERE id = %s AND vinculada_en IS NOT NULL AND revocada_en IS NULL"
+)
+SQL_LISTAR_TELEVISORES = (
+    "SELECT id, nombre, vinculada_en, ultimo_acceso FROM pantallas "
+    "WHERE vinculada_en IS NOT NULL AND revocada_en IS NULL ORDER BY vinculada_en DESC, id DESC"
+)
+
+BODIES_QUE_NO_SON_OBJETO = [
+    {"json": "texto"},
+    {"json": 5},
+    {"json": [{"codigo": "K7M2QX", "nombre": "Sala"}]},
+    {"json": []},
+    {},  # sin body
+    {"data": "no es json", "content_type": "application/json"},
+]
+IDS_BODIES = ["string", "numero", "lista", "lista-vacia", "ausente", "json-invalido"]
+
+
+def sql_ejecutado(cursor):
+    """[(SQL normalizado, params)] de lo que realmente se mandó a la base."""
+    return [(norm(q), p) for q, p in cursor.executed]
+
+
+def sin_conexion(monkeypatch):
+    """Falla si la ruta pide conexión: sirve para probar validaciones previas a la base."""
+    llamadas = []
+    cursor = FakeCursor()
+    conn = FakeConnection(cursor)
+    monkeypatch.setattr(pantalla_routes, "get_connection", lambda: llamadas.append(1) or conn)
+    return llamadas, cursor, conn
+
+
+def fila_pantalla(**cambios):
+    fila = {"id": 1, "codigo": None, "vinculada_en": AHORA, "revocada_en": None, "segundos_restantes": None}
+    fila.update(cambios)
+    return fila
+
+
+# ---------- POST /api/pantalla/vinculacion (sin sesión)
+
+def test_vinculacion_crea_codigo_y_clave_sin_sesion(client, monkeypatch):
+    cursor, conn = preparar(monkeypatch, fetchone=[{"n": 0}])
+    r = client.post("/api/pantalla/vinculacion")  # sin login_as: es público
+    assert r.status_code == 201
+    body = r.get_json()
+    assert set(body) == {"codigo", "clave", "expira_en_segundos"}
+    assert len(body["codigo"]) == 6 and len(body["clave"]) >= 32
+    assert body["expira_en_segundos"] == MINUTOS_VIGENCIA_CODIGO * 60
+    assert sql_ejecutado(cursor) == [
+        (SQL_LIMPIAR_VENCIDOS, None),
+        (SQL_CONTAR_PENDIENTES, None),
+        (SQL_INSERTAR_PANTALLA, (body["codigo"], MINUTOS_VIGENCIA_CODIGO, hash_clave(body["clave"]))),
+    ]
+    assert body["clave"] not in str(cursor.executed)  # se guarda el hash, nunca la clave
+    assert conn.committed and not conn.rolled_back
+    assert cursor.closed and conn.closed
+
+
+def test_vinculacion_ignora_el_body(client, monkeypatch):
+    preparar(monkeypatch, fetchone=[{"n": 0}])
+    assert client.post("/api/pantalla/vinculacion", json="cualquier cosa").status_code == 201
+
+
+def test_vinculacion_con_el_maximo_de_pendientes_devuelve_429(client, monkeypatch):
+    cursor, conn = preparar(monkeypatch, fetchone=[{"n": MAX_CODIGOS_PENDIENTES}])
+    r = client.post("/api/pantalla/vinculacion")
+    assert r.status_code == 429
+    assert set(r.get_json()) == {"error"}
+    assert sql_ejecutado(cursor) == [(SQL_LIMPIAR_VENCIDOS, None), (SQL_CONTAR_PENDIENTES, None)]  # no inserta
+    assert conn.committed  # la limpieza de vencidos no queda a medias
+    assert cursor.closed and conn.closed
+
+
+def test_vinculacion_con_uno_menos_que_el_maximo_todavia_crea(client, monkeypatch):
+    cursor, _ = preparar(monkeypatch, fetchone=[{"n": MAX_CODIGOS_PENDIENTES - 1}])
+    assert client.post("/api/pantalla/vinculacion").status_code == 201
+    assert len(executed_que_empiezan(cursor, "INSERT INTO pantallas")) == 1
+
+
+def test_vinculacion_reintenta_con_otro_codigo_si_el_primero_ya_existe(client, monkeypatch):
+    codigos = iter(["AAAAAA", "BBBBBB"])
+    monkeypatch.setattr(pantalla_routes, "generar_codigo", lambda: next(codigos))
+    cursor = FakeCursor(fetchone_results=[{"n": 0}], execute_side_effects=[None, None, IntegrityError("dup")])
+    conn = FakeConnection(cursor)
+    monkeypatch.setattr(pantalla_routes, "get_connection", lambda: conn)
+
+    r = client.post("/api/pantalla/vinculacion")
+
+    assert r.status_code == 201 and r.get_json()["codigo"] == "BBBBBB"
+    inserts = [p for q, p in sql_ejecutado(cursor) if q == SQL_INSERTAR_PANTALLA]
+    assert [p[0] for p in inserts] == ["AAAAAA", "BBBBBB"]
+    assert inserts[0][2] == inserts[1][2] == hash_clave(r.get_json()["clave"])  # misma clave en ambos intentos
+    assert conn.committed and not conn.rolled_back
+    assert cursor.closed and conn.closed
+
+
+def test_vinculacion_sin_codigo_libre_tras_5_intentos_devuelve_503_con_rollback(client, monkeypatch):
+    cursor = FakeCursor(fetchone_results=[{"n": 0}], execute_side_effects=[None, None] + [IntegrityError("dup")] * 5)
+    conn = FakeConnection(cursor)
+    monkeypatch.setattr(pantalla_routes, "get_connection", lambda: conn)
+    r = client.post("/api/pantalla/vinculacion")
+    assert r.status_code == 503 and "clave" not in r.get_json()
+    assert len(executed_que_empiezan(cursor, "INSERT INTO pantallas")) == 5
+    assert conn.rolled_back and not conn.committed
+    assert cursor.closed and conn.closed
+
+
+def test_vinculacion_hace_rollback_y_cierra_si_falla_la_base(client, monkeypatch):
+    cursor = FakeCursor(fetchone_results=[{"n": 0}], execute_side_effects=[None, None, RuntimeError("boom")])
+    conn = FakeConnection(cursor)
+    monkeypatch.setattr(pantalla_routes, "get_connection", lambda: conn)
+    with pytest.raises(RuntimeError):
+        client.post("/api/pantalla/vinculacion")
+    assert conn.rolled_back and not conn.committed
+    assert cursor.closed and conn.closed
+
+
+# ---------- GET /api/pantalla/llamados (sin sesión, clave en cabecera)
+
+@pytest.mark.parametrize("headers", [{}, {"X-Pantalla-Clave": ""}, {"X-Pantalla-Clave": "   "}], ids=["ausente", "vacia", "blancos"])
+def test_llamados_sin_clave_devuelve_401_sin_tocar_la_base(client, monkeypatch, headers):
+    llamadas, cursor, _ = sin_conexion(monkeypatch)
+    r = client.get("/api/pantalla/llamados", headers=headers)
+    assert r.status_code == 401 and set(r.get_json()) == {"error"}
+    assert llamadas == [] and cursor.executed == []
+
+
+def test_llamados_clave_desconocida_devuelve_401(client, monkeypatch):
+    cursor, conn = preparar(monkeypatch, fetchone=[None])
+    r = client.get("/api/pantalla/llamados", headers=HEADERS_TV)
+    assert r.status_code == 401 and set(r.get_json()) == {"error"}
+    assert sql_ejecutado(cursor) == [(SQL_BUSCAR_POR_CLAVE, (hash_clave(CLAVE_TV),))]
+    assert not conn.committed
+    assert cursor.closed and conn.closed
+
+
+def test_llamados_busca_por_hash_y_nunca_manda_la_clave_a_la_base(client, monkeypatch):
+    cursor, _ = preparar(monkeypatch, fetchone=[None])
+    client.get("/api/pantalla/llamados", headers={"X-Pantalla-Clave": f"  {CLAVE_TV}  "})
+    assert cursor.executed[0][1] == (hash_clave(CLAVE_TV),)  # la cabecera se recorta antes de hashear
+    assert CLAVE_TV not in str(cursor.executed)
+
+
+def test_llamados_revocada_devuelve_401_aunque_este_vinculada(client, monkeypatch):
+    cursor, conn = preparar(monkeypatch, fetchone=[fila_pantalla(revocada_en=AHORA)])
+    r = client.get("/api/pantalla/llamados", headers=HEADERS_TV)
+    assert r.status_code == 401 and set(r.get_json()) == {"error"}
+    assert len(cursor.executed) == 1 and not conn.committed  # ni registra acceso ni lee tarjetas
+    assert cursor.closed and conn.closed
+
+
+@pytest.mark.parametrize("segundos", [-5, 0, None])
+def test_llamados_codigo_vencido_devuelve_401(client, monkeypatch, segundos):
+    fila = fila_pantalla(codigo="K7M2QX", vinculada_en=None, segundos_restantes=segundos)
+    cursor, conn = preparar(monkeypatch, fetchone=[fila])
+    r = client.get("/api/pantalla/llamados", headers=HEADERS_TV)
+    assert r.status_code == 401 and "K7M2QX" not in r.get_data(as_text=True)
+    assert len(cursor.executed) == 1 and not conn.committed
+    assert cursor.closed and conn.closed
+
+
+def test_llamados_pendiente_devuelve_solo_el_codigo(client, monkeypatch):
+    fila = fila_pantalla(codigo="K7M2QX", vinculada_en=None, segundos_restantes=400)
+    cursor, conn = preparar(monkeypatch, fetchone=[fila])
+    r = client.get("/api/pantalla/llamados", headers=HEADERS_TV)  # sin login_as: es público
+    assert r.status_code == 200
+    assert r.get_json() == {"estado": "pendiente", "codigo": "K7M2QX", "expira_en_segundos": 400}
+    assert len(cursor.executed) == 1  # no lee tarjetas ni registra acceso
+    assert not conn.committed
+    assert cursor.closed and conn.closed
+
+
+def test_llamados_vinculada_devuelve_tarjetas_y_registra_acceso(client, monkeypatch):
+    turnos = [
+        turno_fila("usuario", 7, 1, 11, "María", "Gómez", atencion_inicio=datetime(2026, 11, 16, 10, 35)),
+        turno_fila("usuario", 7, 2, 12, "Juan", "Pérez", hora=(10, 30)),
+    ]
+    cursor, conn = preparar(monkeypatch, fetchone=[fila_pantalla(id=9)], fetchall=[ENTIDADES, turnos])
+    r = client.get("/api/pantalla/llamados", headers=HEADERS_TV)  # sin login_as: es público
+    assert r.status_code == 200
+    assert r.get_json() == {
+        "estado": "vinculada",
+        "tarjetas": [
+            {
+                "tipo": "usuario", "id": 7, "consultorio": "3", "nombre": "Dra. Pérez",
+                "en_atencion": [{"nombre": "María G.", "atencion_inicio": "2026-11-16T10:35:00"}],
+                "siguientes": [{"nombre": "Juan P."}],
+            }
+        ],
+    }
+    consultas = sql_ejecutado(cursor)
+    assert len(consultas) == 4
+    assert consultas[0] == (SQL_BUSCAR_POR_CLAVE, (hash_clave(CLAVE_TV),))
+    assert consultas[1] == (SQL_REGISTRAR_ACCESO, (9,))
+    assert "FROM usuarios u" in consultas[2][0] and "FROM turnos t" in consultas[3][0]
+    assert conn.committed and not conn.rolled_back
+    assert cursor.closed and conn.closed
+
+
+def test_llamados_no_expone_clave_hash_ni_datos_del_paciente(client, monkeypatch):
+    turnos = [turno_fila("usuario", 7, 1, 11, "María", "Gómez", atencion_inicio=datetime(2026, 11, 16, 10, 35))]
+    fila = fila_pantalla(codigo="K7M2QX", nombre="Sala principal", clave_hash=hash_clave(CLAVE_TV))
+    preparar(monkeypatch, fetchone=[fila], fetchall=[ENTIDADES, turnos])
+    texto = client.get("/api/pantalla/llamados", headers=HEADERS_TV).get_data(as_text=True)
+    for prohibido in (CLAVE_TV, hash_clave(CLAVE_TV), "K7M2QX", "Sala principal", "Gómez",
+                      "30111222", "lumbar", "penicilina", "dni", "motivo", "paciente_id"):
+        assert prohibido not in texto, prohibido
+
+
+def test_llamados_hace_rollback_y_cierra_si_falla_el_registro_de_acceso(client, monkeypatch):
+    cursor, conn = preparar(
+        monkeypatch, fetchone=[fila_pantalla()], execute_side_effects=[None, RuntimeError("boom")]
+    )
+    with pytest.raises(RuntimeError):
+        client.get("/api/pantalla/llamados", headers=HEADERS_TV)
+    assert conn.rolled_back and not conn.committed
+    assert cursor.closed and conn.closed
+
+
+def test_llamados_cierra_cursor_y_conexion_si_fallan_las_tarjetas(client, monkeypatch):
+    cursor, conn = preparar(
+        monkeypatch, fetchone=[fila_pantalla()], execute_side_effects=[None, None, RuntimeError("boom")]
+    )
+    with pytest.raises(RuntimeError):
+        client.get("/api/pantalla/llamados", headers=HEADERS_TV)
+    assert cursor.closed and conn.closed
+
+
+# ---------- /api/pantalla/televisores (solo director)
+
+@pytest.mark.parametrize("rol", ["administrativo", "profesional", "area"])
+@pytest.mark.parametrize(
+    "metodo, url, kwargs",
+    [
+        ("get", "/api/pantalla/televisores", {}),
+        ("post", "/api/pantalla/televisores", {"json": {"codigo": "K7M2QX", "nombre": "Sala"}}),
+        ("delete", "/api/pantalla/televisores/4", {}),
+    ],
+    ids=["listar", "vincular", "desvincular"],
+)
+def test_televisores_solo_el_director_gestiona(client, monkeypatch, rol, metodo, url, kwargs):
+    llamadas, cursor, conn = sin_conexion(monkeypatch)
+    login_as(client, MockUser(user_id=3, rol=rol))
+    assert getattr(client, metodo)(url, **kwargs).status_code == 403
+    assert llamadas == [] and cursor.executed == [] and not conn.committed
+
+
+@pytest.mark.parametrize(
+    "metodo, url, kwargs",
+    [
+        ("get", "/api/pantalla/televisores", {}),
+        ("post", "/api/pantalla/televisores", {"json": {"codigo": "K7M2QX", "nombre": "Sala"}}),
+        ("delete", "/api/pantalla/televisores/4", {}),
+    ],
+    ids=["listar", "vincular", "desvincular"],
+)
+def test_televisores_sin_sesion_devuelve_401(client, monkeypatch, metodo, url, kwargs):
+    llamadas, cursor, conn = sin_conexion(monkeypatch)
+    assert getattr(client, metodo)(url, **kwargs).status_code == 401
+    assert llamadas == [] and cursor.executed == [] and not conn.committed
+
+
+def test_vincular_televisor_ok(client, monkeypatch):
+    cursor, conn = preparar(monkeypatch, rowcount=1)
+    login_as(client, MockUser(user_id=3, rol="director"))
+    r = client.post("/api/pantalla/televisores", json={"codigo": " k7m2qx ", "nombre": "  Sala principal "})
+    assert r.status_code == 200 and r.get_json() == {"message": "Televisor vinculado"}
+    # Código normalizado a mayúsculas, nombre recortado y vinculado por el director logueado.
+    assert sql_ejecutado(cursor) == [(SQL_VINCULAR, ("Sala principal", 3, "K7M2QX"))]
+    assert conn.committed and not conn.rolled_back
+    assert cursor.closed and conn.closed
+
+
+def test_vincular_codigo_invalido_o_vencido_devuelve_400(client, monkeypatch):
+    cursor, conn = preparar(monkeypatch, rowcount=0)
+    login_as(client, MockUser(user_id=3, rol="director"))
+    r = client.post("/api/pantalla/televisores", json={"codigo": "ZZZZZZ", "nombre": "Sala"})
+    assert r.status_code == 400 and "inválido" in r.get_json()["error"].lower()
+    assert conn.rolled_back and not conn.committed
+    assert cursor.closed and conn.closed
+
+
+@pytest.mark.parametrize("kwargs", BODIES_QUE_NO_SON_OBJETO, ids=IDS_BODIES)
+def test_vincular_body_que_no_es_objeto_devuelve_400_sin_pedir_conexion(client, monkeypatch, kwargs):
+    llamadas, cursor, conn = sin_conexion(monkeypatch)
+    login_as(client, MockUser(user_id=3, rol="director"))
+    r = client.post("/api/pantalla/televisores", **kwargs)
+    assert r.status_code == 400
+    assert isinstance(r.get_json()["error"], str) and r.get_json()["error"]
+    assert llamadas == [] and cursor.executed == [] and not conn.committed
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"codigo": "K7M2QX"},
+        {"nombre": "Sala"},
+        {},
+        {"codigo": "K7M2QX", "nombre": "   "},
+        {"codigo": "   ", "nombre": "Sala"},
+        {"codigo": None, "nombre": "Sala"},
+        {"codigo": 123456, "nombre": "Sala"},
+        {"codigo": ["K7M2QX"], "nombre": "Sala"},
+        {"codigo": "K7M2QX", "nombre": 5},
+        {"codigo": "K7M2QX", "nombre": {"a": 1}},
+    ],
+)
+def test_vincular_exige_codigo_y_nombre_de_texto(client, monkeypatch, body):
+    llamadas, cursor, conn = sin_conexion(monkeypatch)
+    login_as(client, MockUser(user_id=3, rol="director"))
+    assert client.post("/api/pantalla/televisores", json=body).status_code == 400
+    assert llamadas == [] and cursor.executed == []
+
+
+def test_vincular_nombre_demasiado_largo_devuelve_400(client, monkeypatch):
+    llamadas, cursor, _ = sin_conexion(monkeypatch)
+    login_as(client, MockUser(user_id=3, rol="director"))
+    assert client.post("/api/pantalla/televisores", json={"codigo": "K7M2QX", "nombre": "x" * 101}).status_code == 400
+    assert llamadas == [] and cursor.executed == []
+
+
+def test_vincular_nombre_de_100_caracteres_es_valido(client, monkeypatch):
+    cursor, _ = preparar(monkeypatch, rowcount=1)
+    login_as(client, MockUser(user_id=3, rol="director"))
+    assert client.post("/api/pantalla/televisores", json={"codigo": "K7M2QX", "nombre": "x" * 100}).status_code == 200
+    assert cursor.executed[0][1][0] == "x" * 100
+
+
+def test_vincular_hace_rollback_y_cierra_si_falla_la_base(client, monkeypatch):
+    cursor, conn = preparar(monkeypatch, execute_side_effects=[RuntimeError("boom")])
+    login_as(client, MockUser(user_id=3, rol="director"))
+    with pytest.raises(RuntimeError):
+        client.post("/api/pantalla/televisores", json={"codigo": "K7M2QX", "nombre": "Sala"})
+    assert conn.rolled_back and not conn.committed
+    assert cursor.closed and conn.closed
+
+
+def test_listar_televisores_devuelve_solo_campos_publicos_y_nunca_la_clave(client, monkeypatch):
+    filas = [
+        {"id": 4, "nombre": "Sala", "vinculada_en": AHORA, "ultimo_acceso": AHORA,
+         # Columnas que el SQL real no trae, pero que jamás deben salir aunque algún día lo hicieran.
+         "clave": CLAVE_TV, "clave_hash": hash_clave(CLAVE_TV), "codigo": "K7M2QX"},
+        {"id": 3, "nombre": "Pasillo", "vinculada_en": AHORA, "ultimo_acceso": None},
+    ]
+    cursor, conn = preparar(monkeypatch, fetchall=[filas])
+    login_as(client, MockUser(user_id=3, rol="director"))
+    r = client.get("/api/pantalla/televisores")
+    assert r.status_code == 200
+    assert r.get_json() == [
+        {"id": 4, "nombre": "Sala", "vinculada_en": "2026-11-16T10:40:00", "ultimo_acceso": "2026-11-16T10:40:00"},
+        {"id": 3, "nombre": "Pasillo", "vinculada_en": "2026-11-16T10:40:00", "ultimo_acceso": None},
+    ]
+    texto = r.get_data(as_text=True)
+    for prohibido in ("clave", CLAVE_TV, hash_clave(CLAVE_TV), "K7M2QX"):
+        assert prohibido not in texto, prohibido
+    consulta, params = sql_ejecutado(cursor)[0]
+    assert (consulta, params) == (SQL_LISTAR_TELEVISORES, None)  # determinista; ni selecciona la clave
+    assert "clave" not in consulta
+    assert cursor.closed and conn.closed
+
+
+def test_desvincular_televisor(client, monkeypatch):
+    cursor, conn = preparar(monkeypatch, rowcount=1)
+    login_as(client, MockUser(user_id=3, rol="director"))
+    r = client.delete("/api/pantalla/televisores/4")
+    assert r.status_code == 200 and r.get_json() == {"message": "Televisor desvinculado"}
+    assert sql_ejecutado(cursor) == [(SQL_DESVINCULAR, (4,))]
+    assert conn.committed and not conn.rolled_back
+    assert cursor.closed and conn.closed
+
+
+def test_desvincular_inexistente_devuelve_404(client, monkeypatch):
+    cursor, conn = preparar(monkeypatch, rowcount=0)
+    login_as(client, MockUser(user_id=3, rol="director"))
+    r = client.delete("/api/pantalla/televisores/4")
+    assert r.status_code == 404 and set(r.get_json()) == {"error"}
+    assert sql_ejecutado(cursor) == [(SQL_DESVINCULAR, (4,))]
+    assert conn.rolled_back and not conn.committed
+    assert cursor.closed and conn.closed
+
+
+def test_desvincular_hace_rollback_y_cierra_si_falla_la_base(client, monkeypatch):
+    cursor, conn = preparar(monkeypatch, execute_side_effects=[RuntimeError("boom")])
+    login_as(client, MockUser(user_id=3, rol="director"))
+    with pytest.raises(RuntimeError):
+        client.delete("/api/pantalla/televisores/4")
+    assert conn.rolled_back and not conn.committed
+    assert cursor.closed and conn.closed
