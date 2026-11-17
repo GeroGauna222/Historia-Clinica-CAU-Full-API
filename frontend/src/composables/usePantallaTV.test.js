@@ -256,6 +256,53 @@ describe('usePantallaTV', () => {
         expect(pantallaService.obtenerLlamados).toHaveBeenCalledTimes(1);
     });
 
+    it.each([
+        ['sin clave', {}],
+        ['clave vacía', { clave: '' }],
+        ['clave que no es texto', { clave: 5 }]
+    ])('una vinculación con respuesta inesperada (%s) no guarda nada y termina en reconectando', async (_nombre, data) => {
+        vi.useFakeTimers();
+        pantallaService.solicitarVinculacion.mockResolvedValue({ data });
+        const tv = usePantallaTV();
+        await tv.ciclo();
+        expect(window.localStorage.getItem(CLAVE_STORAGE)).toBeNull();
+        expect(pantallaService.obtenerLlamados).not.toHaveBeenCalled();
+        expect(tv.reconectando.value).toBe(false);
+
+        vi.advanceTimersByTime(31000);
+        await tv.ciclo();
+        expect(window.localStorage.getItem(CLAVE_STORAGE)).toBeNull();
+        expect(pantallaService.obtenerLlamados).not.toHaveBeenCalled();
+        expect(tv.reconectando.value).toBe(true);
+    });
+
+    // En ambos casos el televisor se re-vincula y los llamados que ya estaban en pantalla no deben sonar como nuevos:
+    // la primera carga vinculada después del reinicio es "primera carga". Se usan llamados distintos a los previos
+    // porque con los mismos el resultado sería igual aunque `vistos` no se reiniciara.
+    it.each([
+        [
+            '401',
+            () => {
+                pantallaService.obtenerLlamados.mockRejectedValueOnce({ response: { status: 401 } });
+                pantallaService.solicitarVinculacion.mockResolvedValueOnce({ data: { codigo: 'NUEVO1', clave: 'clave-2' } });
+            }
+        ],
+        ['pendiente', () => pantallaService.obtenerLlamados.mockResolvedValueOnce({ data: { estado: 'pendiente', codigo: 'K7M2QX' } })]
+    ])('después de un %s la primera carga vinculada no suena', async (_nombre, interrumpir) => {
+        window.localStorage.setItem(CLAVE_STORAGE, 'k');
+        const tv = usePantallaTV();
+        tv.activarSonido();
+        pantallaService.obtenerLlamados.mockResolvedValueOnce(vinculada(tarjeta('2026-11-16T10:00:00')));
+        await tv.ciclo(); // (a) vinculada con llamados
+        interrumpir();
+        await tv.ciclo(); // (b) 401 o pendiente
+        pantallaService.obtenerLlamados.mockResolvedValueOnce(vinculada(tarjeta('2026-11-16T10:30:00')));
+        await tv.ciclo(); // (c) vinculada con llamados (tras el 401 este ciclo antes pide una vinculación nueva)
+        expect(tv.estado.value).toBe('vinculada');
+        expect(tv.tarjetas.value[0].en_atencion[0].atencion_inicio).toBe('2026-11-16T10:30:00');
+        expect(reproducirAvisoSonoro).toHaveBeenCalledTimes(1); // solo el tono de prueba de activarSonido
+    });
+
     describe('iniciar / detener', () => {
         it('consulta de inmediato y luego cada 5 s', async () => {
             vi.useFakeTimers();
@@ -314,6 +361,73 @@ describe('usePantallaTV', () => {
 
             expect(tv.tarjetas.value[0].en_atencion[0].atencion_inicio).toBe('2026-11-16T10:00:00');
             expect(reproducirAvisoSonoro).toHaveBeenCalledTimes(1);
+        });
+
+        it('se puede volver a iniciar después de detener: consulta de nuevo y el intervalo sigue activo', async () => {
+            vi.useFakeTimers();
+            window.localStorage.setItem(CLAVE_STORAGE, 'k');
+            pantallaService.obtenerLlamados
+                .mockResolvedValueOnce(vinculada(tarjeta('2026-11-16T10:00:00')))
+                .mockResolvedValueOnce(vinculada(tarjeta('2026-11-16T10:05:00')))
+                .mockResolvedValueOnce(vinculada(tarjeta('2026-11-16T10:10:00')));
+            const tv = usePantallaTV();
+            tv.iniciar();
+            await vi.advanceTimersByTimeAsync(0);
+            tv.detener();
+            expect(vi.getTimerCount()).toBe(0);
+
+            tv.iniciar();
+            expect(pantallaService.obtenerLlamados).toHaveBeenCalledTimes(2);
+            await vi.advanceTimersByTimeAsync(0);
+            expect(tv.tarjetas.value[0].en_atencion[0].atencion_inicio).toBe('2026-11-16T10:05:00');
+            expect(vi.getTimerCount()).toBe(1);
+
+            await vi.advanceTimersByTimeAsync(5000);
+            expect(pantallaService.obtenerLlamados).toHaveBeenCalledTimes(3);
+            expect(tv.tarjetas.value[0].en_atencion[0].atencion_inicio).toBe('2026-11-16T10:10:00');
+            tv.detener();
+        });
+
+        // Decisión: si el pedido viejo sigue en vuelo cuando se vuelve a iniciar, `activo` ya es true y su resultado se aplica.
+        // No es un problema: es una respuesta real del servidor para la misma clave, apenas unos segundos vieja, y la
+        // siguiente consulta la reemplaza. Mientras el pedido viejo no termina, `enCurso` hace que el ciclo inmediato del
+        // nuevo `iniciar()` salga sin consultar; el televisor se recupera en el siguiente tick de 5 s.
+        it('si se reinicia con un pedido viejo en vuelo, el viejo se aplica al resolver y el siguiente tick consulta de nuevo', async () => {
+            vi.useFakeTimers();
+            window.localStorage.setItem(CLAVE_STORAGE, 'k');
+            const viejo = diferido();
+            pantallaService.obtenerLlamados.mockReturnValueOnce(viejo.promesa).mockResolvedValueOnce(vinculada(tarjeta('2026-11-16T10:10:00')));
+            const tv = usePantallaTV();
+            tv.iniciar();
+            tv.detener();
+            tv.iniciar();
+            expect(pantallaService.obtenerLlamados).toHaveBeenCalledTimes(1); // el ciclo nuevo salió por `enCurso`
+            expect(vi.getTimerCount()).toBeGreaterThanOrEqual(1);
+
+            viejo.resolver(vinculada(tarjeta('2026-11-16T10:00:00')));
+            await vi.advanceTimersByTimeAsync(0);
+            expect(tv.estado.value).toBe('vinculada');
+            expect(tv.tarjetas.value[0].en_atencion[0].atencion_inicio).toBe('2026-11-16T10:00:00');
+
+            await vi.advanceTimersByTimeAsync(5000);
+            expect(pantallaService.obtenerLlamados).toHaveBeenCalledTimes(2);
+            expect(tv.tarjetas.value[0].en_atencion[0].atencion_inicio).toBe('2026-11-16T10:10:00');
+            tv.detener();
+        });
+
+        it('iniciar apaga reconectando y reinicia la cuenta de 30 s', async () => {
+            vi.useFakeTimers();
+            window.localStorage.setItem(CLAVE_STORAGE, 'k');
+            pantallaService.obtenerLlamados.mockRejectedValue(new Error('network'));
+            const tv = usePantallaTV();
+            vi.advanceTimersByTime(31000);
+            await tv.ciclo();
+            expect(tv.reconectando.value).toBe(true);
+
+            pantallaService.obtenerLlamados.mockReturnValue(new Promise(() => {})); // el pedido nuevo no responde (todavía)
+            tv.iniciar();
+            expect(tv.reconectando.value).toBe(false);
+            tv.detener();
         });
 
         it('una vinculación en vuelo que resuelve después de detener no guarda la clave', async () => {

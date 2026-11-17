@@ -134,6 +134,7 @@ export function usePantallaTV() {
         if (timer) return; // ya iniciado: evita un setInterval huérfano
         activo = true;
         ultimaRespuesta = Date.now();
+        reconectando.value = false;
         ciclo();
         timer = setInterval(ciclo, INTERVALO_MS);
     }
