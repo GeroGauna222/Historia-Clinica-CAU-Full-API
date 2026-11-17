@@ -14,6 +14,10 @@ _Avoid_: Sala, box, lugar de atención
 Turno de un único paciente en la agenda compartida de un grupo; no es una sesión donde varios pacientes se atienden juntos.
 _Avoid_: Sesión de grupo, sesión grupal
 
+**Presente**:
+Asistencia registrada de un paciente que llegó a la sala. Un presente que todavía no fue llamado está esperando; **Llamar** lo pasa a **En atención**.
+_Avoid_: En curso
+
 **Llamar**:
 Acción con la que el profesional hace pasar a un paciente que está esperando.
 _Avoid_: Marcar que pase, dar paso
@@ -49,6 +53,7 @@ _Avoid_: Emparejar, parear, dar de alta la pantalla
 - **Llamar** a un paciente de la agenda propia lo hace el dueño de esa agenda; **Llamar** a un paciente de un **Turno grupal** lo hace cualquier miembro del grupo
 - Un turno ya atendido se puede volver a **Llamar** solo desde la lista de turnos del día, no desde el aviso de llegada ni desde el menú de presentes
 - Volver a **Llamar** un turno que ya está **En atención** solo repite el tono en la **Pantalla de llamados**; no cambia nada más
+- No se puede **Llamar** a un paciente ausente ni a un turno que no es de hoy; **Llamar** a un paciente que figura como programado lo pasa a presente
 - Marcar ausente o volver a "programado" un turno borra su atención; reprogramarlo también, y si cambia de día su asistencia vuelve a "programado"
 - "Profesional" en estas reglas es cualquier usuario con agenda propia, sea de rol `profesional` o `area`
 

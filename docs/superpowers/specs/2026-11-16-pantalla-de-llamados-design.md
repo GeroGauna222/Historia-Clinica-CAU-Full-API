@@ -1,6 +1,6 @@
 # Pantalla de llamados — diseño
 
-Fecha: 2026-11-16 · Estado: aprobado por el usuario, pendiente de plan de implementación
+Fecha: 2026-11-16 · Estado: implementado en la rama `feat/pantalla-de-llamados` (pendiente el recorrido manual en el televisor real)
 
 Vocabulario en [`CONTEXT.md`](../../../CONTEXT.md). Decisión de acceso sin sesión en [`ADR 0001`](../../adr/0001-pantalla-de-llamados-sin-sesion.md).
 
@@ -60,12 +60,12 @@ Se usa el reloj de MySQL (`NOW()`/`CURDATE()`), como ya hace `presentes-hoy`.
 
 | Endpoint | Roles | Función |
 |---|---|---|
-| `POST /api/turnos/<id>/llamar` | dueño del turno | Abre la atención, cierra la otra atención abierta del profesional, `programado` → `presente`. 409 si está ausente o no es de hoy. Sobre un turno atendido lo reabre. |
+| `POST /api/turnos/<id>/llamar` | dueño del turno | Abre la atención, cierra la otra atención abierta del profesional, `programado` → `presente`. 403 si no es el dueño; 409 si está ausente o no es de hoy. Sobre un turno atendido lo reabre. |
 | `POST /api/turnos/<id>/finalizar` | dueño | Cierra la atención. |
-| `POST /api/turnos/grupales/<id>/llamar` | miembro del grupo | Abre la atención sin cerrar las demás. No hay `finalizar` para grupales. |
+| `POST /api/turnos/grupales/<id>/llamar` | miembro del grupo | Abre la atención sin cerrar las demás. 403 si no es miembro; 409 si está ausente o no es de hoy. No hay `finalizar` para grupales. |
 | `GET /api/pantalla/vista-previa` | director, administrativo | Misma función que usa el televisor. |
 | `GET /api/pantalla/visibles` | director, administrativo | Profesionales y grupos con consultorio, visibilidad y si tienen turnos hoy. |
-| `PATCH /api/pantalla/visibles/<tipo>/<id>` | director, administrativo | Visibilidad y consultorio. Rechaza grupo visible sin consultorio. |
+| `PATCH /api/pantalla/visibles/<tipo>/<id>` | director, administrativo | Visibilidad y consultorio. Rechaza grupo visible sin consultorio (400); un profesional visible sin consultorio se acepta. Un cuerpo que no es un objeto JSON responde 400 con la clave `message`; los demás rechazos usan `error`. |
 | `GET /api/pantalla/televisores` | director | Lista de televisores. |
 | `POST /api/pantalla/televisores` | director | Recibe código y nombre, vincula. |
 | `DELETE /api/pantalla/televisores/<id>` | director | Desvincula (revoca la clave). |
@@ -95,10 +95,10 @@ Consultorio, nombre del profesional, pacientes en atención y hasta tres siguien
 - **Desvinculada:** borra la clave y muestra un código nuevo.
 - Tarjeta: consultorio grande, profesional, en atención, hasta tres siguientes.
 - Orden: consultorios numerados ascendente, espacios con nombre alfabético, profesionales sin consultorio al final. Una tarjeta por profesional o grupo.
-- Fondo oscuro, letra grande, sin scroll. Hasta 12 tarjetas en una grilla; con más, páginas que rotan cada 10 s.
+- Fondo oscuro, letra grande, sin scroll. Hasta 12 tarjetas por página (`porPagina`) en una grilla de 1 a 4 columnas; con más, páginas que rotan cada 10 s. Con 4 tarjetas o menos la página usa la clase `grande` (letra ×1.4) y con 10 o más la clase `densa` (×0.85).
 - Tono: el mismo del aviso de llegada, en cada llamado nuevo, incluido "Volver a llamar". Sin anuncio grande en pantalla.
 - La clave se guarda en `localStorage` del televisor.
-- Hay que agregar `/pantalla` a las rutas públicas del guard de `router/index.js` y a la excepción del interceptor 401 de `api/axios.js`.
+- `/pantalla` se declara pública con `meta.publica` en `router/index.js`; el guard (`router/accesoRutas.js`) y el interceptor 401 de `api/axios.js` leen esa marca en lugar de comparar rutas por texto.
 
 ### Vista "Pantalla de llamados" (menú; director y administrativo)
 
@@ -111,7 +111,7 @@ Consultorio, nombre del profesional, pacientes en atención y hasta tres siguien
 - Lista de turnos del día del Dashboard: "Llamar", "Finalizar" o "Volver a llamar" según el estado, solo en turnos propios o de grupos del usuario. "Volver a llamar" también sobre turnos ya en atención: solo repite el tono.
 - Aviso de llegada (`ArrivalNoticeDialog`): botón "Llamar" por paciente, que llama y da por informado solo a ese paciente. "Informado" sigue cerrando sin llamar.
 - Menú de presentes: esperando / en atención / atendido, con "Llamar" solo en los que esperan.
-- "Atención en curso" del Dashboard: muestra al paciente llamado.
+- Widget de atención del Dashboard (`ProximoTurnoWidget`): muestra al paciente llamado como "En atención" (profesional) o "Pacientes en atención" (director); ya no usa "en curso" ni la etiqueta "Presente".
 - Formularios de usuario y grupo: campo Consultorio.
 - Las llamadas van por `src/service/*`, no por axios directo.
 
