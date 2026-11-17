@@ -662,6 +662,9 @@ def editar_turno(id):
         """,
             (fecha_inicio, fecha_fin, motivo, observaciones, es_sobreturno, id),
         )
+        if _to_db_iso(turno["fecha_inicio"]) != fecha_inicio or _to_db_iso(turno["fecha_fin"]) != fecha_fin:
+            cambio_dia = turno["fecha_inicio"].date() != inicio_dt.date()
+            _limpiar_atencion(cursor, "turnos", id, volver_a_programado=cambio_dia)
         conn.commit()
 
         payload = {"message": "Turno actualizado correctamente."}
@@ -1371,6 +1374,9 @@ def editar_turno_grupal(turno_grupal_id):
         """,
             (grupo_id, paciente_id, _to_db_iso(inicio_dt), _to_db_iso(fin_dt), motivo, observaciones, turno_grupal_id),
         )
+        if _to_db_iso(actual["fecha_inicio"]) != _to_db_iso(inicio_dt) or _to_db_iso(actual["fecha_fin"]) != _to_db_iso(fin_dt):
+            cambio_dia = actual["fecha_inicio"].date() != inicio_dt.date()
+            _limpiar_atencion(cursor, "turnos_grupales", turno_grupal_id, volver_a_programado=cambio_dia)
         conn.commit()
         payload = {"message": "Turno grupal actualizado correctamente"}
         if ajuste:
@@ -1400,6 +1406,19 @@ def eliminar_turno_grupal(turno_grupal_id):
     finally:
         cursor.close()
         conn.close()
+
+
+_TABLAS_ATENCION = {"turnos", "turnos_grupales"}
+
+
+def _limpiar_atencion(cursor, tabla, turno_id, volver_a_programado=False):
+    if tabla not in _TABLAS_ATENCION:  # el nombre de tabla nunca viene del usuario; defensa en profundidad
+        raise ValueError("tabla invalida")
+    extra = ", estado_asistencia = 'programado', ausencia = NULL" if volver_a_programado else ""
+    cursor.execute(
+        f"UPDATE {tabla} SET atencion_inicio = NULL, atencion_fin = NULL{extra} WHERE id = %s",
+        (turno_id,),
+    )
 
 
 def _resolver_asistencia(data):
@@ -1451,6 +1470,8 @@ def api_actualizar_ausencia_turno(id):
                 "UPDATE turnos_grupales SET ausencia = %s, estado_asistencia = %s WHERE id = %s",
                 (ausencia, estado_asistencia, id)
             )
+            if estado_asistencia != "presente":
+                _limpiar_atencion(cursor, "turnos_grupales", id)
             conn.commit()
             return jsonify({
                 "mensaje": "Asistencia de turno grupal actualizada correctamente",
@@ -1465,6 +1486,8 @@ def api_actualizar_ausencia_turno(id):
             "UPDATE turnos SET ausencia = %s, estado_asistencia = %s WHERE id = %s",
             (ausencia, estado_asistencia, id)
         )
+        if estado_asistencia != "presente":
+            _limpiar_atencion(cursor, "turnos", id)
         conn.commit()
         return jsonify({
             "mensaje": "Asistencia de turno actualizada correctamente",
@@ -1500,6 +1523,8 @@ def api_actualizar_ausencia_turno_grupal(turno_grupal_id):
             "UPDATE turnos_grupales SET ausencia = %s, estado_asistencia = %s WHERE id = %s",
             (ausencia, estado_asistencia, turno_grupal_id)
         )
+        if estado_asistencia != "presente":
+            _limpiar_atencion(cursor, "turnos_grupales", turno_grupal_id)
         conn.commit()
         return jsonify({
             "mensaje": "Asistencia de turno grupal actualizada correctamente",

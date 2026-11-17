@@ -10,7 +10,11 @@ from app.routes import ausencias_routes, turnos_routes
 def test_editar_turno_allows_overlap_for_area_role(client, monkeypatch):
     login_as(client, MockUser(user_id=7, rol="area"))
 
-    fake_cursor = FakeCursor(fetchone_results=[{"usuario_id": 7}])
+    fake_cursor = FakeCursor(
+        fetchone_results=[
+            {"usuario_id": 7, "fecha_inicio": datetime(2026, 3, 20, 10, 0), "fecha_fin": datetime(2026, 3, 20, 10, 30)}
+        ]
+    )
     fake_connection = FakeConnection(fake_cursor)
     monkeypatch.setattr(turnos_routes, "get_connection", lambda: fake_connection)
 
@@ -356,7 +360,7 @@ def test_crear_y_editar_turno_con_observaciones(client, monkeypatch):
     # Para PUT, fetchone busca el turno inicial. Mockeamos eso.
     fake_cursor_put = FakeCursor(
         fetchone_results=[
-            {"usuario_id": 7, "fecha_inicio": "2026-07-06T10:00:00", "fecha_fin": "2026-07-06T10:20:00", "motivo": "Consulta", "observaciones": ""}
+            {"usuario_id": 7, "fecha_inicio": datetime(2026, 7, 6, 10, 0), "fecha_fin": datetime(2026, 7, 6, 10, 20), "motivo": "Consulta", "observaciones": ""}
         ]
     )
     fake_conn_put = FakeConnection(fake_cursor_put)
@@ -394,7 +398,7 @@ def test_actualizar_ausencia_y_conteo_ausencias(client, monkeypatch):
         json={"ausencia": "sin_aviso"}
     )
     assert response.status_code == 200
-    update_queries = [item for item in fake_cursor_patch.executed if "UPDATE turnos SET" in item[0]]
+    update_queries = [item for item in fake_cursor_patch.executed if "UPDATE turnos SET ausencia" in item[0]]
     assert len(update_queries) == 1
     assert "ausencia" in update_queries[0][0]
     assert "estado_asistencia" in update_queries[0][0]
@@ -413,7 +417,7 @@ def test_actualizar_ausencia_y_conteo_ausencias(client, monkeypatch):
         json={"ausencia": "con_aviso"}
     )
     assert response.status_code == 200
-    update_queries_grup = [item for item in fake_cursor_patch_grup.executed if "UPDATE turnos_grupales SET" in item[0]]
+    update_queries_grup = [item for item in fake_cursor_patch_grup.executed if "UPDATE turnos_grupales SET ausencia" in item[0]]
     assert len(update_queries_grup) == 1
     assert "ausencia" in update_queries_grup[0][0]
     assert "estado_asistencia" in update_queries_grup[0][0]
