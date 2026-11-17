@@ -4,6 +4,8 @@ import { useRouter } from 'vue-router';
 import api from '@/api/axios';
 import { useUserStore } from '@/stores/user';
 import { fechaRangoBonito, fechaBonitaDashboard } from '@/utils/formatDate';
+import { claveTurno, idReal, accionesAtencion } from '@/utils/atencionTurnos';
+import turnosService from '@/service/turnosService';
 
 import DataTable from 'primevue/datatable';
 import Column from 'primevue/column';
@@ -48,22 +50,9 @@ const resumenItems = computed(() => {
 
 const proximoEvento = computed(() => dashboard.value?.proximo_evento || null);
 const turnosHoy = computed(() => dashboard.value?.turnos || []);
-const atencionesEnCurso = computed(() => {
-    if (dashboard.value?.atenciones_en_curso && dashboard.value.atenciones_en_curso.length > 0) {
-        return dashboard.value.atenciones_en_curso;
-    }
-    const presentes = turnosHoy.value.filter((t) => t.estado_asistencia === 'presente');
-    if (!esDirector.value) {
-        return presentes.slice(-1);
-    }
-    const ultimosPorProf = {};
-    for (const t of presentes) {
-        const key = t.es_grupal ? `grupo-${t.grupo_id}` : t.usuario_id ? `usuario-${t.usuario_id}` : t.profesional || t.id;
-        ultimosPorProf[key] = t;
-    }
-    return Object.values(ultimosPorProf);
-});
-const turnoEnCurso = computed(() => dashboard.value?.turno_en_curso || atencionesEnCurso.value.slice(-1)[0] || null);
+// "En curso" lo calcula el backend a partir de los turnos En atención (el paciente fue llamado).
+const atencionesEnCurso = computed(() => dashboard.value?.atenciones_en_curso || []);
+const turnoEnCurso = computed(() => dashboard.value?.turno_en_curso || null);
 const disponibilidadHoy = computed(() => dashboard.value?.disponibilidad_hoy || []);
 const comunicados = computed(() => dashboard.value?.comunicados || []);
 const alertas = computed(() => dashboard.value?.alertas || {});
@@ -113,16 +102,39 @@ const tagSeverityAsistencia = (estado) => {
 };
 
 const filaTurnoClass = (data) => {
-    if (data?.id) {
-        if (esDirector.value) {
-            if (atencionesEnCurso.value.some((t) => t.id === data.id)) {
-                return '!bg-status-presente-bg/30 !border-l-4 !border-status-presente-fg font-semibold';
-            }
-        } else if (data.id === turnoEnCurso.value?.id) {
-            return '!bg-status-presente-bg/30 !border-l-4 !border-status-presente-fg font-semibold';
-        }
+    if (data?.estado_atencion === 'en_atencion') {
+        return '!bg-status-presente-bg/30 !border-l-4 !border-status-presente-fg font-semibold';
     }
     return '';
+};
+
+// Acción de atención en curso ("<clave del turno>:<accion>"). Mientras haya una, se bloquean todos los botones
+// de atención: evita llamar a dos pacientes a la vez con un doble clic rápido.
+const llamando = ref(null);
+
+const accionesDeFila = (t) => accionesAtencion(t, { esAdmin: esAdmin.value, userId: user.id });
+const claveAccion = (t, accion) => `${claveTurno(t)}:${accion}`;
+
+const ejecutarAtencion = async (t, accion) => {
+    if (llamando.value !== null) return;
+    llamando.value = claveAccion(t, accion);
+    try {
+        const id = idReal(t);
+        if (accion === 'finalizar') await turnosService.finalizar(id);
+        else if (t.es_grupal) await turnosService.llamarGrupal(id);
+        else await turnosService.llamar(id);
+        await fetchDashboard(true);
+    } catch (err) {
+        console.error('Error al actualizar la atención:', err);
+        toast.add({
+            severity: 'error',
+            summary: 'No se pudo completar la acción',
+            detail: err?.response?.data?.error || err?.response?.data?.message || 'Reintentá en unos segundos.',
+            life: 4000
+        });
+    } finally {
+        llamando.value = null;
+    }
 };
 
 const actualizarAsistencia = async ({ turnoId, estado, esGrupal = false }) => {
@@ -279,7 +291,7 @@ const cerrarAlertaHoy = () => {
                         </div>
 
                         <DataTable v-else :value="turnosHoy" paginator :rows="6" :rowClass="filaTurnoClass" class="p-datatable-sm" responsiveLayout="scroll">
-                            <Column field="fecha_inicio" header="Hora" style="width: 16%">
+                            <Column field="fecha_inicio" header="Hora" style="width: 12%">
                                 <template #body="slotProps">
                                     <div class="flex flex-col">
                                         <span class="font-bold text-color">{{ horaAgenda(slotProps.data.fecha_inicio) }}</span>
@@ -307,12 +319,15 @@ const cerrarAlertaHoy = () => {
                             <Column v-if="esAdmin" field="profesional" header="Profesional" />
                             <Column header="Estado" style="width: 20%">
                                 <template #body="slotProps">
-                                    <Tag :value="tagTextoAsistencia(slotProps.data.estado_asistencia)" :severity="tagSeverityAsistencia(slotProps.data.estado_asistencia)" rounded class="text-xs font-semibold" />
+                                    <div class="flex flex-wrap items-center gap-1">
+                                        <Tag :value="tagTextoAsistencia(slotProps.data.estado_asistencia)" :severity="tagSeverityAsistencia(slotProps.data.estado_asistencia)" rounded class="text-xs font-semibold" />
+                                        <Tag v-if="slotProps.data.estado_atencion === 'en_atencion'" value="En atención" severity="success" rounded class="text-xs font-semibold" />
+                                    </div>
                                 </template>
                             </Column>
-                            <Column header="" bodyClass="text-right" style="width: 20%">
+                            <Column header="" bodyClass="text-right" style="width: 30%">
                                 <template #body="slotProps">
-                                    <div class="flex items-center justify-end gap-1.5">
+                                    <div class="flex flex-wrap items-center justify-end gap-1.5">
                                         <Button
                                             v-if="!esAdmin && slotProps.data.estado_asistencia === 'programado'"
                                             icon="pi pi-check"
@@ -321,6 +336,19 @@ const cerrarAlertaHoy = () => {
                                             severity="success"
                                             v-tooltip.top="'Marcar presente'"
                                             @click="actualizarAsistencia({ turnoId: slotProps.data.turnoId || slotProps.data.id, estado: 'presente', esGrupal: slotProps.data.es_grupal })"
+                                        />
+                                        <Button
+                                            v-for="a in accionesDeFila(slotProps.data)"
+                                            :key="a.accion"
+                                            :label="a.label"
+                                            :icon="a.icon"
+                                            :severity="a.severity"
+                                            :text="a.text"
+                                            size="small"
+                                            :aria-label="a.ariaLabel"
+                                            :loading="llamando === claveAccion(slotProps.data, a.accion)"
+                                            :disabled="llamando !== null"
+                                            @click="ejecutarAtencion(slotProps.data, a.accion)"
                                         />
                                         <Button icon="pi pi-folder-open" rounded outlined size="small" severity="info" v-tooltip.top="'Ver historia clínica'" :disabled="!slotProps.data.paciente_id" @click="verHistoria(slotProps.data)" />
                                     </div>
