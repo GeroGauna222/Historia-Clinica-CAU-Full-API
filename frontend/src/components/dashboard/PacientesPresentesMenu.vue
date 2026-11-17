@@ -1,10 +1,48 @@
 <script setup>
-import { ref, onMounted, onBeforeUnmount } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import { useRouter } from 'vue-router';
 import { usePacientesPresentes } from '@/layout/composables/usePacientesPresentes';
+import { useUserStore } from '@/stores/user';
 
 const router = useRouter();
-const { presentes, cantidadPresentes, iniciarPolling, detenerPolling } = usePacientesPresentes();
+const userStore = useUserStore();
+const { presentes, cantidadPresentes, iniciarPolling, detenerPolling, llamarYMarcar } = usePacientesPresentes();
+
+// Un presente sin estado_atencion (o con un valor desconocido) se trata como "Esperando":
+// nunca desaparece del menú.
+const grupos = computed(() => ({
+    esperando: presentes.value.filter((t) => t.estado_atencion !== 'en_atencion' && t.estado_atencion !== 'atendido'),
+    enAtencion: presentes.value.filter((t) => t.estado_atencion === 'en_atencion'),
+    atendidos: presentes.value.filter((t) => t.estado_atencion === 'atendido')
+}));
+
+const secciones = computed(() =>
+    [
+        { clave: 'esperando', titulo: 'Esperando', items: grupos.value.esperando, llamable: true },
+        { clave: 'en-atencion', titulo: 'En atención', items: grupos.value.enAtencion, llamable: false },
+        { clave: 'atendidos', titulo: 'Atendidos', items: grupos.value.atendidos, llamable: false }
+    ].filter((s) => s.items.length > 0)
+);
+
+// El backend solo deja llamar al dueño del turno (o a un miembro del grupo): el profesional recibe
+// solo lo suyo; el resto de los roles ve todos los presentes y llama solo a sus propios turnos.
+const puedeLlamar = (p) => (userStore.rol || '').toLowerCase().trim() === 'profesional' || (p.usuario_id != null && p.usuario_id === userStore.id);
+
+const llamandoId = ref(null);
+const errorLlamado = ref('');
+
+// Solo las filas de "Esperando" se pueden llamar; un atendido no se vuelve a llamar desde acá.
+async function llamar(p) {
+    errorLlamado.value = '';
+    llamandoId.value = p.id;
+    try {
+        await llamarYMarcar(p);
+    } catch (e) {
+        errorLlamado.value = e?.response?.data?.error || e?.response?.data?.message || 'No se pudo llamar al paciente. Reintentá.';
+    } finally {
+        llamandoId.value = null;
+    }
+}
 
 const menuActive = ref(false);
 const menuRef = ref(null);
@@ -87,18 +125,35 @@ function formatoHora(isoString) {
                         No hay pacientes esperando en recepción.
                     </div>
 
-                    <div v-for="p in presentes" :key="p.id" class="p-3 hover:bg-emphasis transition cursor-pointer" @click="irAgenda">
-                        <div class="flex items-start justify-between gap-2">
-                            <div>
-                                <p class="text-sm font-semibold text-color leading-tight">{{ p.paciente }}</p>
-                                <p v-if="p.dni" class="text-xs text-muted-color">DNI: {{ p.dni }}</p>
+                    <p v-if="errorLlamado" class="p-3 text-xs text-status-sin-aviso-fg" role="alert">{{ errorLlamado }}</p>
+
+                    <section v-for="seccion in secciones" :key="seccion.clave" :data-seccion="seccion.clave" class="divide-y divide-line">
+                        <h3 class="px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-color bg-subtle">{{ seccion.titulo }}</h3>
+
+                        <div v-for="p in seccion.items" :key="p.id" class="p-3 hover:bg-emphasis transition cursor-pointer" @click="irAgenda">
+                            <div class="flex items-start justify-between gap-2">
+                                <div>
+                                    <p class="text-sm font-semibold text-color leading-tight">{{ p.paciente }}</p>
+                                    <p v-if="p.dni" class="text-xs text-muted-color">DNI: {{ p.dni }}</p>
+                                </div>
+                                <span class="text-xs font-mono font-medium text-status-presente-fg bg-status-presente-bg px-1.5 py-0.5 rounded">
+                                    {{ formatoHora(p.start) }}
+                                </span>
                             </div>
-                            <span class="text-xs font-mono font-medium text-status-presente-fg bg-status-presente-bg px-1.5 py-0.5 rounded">
-                                {{ formatoHora(p.start) }}
-                            </span>
+                            <p v-if="p.motivo" class="text-xs text-muted-color mt-1 truncate"><span class="font-medium text-muted-color">Motivo:</span> {{ p.motivo }}</p>
+                            <button
+                                v-if="seccion.llamable && puedeLlamar(p)"
+                                type="button"
+                                class="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline focus:outline-none cursor-pointer border-none bg-transparent p-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                                :aria-label="`Llamar a ${p.paciente}`"
+                                :disabled="llamandoId !== null"
+                                @click.stop="llamar(p)"
+                            >
+                                <i :class="llamandoId === p.id ? 'pi pi-spin pi-spinner' : 'pi pi-megaphone'"></i>
+                                Llamar
+                            </button>
                         </div>
-                        <p v-if="p.motivo" class="text-xs text-muted-color mt-1 truncate"><span class="font-medium text-muted-color">Motivo:</span> {{ p.motivo }}</p>
-                    </div>
+                    </section>
                 </div>
 
                 <div class="p-2 border-t border-surface bg-subtle text-center">

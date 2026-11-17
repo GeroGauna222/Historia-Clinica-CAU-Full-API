@@ -2,9 +2,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
 
 const mockGet = vi.fn();
+const mockLlamar = vi.fn();
+const mockLlamarGrupal = vi.fn();
 
 vi.mock('@/api/axios', () => ({
     default: { get: (...args) => mockGet(...args) }
+}));
+
+vi.mock('@/service/turnosService', () => ({
+    default: {
+        llamar: (...args) => mockLlamar(...args),
+        llamarGrupal: (...args) => mockLlamarGrupal(...args)
+    }
 }));
 
 const STORAGE_KEY = 'cau-arrival-acks';
@@ -46,6 +55,8 @@ describe('usePacientesPresentes', () => {
     beforeEach(() => {
         setActivePinia(createPinia());
         mockGet.mockReset();
+        mockLlamar.mockReset();
+        mockLlamarGrupal.mockReset();
         try {
             window.localStorage.clear();
         } catch {
@@ -165,5 +176,64 @@ describe('usePacientesPresentes', () => {
         composable.detenerPolling();
 
         expect(composable.pendientes.value).toEqual([]);
+    });
+
+    describe('llamarYMarcar', () => {
+        it('llama al turno individual, saca solo a ese paciente de pendientes y lo persiste como informado', async () => {
+            mockGet.mockResolvedValue({ data: [turno(1, { turnoId: 1 }), turno(2, { turnoId: 2 })] });
+            mockLlamar.mockResolvedValue({});
+            const { composable } = await setupProfesional(8);
+            await composable.cargarPresentes();
+
+            await composable.llamarYMarcar(composable.pendientes.value[0]);
+
+            expect(mockLlamar).toHaveBeenCalledWith(1);
+            expect(mockLlamarGrupal).not.toHaveBeenCalled();
+            expect(composable.pendientes.value.map((t) => t.id)).toEqual([2]);
+            const stored = JSON.parse(window.localStorage.getItem(STORAGE_KEY));
+            expect(stored.ids).toEqual([1]);
+        });
+
+        it('usa llamarGrupal para un turno grupal', async () => {
+            const grupal = turno('grupal-9', { turnoId: 9, es_grupal: 1 });
+            mockGet.mockResolvedValue({ data: [grupal, turno(2, { turnoId: 2 })] });
+            mockLlamarGrupal.mockResolvedValue({});
+            const { composable } = await setupProfesional(8);
+            await composable.cargarPresentes();
+
+            await composable.llamarYMarcar(grupal);
+
+            expect(mockLlamarGrupal).toHaveBeenCalledWith(9);
+            expect(mockLlamar).not.toHaveBeenCalled();
+            expect(composable.pendientes.value.map((t) => t.id)).toEqual([2]);
+        });
+
+        it('si el servicio rechaza, pendientes queda intacto, el paciente no se da por informado y se rechaza la promesa', async () => {
+            mockGet.mockResolvedValue({ data: [turno(1, { turnoId: 1 }), turno(2, { turnoId: 2 })] });
+            const error = { response: { data: { error: 'El paciente figura como ausente' } } };
+            mockLlamar.mockRejectedValue(error);
+            const { composable } = await setupProfesional(8);
+            await composable.cargarPresentes();
+
+            await expect(composable.llamarYMarcar(composable.pendientes.value[0])).rejects.toBe(error);
+
+            expect(composable.pendientes.value.map((t) => t.id)).toEqual([1, 2]);
+            expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull();
+            expect(mockGet).toHaveBeenCalledTimes(1);
+        });
+
+        it('si falla la recarga posterior al llamado confirmado, el paciente queda informado y la promesa no se rechaza', async () => {
+            vi.spyOn(console, 'error').mockImplementation(() => {});
+            mockGet.mockResolvedValueOnce({ data: [turno(1, { turnoId: 1 }), turno(2, { turnoId: 2 })] });
+            mockLlamar.mockResolvedValue({});
+            const { composable } = await setupProfesional(8);
+            await composable.cargarPresentes();
+            mockGet.mockRejectedValueOnce(new Error('Network Error'));
+
+            await expect(composable.llamarYMarcar(composable.pendientes.value[0])).resolves.toBeUndefined();
+
+            expect(composable.pendientes.value.map((t) => t.id)).toEqual([2]);
+            expect(JSON.parse(window.localStorage.getItem(STORAGE_KEY)).ids).toEqual([1]);
+        });
     });
 });

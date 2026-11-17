@@ -2,6 +2,7 @@ import { ref, computed } from 'vue';
 import api from '@/api/axios';
 import { reproducirAvisoSonoro } from '@/utils/avisoSonoro';
 import { useUserStore } from '@/stores/user';
+import turnosService from '@/service/turnosService';
 
 const STORAGE_KEY = 'cau-arrival-acks';
 
@@ -111,6 +112,28 @@ export function usePacientesPresentes() {
         }
     }
 
+    // Llama a un paciente y, solo a ese paciente, lo da por informado.
+    // Si el backend rechaza el llamado la promesa se rechaza y el estado queda intacto.
+    async function llamarYMarcar(turno) {
+        const usuarioAlLlamar = usuarioEstadoId;
+        if (turno.es_grupal) await turnosService.llamarGrupal(turno.turnoId);
+        else await turnosService.llamar(turno.turnoId);
+
+        // Desde acá el llamado está confirmado: lo que falle después (recarga) no lo deshace.
+        // Si mientras tanto cambió el usuario (cierre de sesión), no se toca el estado de otro.
+        if (usuarioEstadoId === usuarioAlLlamar) {
+            informados.add(turno.id);
+            pendientes.value = pendientes.value.filter((t) => t.id !== turno.id);
+            if (usuarioEstadoId != null) guardarInformados(usuarioEstadoId);
+        }
+
+        try {
+            await cargarPresentes(true);
+        } catch {
+            // La recarga es solo para refrescar la lista; el llamado ya se hizo.
+        }
+    }
+
     function iniciarPolling(intervaloMs = 20000) {
         if (initialized) return;
         initialized = true;
@@ -141,6 +164,7 @@ export function usePacientesPresentes() {
         cargando,
         cargarPresentes,
         marcarInformado,
+        llamarYMarcar,
         iniciarPolling,
         detenerPolling
     };
