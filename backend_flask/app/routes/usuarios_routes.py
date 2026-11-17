@@ -8,6 +8,7 @@ import os
 from PIL import Image
 import io
 from app.utils.validacion import password_valida, validar_email
+from app.utils.pantalla import normalizar_consultorio
 
 bp_usuarios = Blueprint("usuarios", __name__)
 
@@ -146,7 +147,7 @@ def api_usuarios_listado():
         cursor.execute(f"""
             SELECT id, nombre, username, email, rol, especialidad, dni, matricula_tipo,
                    matricula_numero, matricula_provincia, matricula_verificada,
-                   lugar_atencion_direccion, activo
+                   lugar_atencion_direccion, consultorio, activo
             FROM usuarios
             WHERE (nombre LIKE %s OR username LIKE %s OR email LIKE %s)
             {filtro_activo}
@@ -156,7 +157,7 @@ def api_usuarios_listado():
         cursor.execute(f"""
             SELECT id, nombre, username, email, rol, especialidad, dni, matricula_tipo,
                    matricula_numero, matricula_provincia, matricula_verificada,
-                   lugar_atencion_direccion, activo
+                   lugar_atencion_direccion, consultorio, activo
             FROM usuarios
             WHERE 1=1 {filtro_activo}
             ORDER BY nombre
@@ -182,7 +183,7 @@ def api_usuarios_detalle(usuario_id):
                matricula_tipo, matricula_numero, matricula_provincia,
                matricula_verificada, matricula_verificada_en, matricula_verificada_por,
                lugar_atencion_nombre, lugar_atencion_direccion, lugar_atencion_contacto,
-               lugar_atencion_email
+               lugar_atencion_email, consultorio
         FROM usuarios
         WHERE id = %s
     """, (usuario_id,))
@@ -252,6 +253,14 @@ def api_usuarios_editar(usuario_id):
         if field in data:
             sets.append(f"{field}=%s")
             params.append(value)
+
+    if "consultorio" in data:
+        consultorio, err = normalizar_consultorio(data["consultorio"])
+        if err:
+            cur.close(); conn.close()
+            return jsonify({"error": err}), 400
+        sets.append("consultorio = %s")
+        params.append(consultorio)
 
     # Changing any registration datum invalidates CAU's previous validation.
     # Re-verification is intentionally performed outside the self-service edit

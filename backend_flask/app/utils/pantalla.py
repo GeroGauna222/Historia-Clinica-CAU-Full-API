@@ -105,3 +105,15 @@ def abreviar_pacientes(pacientes):
         if not avanzo:
             break
     return {pid: _abreviado(p["nombre"], p["apellido"], letras[pid]) for pid, p in unicos.items()}
+
+
+def normalizar_consultorio(valor):
+    """None si viene vacío; error si supera 50 caracteres. Devuelve (valor, error)."""
+    if valor is None:
+        return None, None
+    texto = str(valor).strip()
+    if not texto:
+        return None, None
+    if len(texto) > 50:
+        return None, "El consultorio no puede superar los 50 caracteres"
+    return texto, None

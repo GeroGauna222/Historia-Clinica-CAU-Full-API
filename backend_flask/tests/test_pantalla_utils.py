@@ -9,6 +9,7 @@ from app.utils.pantalla import (
     estado_atencion,
     generar_codigo,
     hash_clave,
+    normalizar_consultorio,
 )
 
 AHORA = datetime(2026, 11, 16, 10, 40)
@@ -160,3 +161,24 @@ def test_hash_clave_es_sha256_hex_estable():
     assert len(hash_clave("abc")) == 64
     assert hash_clave("abc") == hash_clave("abc")
     assert hash_clave("abc") != hash_clave("abd")
+
+
+# ---- consultorio ----
+def test_normalizar_consultorio_recorta():
+    assert normalizar_consultorio("  3 ") == ("3", None)
+
+
+def test_normalizar_consultorio_vacio_o_none():
+    assert normalizar_consultorio("   ") == (None, None)
+    assert normalizar_consultorio(None) == (None, None)
+
+
+def test_normalizar_consultorio_acepta_numero():
+    assert normalizar_consultorio(3) == ("3", None)
+
+
+def test_normalizar_consultorio_limite_de_50():
+    assert normalizar_consultorio("x" * 50) == ("x" * 50, None)
+    valor, error = normalizar_consultorio("x" * 51)
+    assert valor is None
+    assert error
