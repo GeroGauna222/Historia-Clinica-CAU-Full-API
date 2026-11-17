@@ -1514,6 +1514,99 @@ def api_actualizar_ausencia_turno_grupal(turno_grupal_id):
         conn.close()
 
 
+ESTADOS_AUSENTE = ("con_aviso", "sin_aviso")
+
+
+def _motivo_no_llamable(estado_asistencia, es_hoy):
+    if estado_asistencia in ESTADOS_AUSENTE:
+        return "El paciente figura como ausente"
+    if not es_hoy:
+        return "Solo se pueden llamar turnos de hoy"
+    return None
+
+
+@bp_turnos.route("/api/turnos/<int:id>/llamar", methods=["POST"])
+@login_required
+def llamar_turno(id):
+    # Permiso propio: solo el profesional dueno del turno, sin depender de ROLES_TURNOS.
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(
+            """
+            SELECT id, usuario_id, estado_asistencia, DATE(fecha_inicio) = CURDATE() AS es_hoy
+            FROM turnos WHERE id = %s
+            """,
+            (id,),
+        )
+        turno = cursor.fetchone()
+        if not turno:
+            return jsonify({"error": "Turno no encontrado"}), 404
+        if turno["usuario_id"] != current_user.id:
+            return jsonify({"error": "Solo el profesional del turno puede llamar al paciente"}), 403
+
+        motivo = _motivo_no_llamable(turno["estado_asistencia"], turno["es_hoy"])
+        if motivo:
+            return jsonify({"error": motivo}), 409
+
+        # Un profesional tiene una sola atencion abierta: llamar al siguiente cierra la anterior.
+        cursor.execute(
+            """
+            UPDATE turnos SET atencion_fin = NOW()
+            WHERE usuario_id = %s AND id <> %s
+              AND atencion_inicio IS NOT NULL AND atencion_fin IS NULL
+            """,
+            (current_user.id, id),
+        )
+        # Siempre refresca atencion_inicio: asi "Volver a llamar" cambia el valor y el televisor suena.
+        cursor.execute(
+            """
+            UPDATE turnos
+            SET atencion_inicio = NOW(), atencion_fin = NULL,
+                estado_asistencia = 'presente', ausencia = NULL
+            WHERE id = %s
+            """,
+            (id,),
+        )
+        conn.commit()
+        return jsonify({"message": "Paciente llamado", "estado_atencion": "en_atencion"})
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        cursor.close()
+        conn.close()
+
+
+@bp_turnos.route("/api/turnos/<int:id>/finalizar", methods=["POST"])
+@login_required
+def finalizar_turno(id):
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(
+            "SELECT id, usuario_id, atencion_inicio, atencion_fin FROM turnos WHERE id = %s",
+            (id,),
+        )
+        turno = cursor.fetchone()
+        if not turno:
+            return jsonify({"error": "Turno no encontrado"}), 404
+        if turno["usuario_id"] != current_user.id:
+            return jsonify({"error": "Solo el profesional del turno puede finalizar la atención"}), 403
+        if turno["atencion_inicio"] is None or turno["atencion_fin"] is not None:
+            return jsonify({"error": "El turno no está en atención"}), 409
+
+        cursor.execute("UPDATE turnos SET atencion_fin = NOW() WHERE id = %s", (id,))
+        conn.commit()
+        return jsonify({"message": "Atención finalizada", "estado_atencion": "atendido"})
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        cursor.close()
+        conn.close()
+
+
 @bp_turnos.route("/api/turnos/presentes-hoy", methods=["GET"])
 @login_required
 @requiere_rol(*ROLES_TURNOS)
