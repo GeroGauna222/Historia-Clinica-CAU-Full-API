@@ -103,7 +103,7 @@ All API routes are prefixed `/api/...` internally in each blueprint — no `url_
 
 23 tables: `usuarios`, `pacientes`, `historias` (1-per-patient), `evoluciones`, `evolucion_archivos`, `historia_archivos`, `autenticacion_eventos`, `firmas_electronicas`, `auditorias_clinicas`, `recetas_electronicas`, `turnos`, `ausencias`, `disponibilidades`, `grupos_profesionales`, `turnos_grupales`, `grupo_miembros`, `pantallas`, `comunicados`, `grupo_posteos`, `auditorias_blockchain`, `facturacion_practicas`, `facturacion_prestadores`, `facturacion_registros`. Schema changes must update `init.sql` and all affected backend/frontend callers in the same change.
 
-Calls screen columns: `usuarios` and `grupos_profesionales` have `consultorio` and `mostrar_en_pantalla`; `turnos` and `turnos_grupales` have `atencion_inicio` and `atencion_fin`. The `pantallas` table holds one row per TV (pairing code, `clave_hash`, never the key itself). Incremental migration: `db/migrations/20261116_pantalla_de_llamados.sql`.
+Calls screen columns: `usuarios` and `grupos_profesionales` have `consultorio` and `mostrar_en_pantalla`; `turnos` and `turnos_grupales` have `atencion_inicio` and `atencion_fin`. The `pantallas` table holds one row per TV (pairing code, `clave_hash`, never the key itself). Incremental migration: `db/migrations/20261116_pantalla_de_llamados.sql` (must stay equivalent to `db/init.sql`).
 
 ### Test infrastructure (`backend_flask/tests/`)
 
@@ -130,7 +130,7 @@ Roles are stored in `usuarios.rol` (DB enum) and enforced in two places:
 - **Blockchain integrity**: `utils/hashing.py` generates SHA-256 hashes stored in DB; `blockchain_routes.py` / `bfa_client.py` optionally publish hashes to BFA. The BFA node runs in `--dev` mode by default.
 - **Password hashing**: `werkzeug.security.generate_password_hash` with `method="scrypt"`.
 - **Cookie security**: `SESSION_COOKIE_SECURE` and `REMEMBER_COOKIE_SECURE` are configurable per environment (HTTP dev / HTTPS prod).
-- **Pantalla de llamados**: televisor sin sesión con clave por hash (ver `docs/adr/0001-pantalla-de-llamados-sin-sesion.md`); el estado de atención se deriva al leer en `app/utils/pantalla.py`. Los únicos endpoints sin Flask-Login, por decisión deliberada, son `POST /api/pantalla/vinculacion` y `GET /api/pantalla/llamados` (clave en el encabezado `X-Pantalla-Clave`); el resto de `/api/pantalla/*` exige sesión y rol. Vocabulario del dominio en `CONTEXT.md`. Migración: `db/migrations/20261116_pantalla_de_llamados.sql` (debe quedar equivalente a `db/init.sql`).
+- **Calls screen (pantalla de llamados)**: the waiting-room TV runs without a session and authenticates with a revocable key stored only as a hash (see `docs/adr/0001-pantalla-de-llamados-sin-sesion.md`); the attention state is derived at read time in `app/utils/pantalla.py`. Within `/api/pantalla/*`, only `POST /api/pantalla/vinculacion` and `GET /api/pantalla/llamados` (key in the `X-Pantalla-Clave` header) skip Flask-Login, deliberately; the rest requires session and role. Domain glossary in `CONTEXT.md`.
 - **Frontend services pattern**: Backend calls must go through `src/service/*` modules; components consume services/stores, not axios directly.
 
 ## Universal Rules

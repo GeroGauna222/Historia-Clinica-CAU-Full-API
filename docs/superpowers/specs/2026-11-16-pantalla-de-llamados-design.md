@@ -111,7 +111,7 @@ Consultorio, nombre del profesional, pacientes en atención y hasta tres siguien
 - Lista de turnos del día del Dashboard: "Llamar", "Finalizar" o "Volver a llamar" según el estado, solo en turnos propios o de grupos del usuario. "Volver a llamar" también sobre turnos ya en atención: solo repite el tono.
 - Aviso de llegada (`ArrivalNoticeDialog`): botón "Llamar" por paciente, que llama y da por informado solo a ese paciente. "Informado" sigue cerrando sin llamar.
 - Menú de presentes: esperando / en atención / atendido, con "Llamar" solo en los que esperan.
-- Widget de atención del Dashboard (`ProximoTurnoWidget`): muestra al paciente llamado como "En atención" (profesional) o "Pacientes en atención" (director); ya no usa "en curso" ni la etiqueta "Presente".
+- Widget de atención del Dashboard (`ProximoTurnoWidget`): muestra al paciente llamado como "En atención" (profesional) o "Pacientes en atención" (director); ya no usa "en curso" ni la etiqueta "Presente" en el texto visible; los nombres de campos del API (`atenciones_en_curso`, `turno_en_curso`) se mantienen.
 - Formularios de usuario y grupo: campo Consultorio.
 - Las llamadas van por `src/service/*`, no por axios directo.
 
