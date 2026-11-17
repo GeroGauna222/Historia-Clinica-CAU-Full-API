@@ -19,5 +19,14 @@ export default {
     },
     actualizarAusenciaGrupal(turnoGrupalId, ausencia) {
         return api.patch(`/turnos/grupales/${turnoGrupalId}/ausencia`, { ausencia }, { withCredentials: true });
+    },
+    llamar(id) {
+        return api.post(`/turnos/${id}/llamar`, {}, { withCredentials: true });
+    },
+    finalizar(id) {
+        return api.post(`/turnos/${id}/finalizar`, {}, { withCredentials: true });
+    },
+    llamarGrupal(turnoGrupalId) {
+        return api.post(`/turnos/grupales/${turnoGrupalId}/llamar`, {}, { withCredentials: true });
     }
 };
