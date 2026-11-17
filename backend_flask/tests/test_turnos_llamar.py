@@ -160,9 +160,19 @@ def test_llamar_grupal_de_otro_dia_devuelve_409(client, monkeypatch):
 
 # --- Limpieza de la atencion al cambiar la asistencia o reprogramar ---------
 
+LIMPIEZA = "SET atencion_inicio = NULL"
+
 
 def _limpiezas(cursor):
-    return [q for q, _ in cursor.executed if "atencion_inicio = NULL" in q]
+    """UPDATEs de limpieza ejecutados, como (sql, params)."""
+    return [(q, p) for q, p in cursor.executed if LIMPIEZA in q]
+
+
+def _indice(cursor, fragmento):
+    """Posicion (unica) en cursor.executed de la consulta que contiene `fragmento`."""
+    idx = [i for i, (q, _) in enumerate(cursor.executed) if fragmento in q]
+    assert len(idx) == 1, f"se esperaba una sola consulta con {fragmento!r}: {idx}"
+    return idx[0]
 
 
 @pytest.mark.parametrize("estado", ["sin_aviso", "con_aviso", "programado"])
@@ -175,8 +185,12 @@ def test_cambiar_asistencia_a_no_presente_borra_la_atencion(client, monkeypatch,
     assert r.status_code == 200
     limpiezas = _limpiezas(cursor)
     assert len(limpiezas) == 1
-    assert limpiezas[0].startswith("UPDATE turnos ") and "atencion_fin = NULL" in limpiezas[0]
-    assert "estado_asistencia" not in limpiezas[0]  # no vuelve a programado: solo limpia
+    sql, params = limpiezas[0]
+    assert sql.startswith("UPDATE turnos ") and "atencion_fin = NULL" in sql
+    assert "estado_asistencia" not in sql  # no vuelve a programado: solo limpia
+    assert params == (10,)
+    # La limpieza va despues del UPDATE de asistencia y antes del commit.
+    assert _indice(cursor, LIMPIEZA) > _indice(cursor, "UPDATE turnos SET ausencia")
     assert conn.committed
 
 
@@ -185,7 +199,8 @@ def test_marcar_ausente_por_alias_ausencia_borra_la_atencion(client, monkeypatch
     cursor, _ = preparar(monkeypatch, [{"usuario_id": 7}])
     r = client.patch("/api/turnos/10/ausencia", json={"ausencia": "sin_aviso"})
     assert r.status_code == 200
-    assert len(_limpiezas(cursor)) == 1
+    limpiezas = _limpiezas(cursor)
+    assert len(limpiezas) == 1 and limpiezas[0][1] == (10,)
 
 
 def test_marcar_presente_no_borra_la_atencion(client, monkeypatch):
@@ -211,7 +226,10 @@ def test_asistencia_en_turno_grupal_via_ruta_individual_borra_la_atencion(client
     r = client.patch("/api/turnos/10/asistencia", json={"estado_asistencia": "sin_aviso"})
     assert r.status_code == 200
     limpiezas = _limpiezas(cursor)
-    assert len(limpiezas) == 1 and limpiezas[0].startswith("UPDATE turnos_grupales ")
+    assert len(limpiezas) == 1
+    sql, params = limpiezas[0]
+    assert sql.startswith("UPDATE turnos_grupales ") and params == (10,)
+    assert _indice(cursor, LIMPIEZA) > _indice(cursor, "UPDATE turnos_grupales SET ausencia")
 
 
 def test_asistencia_en_turno_grupal_via_ruta_individual_presente_no_borra(client, monkeypatch):
@@ -232,7 +250,10 @@ def test_patch_grupal_ausente_borra_la_atencion(client, monkeypatch, ruta):
 
     assert r.status_code == 200
     limpiezas = _limpiezas(cursor)
-    assert len(limpiezas) == 1 and limpiezas[0].startswith("UPDATE turnos_grupales ")
+    assert len(limpiezas) == 1
+    sql, params = limpiezas[0]
+    assert sql.startswith("UPDATE turnos_grupales ") and params == (5,)
+    assert _indice(cursor, LIMPIEZA) > _indice(cursor, "UPDATE turnos_grupales SET ausencia")
     assert conn.committed
 
 
@@ -249,13 +270,32 @@ def test_patch_grupal_volver_a_programado_borra_la_atencion(client, monkeypatch)
     cursor, _ = preparar(monkeypatch, [{"id": 5}])
     r = client.patch("/api/turnos/grupales/5/asistencia", json={"estado_asistencia": "programado"})
     assert r.status_code == 200
-    assert len(_limpiezas(cursor)) == 1
+    limpiezas = _limpiezas(cursor)
+    assert len(limpiezas) == 1 and limpiezas[0][1] == (5,)
+
+
+def test_falla_la_limpieza_en_patch_hace_rollback_y_no_confirma(client, monkeypatch):
+    login_as(client, MockUser(user_id=7, rol="profesional"))
+    # execute #0 SELECT, #1 UPDATE de asistencia, #2 UPDATE de limpieza (falla)
+    cursor = FakeCursor(
+        fetchone_results=[{"usuario_id": 7}],
+        execute_side_effects=[None, None, RuntimeError("limpieza fallo")],
+    )
+    conn = FakeConnection(cursor)
+    monkeypatch.setattr(turnos_routes, "get_connection", lambda: conn)
+
+    r = client.patch("/api/turnos/10/asistencia", json={"estado_asistencia": "sin_aviso"})
+
+    assert r.status_code == 500
+    assert LIMPIEZA in cursor.executed[2][0]
+    assert conn.rolled_back and not conn.committed
+    assert cursor.closed and conn.closed
 
 
 # PUT individual (reprogramar) ------------------------------------------------
 
 
-def _put_turno(client, monkeypatch, body):
+def _put_turno(client, monkeypatch, body, fecha_fin=datetime(2026, 3, 20, 10, 20)):
     login_as(client, MockUser(user_id=7, rol="area"))
     cursor, conn = preparar(
         monkeypatch,
@@ -263,7 +303,7 @@ def _put_turno(client, monkeypatch, body):
             {
                 "usuario_id": 7,
                 "fecha_inicio": datetime(2026, 3, 20, 10, 0),
-                "fecha_fin": datetime(2026, 3, 20, 10, 20),  # 20 min = duracion por defecto
+                "fecha_fin": fecha_fin,  # 10:20 = inicio + duracion por defecto (20 min)
                 "motivo": "Control",
                 "observaciones": "",
                 "es_sobreturno": 0,
@@ -279,8 +319,11 @@ def test_reprogramar_turno_mismo_dia_borra_la_atencion_sin_volver_a_programado(c
     r, cursor, conn = _put_turno(client, monkeypatch, {"fecha_inicio": "2026-03-20T11:00:00"})
     assert r.status_code == 200
     limpiezas = _limpiezas(cursor)
-    assert len(limpiezas) == 1 and limpiezas[0].startswith("UPDATE turnos ")
-    assert "estado_asistencia" not in limpiezas[0] and "ausencia" not in limpiezas[0]
+    assert len(limpiezas) == 1
+    sql, params = limpiezas[0]
+    assert sql.startswith("UPDATE turnos ") and params == (15,)
+    assert "estado_asistencia" not in sql and "ausencia" not in sql
+    assert _indice(cursor, LIMPIEZA) > _indice(cursor, "SET fecha_inicio=%s")
     assert conn.committed
 
 
@@ -289,7 +332,10 @@ def test_reprogramar_turno_otro_dia_vuelve_a_programado(client, monkeypatch):
     assert r.status_code == 200
     limpiezas = _limpiezas(cursor)
     assert len(limpiezas) == 1
-    assert "estado_asistencia = 'programado'" in limpiezas[0] and "ausencia = NULL" in limpiezas[0]
+    sql, params = limpiezas[0]
+    assert sql.startswith("UPDATE turnos ") and params == (15,)
+    assert "estado_asistencia = 'programado'" in sql and "ausencia = NULL" in sql
+    assert _indice(cursor, LIMPIEZA) > _indice(cursor, "SET fecha_inicio=%s")
 
 
 def test_editar_solo_motivo_no_borra_la_atencion(client, monkeypatch):
@@ -302,6 +348,46 @@ def test_editar_turno_misma_hora_explicita_no_borra_la_atencion(client, monkeypa
     r, cursor, _ = _put_turno(client, monkeypatch, {"fecha_inicio": "2026-03-20T10:00:00", "motivo": "x"})
     assert r.status_code == 200
     assert _limpiezas(cursor) == []
+
+
+def test_editar_motivo_con_fecha_fin_guardada_distinta_de_la_recalculada_no_borra_la_atencion(client, monkeypatch):
+    # fecha_fin guardada 10:45 (la duracion del profesional cambio despues); se recalcula a 10:20.
+    # El inicio no cambia, asi que una atencion en curso no debe borrarse.
+    r, cursor, conn = _put_turno(
+        client, monkeypatch, {"motivo": "Otro motivo"}, fecha_fin=datetime(2026, 3, 20, 10, 45)
+    )
+    assert r.status_code == 200
+    assert _limpiezas(cursor) == []
+    assert conn.committed
+
+
+def test_falla_la_limpieza_en_put_hace_rollback_y_no_confirma(client, monkeypatch):
+    login_as(client, MockUser(user_id=7, rol="area"))
+    # execute #0 SELECT turno, #1 duracion, #2 solape, #3 UPDATE principal, #4 limpieza (falla)
+    cursor = FakeCursor(
+        fetchone_results=[
+            {
+                "usuario_id": 7,
+                "fecha_inicio": datetime(2026, 3, 20, 10, 0),
+                "fecha_fin": datetime(2026, 3, 20, 10, 20),
+                "motivo": "Control",
+                "observaciones": "",
+                "es_sobreturno": 0,
+            }
+        ],
+        execute_side_effects=[None, None, None, None, RuntimeError("limpieza fallo")],
+    )
+    conn = FakeConnection(cursor)
+    monkeypatch.setattr(turnos_routes, "get_connection", lambda: conn)
+    monkeypatch.setattr(turnos_routes, "medico_disponible", lambda *a, **k: True)
+    monkeypatch.setitem(client.application.config, "PROPAGATE_EXCEPTIONS", True)
+
+    with pytest.raises(RuntimeError, match="limpieza fallo"):
+        client.put("/api/turnos/15", json={"fecha_inicio": "2026-03-20T11:00:00"})
+
+    assert LIMPIEZA in cursor.executed[4][0]
+    assert conn.rolled_back and not conn.committed
+    assert cursor.closed and conn.closed
 
 
 # PUT grupal (reprogramar) ----------------------------------------------------
@@ -329,8 +415,11 @@ def test_reprogramar_grupal_mismo_dia_borra_la_atencion_sin_volver_a_programado(
     )
     assert r.status_code == 200
     limpiezas = _limpiezas(cursor)
-    assert len(limpiezas) == 1 and limpiezas[0].startswith("UPDATE turnos_grupales ")
-    assert "estado_asistencia" not in limpiezas[0] and "ausencia" not in limpiezas[0]
+    assert len(limpiezas) == 1
+    sql, params = limpiezas[0]
+    assert sql.startswith("UPDATE turnos_grupales ") and params == (5,)
+    assert "estado_asistencia" not in sql and "ausencia" not in sql
+    assert _indice(cursor, LIMPIEZA) > _indice(cursor, "SET grupo_id=%s")
     assert conn.committed
 
 
@@ -341,7 +430,10 @@ def test_reprogramar_grupal_otro_dia_vuelve_a_programado(client, monkeypatch):
     assert r.status_code == 200
     limpiezas = _limpiezas(cursor)
     assert len(limpiezas) == 1
-    assert "estado_asistencia = 'programado'" in limpiezas[0] and "ausencia = NULL" in limpiezas[0]
+    sql, params = limpiezas[0]
+    assert sql.startswith("UPDATE turnos_grupales ") and params == (5,)
+    assert "estado_asistencia = 'programado'" in sql and "ausencia = NULL" in sql
+    assert _indice(cursor, LIMPIEZA) > _indice(cursor, "SET grupo_id=%s")
 
 
 def test_editar_grupal_solo_motivo_no_borra_la_atencion(client, monkeypatch):

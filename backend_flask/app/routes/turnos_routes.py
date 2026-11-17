@@ -662,7 +662,9 @@ def editar_turno(id):
         """,
             (fecha_inicio, fecha_fin, motivo, observaciones, es_sobreturno, id),
         )
-        if _to_db_iso(turno["fecha_inicio"]) != fecha_inicio or _to_db_iso(turno["fecha_fin"]) != fecha_fin:
+        # Solo se compara el inicio: fecha_fin se recalcula con la duracion actual del profesional,
+        # asi que editar otro campo no debe borrar una atencion en curso si esa duracion cambio.
+        if _to_db_iso(turno["fecha_inicio"]) != fecha_inicio:
             cambio_dia = turno["fecha_inicio"].date() != inicio_dt.date()
             _limpiar_atencion(cursor, "turnos", id, volver_a_programado=cambio_dia)
         conn.commit()
