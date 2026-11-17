@@ -1182,7 +1182,6 @@ def listar_turnos_grupales():
             tg.atencion_inicio,
             tg.atencion_fin,
             NOW() AS ahora_db,
-            1 AS es_grupal,
             ucg.nombre AS creado_por_nombre,
             tg.creado_en
         FROM turnos_grupales tg
@@ -1196,9 +1195,9 @@ def listar_turnos_grupales():
     )
 
     rows = cursor.fetchall()
+    anotar_estado_atencion(rows, grupal=True)
     cursor.close()
     conn.close()
-    anotar_estado_atencion(rows)
 
     puede_editar = current_user.rol in ROLES_TURNOS_GRUPALES
     payload = []

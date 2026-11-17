@@ -57,12 +57,15 @@ def ahora_de(rows):
     return datetime.now()
 
 
-def anotar_estado_atencion(rows, quitar_tiempos=False):
+def anotar_estado_atencion(rows, quitar_tiempos=False, grupal=None):
     """Agrega `estado_atencion` a cada fila (dict con datetimes). Quita `ahora_db`; con
-    `quitar_tiempos` quita además `atencion_inicio`/`atencion_fin` (para respuestas JSON directas)."""
+    `quitar_tiempos` quita además `atencion_inicio`/`atencion_fin` (para respuestas JSON directas).
+    `grupal`: si no es None, fuerza el tipo de todas las filas (sin necesitar la clave `es_grupal`);
+    si es None se usa la clave `es_grupal` de cada fila."""
     ahora = ahora_de(rows)
     for row in rows or []:
-        row["estado_atencion"] = estado_atencion(row, ahora)
+        fuente = row if grupal is None else {**row, "es_grupal": 1 if grupal else 0}
+        row["estado_atencion"] = estado_atencion(fuente, ahora)
         row.pop("ahora_db", None)
         if quitar_tiempos:
             row.pop("atencion_inicio", None)

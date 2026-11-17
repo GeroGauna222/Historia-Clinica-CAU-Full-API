@@ -87,6 +87,28 @@ def test_anotar_quita_tiempos_si_se_pide():
     assert "atencion_inicio" not in fila and "atencion_fin" not in fila
 
 
+def test_presente_de_un_dia_anterior_sin_llamar_sigue_esperando():
+    # Intencional: sin atencion_inicio no hay nada que "cerrar"; la UI solo usa este
+    # estado para los turnos del dia actual (presentes-hoy), asi que no se compara la fecha.
+    t = turno(fecha_inicio=datetime(2026, 11, 15, 10, 0), fecha_fin=datetime(2026, 11, 15, 10, 30))
+    assert estado_atencion(t, AHORA) == "esperando"
+
+
+def test_anotar_grupal_true_no_necesita_la_clave_es_grupal():
+    fila = turno(atencion_inicio=datetime(2026, 11, 16, 10, 5), ahora_db=AHORA)
+    del fila["es_grupal"]
+    anotar_estado_atencion([fila], grupal=True)
+    assert fila["estado_atencion"] == "atendido"  # el grupo cerro a las 10:30
+
+
+def test_anotar_grupal_none_usa_la_clave_de_la_fila():
+    individual = turno(atencion_inicio=datetime(2026, 11, 16, 10, 5), ahora_db=AHORA)
+    grupal = turno(es_grupal=1, atencion_inicio=datetime(2026, 11, 16, 10, 5), ahora_db=AHORA)
+    anotar_estado_atencion([individual, grupal])
+    assert individual["estado_atencion"] == "en_atencion"
+    assert grupal["estado_atencion"] == "atendido"
+
+
 def test_ahora_de_cae_a_datetime_now_si_no_hay_ahora_db():
     antes = datetime.now() - timedelta(seconds=1)
     assert ahora_de([{"id": 1}]) >= antes

@@ -278,7 +278,6 @@ def test_listar_turnos_grupales_incluye_estado_atencion(client, monkeypatch):
         "estado_asistencia": "presente",
         "atencion_inicio": datetime(2026, 11, 16, 10, 5),
         "atencion_fin": None,
-        "es_grupal": 1,
         "ahora_db": datetime(2026, 11, 16, 10, 10),
         "creado_por_nombre": "Administración",
         "creado_en": datetime(2026, 11, 15, 9, 0),
@@ -293,11 +292,43 @@ def test_listar_turnos_grupales_incluye_estado_atencion(client, monkeypatch):
     assert turno["estado_atencion"] == "en_atencion"
     assert "ahora_db" not in turno
     assert "atencion_inicio" not in turno
+    assert "atencion_fin" not in turno
     consulta = fake_cursor.executed[0][0]
     assert "tg.atencion_inicio" in consulta
     assert "tg.atencion_fin" in consulta
     assert "NOW() AS ahora_db" in consulta
-    assert "1 AS es_grupal" in consulta
+
+
+def test_listar_turnos_grupales_estado_atencion_sin_clave_es_grupal(client, monkeypatch):
+    login_as(client, MockUser(user_id=2, rol="administrativo"))
+    ahora = datetime(2026, 11, 16, 10, 40)
+
+    def fila(id_, inicio, fin, atencion_inicio):
+        # sin clave "es_grupal": el estado no puede depender del SQL
+        return {
+            "id": id_, "grupo_id": 4, "grupo_nombre": "Rehab", "color": "#00936B", "es_rehabilitacion": 1,
+            "paciente_id": id_, "paciente": "Ana Perez", "dni": "1", "cobertura": None, "nro_certificado": None,
+            "fecha_inicio": inicio, "fecha_fin": fin, "motivo": "Rehab", "creado_por": 2, "observaciones": None,
+            "ausencia": None, "estado_asistencia": "presente", "atencion_inicio": atencion_inicio,
+            "atencion_fin": None, "ahora_db": ahora, "creado_por_nombre": "Admin",
+            "creado_en": datetime(2026, 11, 15, 9, 0),
+        }
+
+    cursor = FakeCursor(fetchall_results=[[
+        # termino a las 10:30, llamado 10:05, ya son las 10:40: se cerro solo
+        fila(1, datetime(2026, 11, 16, 10, 0), datetime(2026, 11, 16, 10, 30), datetime(2026, 11, 16, 10, 5)),
+        # llamado 10:35, sigue dentro de su ventana (cierra 11:05)
+        fila(2, datetime(2026, 11, 16, 10, 30), datetime(2026, 11, 16, 11, 0), datetime(2026, 11, 16, 10, 35)),
+        # presente sin llamar
+        fila(3, datetime(2026, 11, 16, 11, 0), datetime(2026, 11, 16, 11, 30), None),
+    ]])
+    monkeypatch.setattr(turnos_routes, "get_connection", lambda: FakeConnection(cursor))
+
+    response = client.get("/api/turnos/grupales")
+
+    assert response.status_code == 200
+    estados = {t["id"]: t["estado_atencion"] for t in response.get_json()}
+    assert estados == {1: "atendido", 2: "en_atencion", 3: "esperando"}
 
 
 def test_agenda_turnos_incluye_estado_atencion(client, monkeypatch):
@@ -323,6 +354,9 @@ def test_agenda_turnos_incluye_estado_atencion(client, monkeypatch):
          "estado_asistencia": "presente", "atencion_inicio": datetime(2026, 11, 16, 10, 1), "atencion_fin": None},
         {**base, "id": 3, "fecha_inicio": datetime(2026, 11, 16, 11, 0), "fecha_fin": datetime(2026, 11, 16, 11, 30),
          "estado_asistencia": "programado", "atencion_inicio": None, "atencion_fin": None},
+        {**base, "id": 4, "fecha_inicio": datetime(2026, 11, 16, 9, 0), "fecha_fin": datetime(2026, 11, 16, 9, 30),
+         "estado_asistencia": "presente", "atencion_inicio": datetime(2026, 11, 16, 9, 2),
+         "atencion_fin": datetime(2026, 11, 16, 9, 20)},
     ]])
     monkeypatch.setattr(turnos_routes, "get_connection", lambda: FakeConnection(fake_cursor))
 
@@ -330,7 +364,7 @@ def test_agenda_turnos_incluye_estado_atencion(client, monkeypatch):
 
     assert response.status_code == 200
     eventos = response.get_json()
-    assert {e["id"]: e["estado_atencion"] for e in eventos} == {1: "esperando", 2: "en_atencion", 3: None}
+    assert {e["id"]: e["estado_atencion"] for e in eventos} == {1: "esperando", 2: "en_atencion", 3: None, 4: "atendido"}
     assert all("ahora_db" not in e for e in eventos)
     consulta = fake_cursor.executed[0][0]
     assert "t.atencion_inicio" in consulta and "t.atencion_fin" in consulta
