@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { computed, reactive, ref } from 'vue';
 import { flushPromises, mount } from '@vue/test-utils';
 
@@ -33,11 +33,14 @@ function fila(id, estado, extra = {}) {
     return f;
 }
 
+const montados = [];
+
 async function montarAbierto(lista, { rol = 'profesional', userId = 7 } = {}) {
     presentes.value = lista;
     userStore.id = userId;
     userStore.rol = rol;
     const wrapper = mount(PacientesPresentesMenu);
+    montados.push(wrapper);
     await wrapper.find('button[title="Pacientes en recepción"]').trigger('click');
     return wrapper;
 }
@@ -50,6 +53,10 @@ describe('PacientesPresentesMenu', () => {
         presentes.value = [];
         llamarYMarcar.mockReset();
         push.mockReset();
+    });
+
+    afterEach(() => {
+        montados.splice(0).forEach((w) => w.unmount());
     });
 
     it('agrupa los presentes en Esperando, En atención y Atendidos conservando el contenido de la fila', async () => {
@@ -125,5 +132,36 @@ describe('PacientesPresentesMenu', () => {
 
         const propio = await montarAbierto([fila(1, 'esperando', { usuario_id: 5 }), fila(2, 'esperando', { usuario_id: 8 })], { rol: 'area', userId: 5 });
         expect(botonesLlamar(propio)).toHaveLength(1);
+    });
+
+    it('un profesional ve Llamar aunque usuario_id sea distinto de su id o nulo (grupales)', async () => {
+        const wrapper = await montarAbierto([fila(1, 'esperando', { usuario_id: 8 }), fila(2, 'esperando', { usuario_id: null })], { rol: 'profesional', userId: 5 });
+
+        expect(botonesLlamar(wrapper)).toHaveLength(2);
+    });
+
+    it('no renderiza las secciones vacías', async () => {
+        const wrapper = await montarAbierto([fila(1, 'esperando')]);
+
+        expect(seccion(wrapper, 'esperando').exists()).toBe(true);
+        expect(seccion(wrapper, 'en-atencion').exists()).toBe(false);
+        expect(seccion(wrapper, 'atendidos').exists()).toBe(false);
+    });
+
+    it('el banner de error queda fuera del contenedor con scroll y se limpia al cerrar y reabrir el menú', async () => {
+        llamarYMarcar.mockRejectedValue({ response: { data: { error: 'El paciente figura como ausente' } } });
+        const wrapper = await montarAbierto([fila(1, 'esperando')]);
+
+        await botonesLlamar(wrapper)[0].trigger('click');
+        await flushPromises();
+
+        expect(wrapper.find('[role="alert"]').exists()).toBe(true);
+        expect(wrapper.find('.overflow-y-auto').find('[role="alert"]').exists()).toBe(false);
+
+        const toggle = wrapper.find('button[title="Pacientes en recepción"]');
+        await toggle.trigger('click');
+        await toggle.trigger('click');
+
+        expect(wrapper.find('[role="alert"]').exists()).toBe(false);
     });
 });

@@ -58,10 +58,12 @@ onBeforeUnmount(() => {
 });
 
 const toggleMenu = () => {
+    errorLlamado.value = '';
     menuActive.value = !menuActive.value;
 };
 
 const closeMenu = () => {
+    errorLlamado.value = '';
     menuActive.value = false;
 };
 
@@ -119,13 +121,13 @@ function formatoHora(isoString) {
                     <span v-if="cantidadPresentes > 0" class="text-xs bg-status-presente-bg text-status-presente-fg font-semibold px-2 py-0.5 rounded-full"> {{ cantidadPresentes }} presente{{ cantidadPresentes > 1 ? 's' : '' }} </span>
                 </div>
 
+                <p v-if="errorLlamado" class="px-4 py-2 text-xs text-status-sin-aviso-fg border-b border-surface" role="alert">{{ errorLlamado }}</p>
+
                 <div class="max-h-72 overflow-y-auto divide-y divide-line">
                     <div v-if="cantidadPresentes === 0" class="p-5 text-center text-sm text-muted-color">
                         <i class="pi pi-check-circle text-2xl text-muted-color block mb-2"></i>
                         No hay pacientes esperando en recepción.
                     </div>
-
-                    <p v-if="errorLlamado" class="p-3 text-xs text-status-sin-aviso-fg" role="alert">{{ errorLlamado }}</p>
 
                     <section v-for="seccion in secciones" :key="seccion.clave" :data-seccion="seccion.clave" class="divide-y divide-line">
                         <h3 class="px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-color bg-subtle">{{ seccion.titulo }}</h3>
@@ -144,7 +146,7 @@ function formatoHora(isoString) {
                             <button
                                 v-if="seccion.llamable && puedeLlamar(p)"
                                 type="button"
-                                class="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline focus:outline-none cursor-pointer border-none bg-transparent p-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                                class="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline focus-visible:underline cursor-pointer border-none bg-transparent p-0 disabled:opacity-50 disabled:cursor-not-allowed"
                                 :aria-label="`Llamar a ${p.paciente}`"
                                 :disabled="llamandoId !== null"
                                 @click.stop="llamar(p)"

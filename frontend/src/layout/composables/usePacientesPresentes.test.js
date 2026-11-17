@@ -4,9 +4,14 @@ import { createPinia, setActivePinia } from 'pinia';
 const mockGet = vi.fn();
 const mockLlamar = vi.fn();
 const mockLlamarGrupal = vi.fn();
+const mockAviso = vi.fn();
 
 vi.mock('@/api/axios', () => ({
     default: { get: (...args) => mockGet(...args) }
+}));
+
+vi.mock('@/utils/avisoSonoro', () => ({
+    reproducirAvisoSonoro: (...args) => mockAviso(...args)
 }));
 
 vi.mock('@/service/turnosService', () => ({
@@ -57,6 +62,7 @@ describe('usePacientesPresentes', () => {
         mockGet.mockReset();
         mockLlamar.mockReset();
         mockLlamarGrupal.mockReset();
+        mockAviso.mockReset();
         try {
             window.localStorage.clear();
         } catch {
@@ -234,6 +240,42 @@ describe('usePacientesPresentes', () => {
 
             expect(composable.pendientes.value.map((t) => t.id)).toEqual([2]);
             expect(JSON.parse(window.localStorage.getItem(STORAGE_KEY)).ids).toEqual([1]);
+        });
+
+        it('si el usuario cambia antes de que se confirme el llamado, no toca pendientes ni informados del otro usuario', async () => {
+            mockGet.mockResolvedValueOnce({ data: [turno(1, { turnoId: 1 })] });
+            let confirmar;
+            mockLlamar.mockReturnValue(new Promise((resolve) => (confirmar = resolve)));
+            const { composable, store } = await setupProfesional(8);
+            await composable.cargarPresentes();
+            const llamado = composable.llamarYMarcar(composable.pendientes.value[0]);
+
+            // Otro usuario inicia sesión mientras el llamado sigue pendiente; también tiene el turno id 1.
+            store.id = 99;
+            mockGet.mockResolvedValue({ data: [turno(1, { turnoId: 1 })] });
+            await composable.cargarPresentes();
+            expect(composable.pendientes.value.map((t) => t.id)).toEqual([1]);
+
+            confirmar({});
+            await llamado;
+
+            expect(composable.pendientes.value.map((t) => t.id)).toEqual([1]);
+            expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull();
+        });
+
+        it('tras llamar, una recarga no silenciosa con el mismo paciente no lo vuelve a mostrar ni suena el aviso', async () => {
+            const lista = [turno(1, { turnoId: 1 })];
+            mockGet.mockResolvedValue({ data: lista });
+            mockLlamar.mockResolvedValue({});
+            const { composable } = await setupProfesional(8);
+            await composable.cargarPresentes();
+            await composable.llamarYMarcar(composable.pendientes.value[0]);
+            mockAviso.mockClear();
+
+            await composable.cargarPresentes(false);
+
+            expect(composable.pendientes.value).toEqual([]);
+            expect(mockAviso).not.toHaveBeenCalled();
         });
     });
 });

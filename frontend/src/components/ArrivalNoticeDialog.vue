@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import Button from 'primevue/button';
 import Dialog from 'primevue/dialog';
 import { usePacientesPresentes } from '@/layout/composables/usePacientesPresentes';
@@ -16,13 +16,19 @@ async function llamar(t) {
     try {
         await llamarYMarcar(t);
     } catch (e) {
-        errorLlamado.value = e?.response?.data?.error || e?.response?.data?.message || 'No se pudo llamar al paciente. Reintentá.';
+        const detalle = e?.response?.data?.error || e?.response?.data?.message || 'No se pudo llamar al paciente. Reintentá.';
+        errorLlamado.value = `${t.paciente}: ${detalle}`;
     } finally {
         llamandoId.value = null;
     }
 }
 
 const visible = computed(() => pendientes.value.length > 0);
+
+// El error no debe sobrevivir al cierre del diálogo: al reabrirse no refiere a nadie.
+watch(visible, (v) => {
+    if (!v) errorLlamado.value = '';
+});
 
 const titulo = computed(() => {
     const n = pendientes.value.length;

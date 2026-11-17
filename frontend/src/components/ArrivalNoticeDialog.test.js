@@ -106,7 +106,7 @@ describe('ArrivalNoticeDialog', () => {
             .trigger('click');
         await flushPromises();
         expect(wrapper.text()).toContain('El paciente figura como ausente');
-        expect(wrapper.find('[role="alert"]').exists()).toBe(true);
+        expect(wrapper.find('[role="alert"]').text()).toBe('Ana Gomez: El paciente figura como ausente');
         const boton = botonesLlamar(wrapper)[0];
         expect(boton.attributes('disabled')).toBeUndefined();
     });
@@ -153,5 +153,21 @@ describe('ArrivalNoticeDialog', () => {
             .trigger('click');
         expect(marcarInformado).toHaveBeenCalledTimes(1);
         expect(llamarYMarcar).toHaveBeenCalledTimes(2);
+    });
+
+    it('el error no queda pegado: al cerrarse el diálogo y reabrirse no aparece el alert viejo', async () => {
+        llamarYMarcar.mockRejectedValue({ response: { data: { error: 'Falla' } } });
+        const wrapper = montar([{ id: 1, turnoId: 1, es_grupal: 0, paciente: 'Ana Gomez' }]);
+        await botonesLlamar(wrapper)[0].trigger('click');
+        await flushPromises();
+        expect(wrapper.find('[role="alert"]').exists()).toBe(true);
+
+        pendientes.value = [];
+        await flushPromises();
+        pendientes.value = [{ id: 2, turnoId: 2, es_grupal: 0, paciente: 'Luis Paz' }];
+        await flushPromises();
+
+        expect(wrapper.find('[role="alert"]').exists()).toBe(false);
+        expect(wrapper.text()).not.toContain('Falla');
     });
 });
