@@ -29,4 +29,14 @@ describe('guard beforeEach', () => {
         expect(fetchUser).toHaveBeenCalled();
         expect(router.currentRoute.value.path).toBe('/auth/login');
     });
+
+    it('la administración de la pantalla de llamados no es pública: sin sesión redirige al login', async () => {
+        const ruta = router.getRoutes().find((r) => r.name === 'pantalla-llamados');
+        expect(ruta.meta.publica).toBeUndefined();
+        expect(ruta.meta.roles).toEqual(['director', 'administrativo']);
+
+        await router.push('/pantalla-de-llamados');
+        expect(fetchUser).toHaveBeenCalled();
+        expect(router.currentRoute.value.path).toBe('/auth/login');
+    });
 });

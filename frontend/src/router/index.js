@@ -84,6 +84,13 @@ const router = createRouter({
                     component: () => import('@/views/pages/presupuestos/PresupuestoGenerator.vue'),
                     meta: { roles: ['director', 'administrativo'] }
                 },
+                // 📌 Pantalla de llamados (🔒 DIRECTOR Y ADMINISTRATIVO; los televisores los vincula solo el director)
+                {
+                    path: 'pantalla-de-llamados',
+                    name: 'pantalla-llamados',
+                    component: () => import('@/views/pages/pantalla/PantallaLlamados.vue'),
+                    meta: { roles: ['director', 'administrativo'] }
+                },
                 // 📌 Facturación (🔒 DIRECTOR Y ADMINISTRATIVO)
                 {
                     path: 'facturacion',
