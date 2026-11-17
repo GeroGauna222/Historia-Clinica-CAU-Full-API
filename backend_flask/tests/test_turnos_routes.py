@@ -255,6 +255,101 @@ def test_listar_turnos_grupales_incluye_datos_de_cobertura(client, monkeypatch):
     assert turno["nro_cobertura"] == "AF-9087"
 
 
+def test_listar_turnos_grupales_incluye_estado_atencion(client, monkeypatch):
+    login_as(client, MockUser(user_id=2, rol="administrativo"))
+
+    fake_cursor = FakeCursor(fetchall_results=[[{
+        "id": 12,
+        "grupo_id": 4,
+        "grupo_nombre": "Rehabilitación",
+        "color": "#00936B",
+        "es_rehabilitacion": 1,
+        "paciente_id": 9,
+        "paciente": "Ana Pérez",
+        "dni": "12345678",
+        "cobertura": "IOMA",
+        "nro_certificado": "AF-9087",
+        "fecha_inicio": datetime(2026, 11, 16, 10, 0),
+        "fecha_fin": datetime(2026, 11, 16, 10, 30),
+        "motivo": "Rehabilitación",
+        "creado_por": 2,
+        "observaciones": None,
+        "ausencia": None,
+        "estado_asistencia": "presente",
+        "atencion_inicio": datetime(2026, 11, 16, 10, 5),
+        "atencion_fin": None,
+        "es_grupal": 1,
+        "ahora_db": datetime(2026, 11, 16, 10, 10),
+        "creado_por_nombre": "Administración",
+        "creado_en": datetime(2026, 11, 15, 9, 0),
+    }]])
+    fake_connection = FakeConnection(fake_cursor)
+    monkeypatch.setattr(turnos_routes, "get_connection", lambda: fake_connection)
+
+    response = client.get("/api/turnos/grupales")
+
+    assert response.status_code == 200
+    turno = response.get_json()[0]
+    assert turno["estado_atencion"] == "en_atencion"
+    assert "ahora_db" not in turno
+    assert "atencion_inicio" not in turno
+    consulta = fake_cursor.executed[0][0]
+    assert "tg.atencion_inicio" in consulta
+    assert "tg.atencion_fin" in consulta
+    assert "NOW() AS ahora_db" in consulta
+    assert "1 AS es_grupal" in consulta
+
+
+def test_agenda_turnos_incluye_estado_atencion(client, monkeypatch):
+    login_as(client, MockUser(user_id=2, rol="administrativo"))
+
+    base = {
+        "paciente_id": 1,
+        "motivo": "Control",
+        "observaciones": None,
+        "ausencia": None,
+        "es_sobreturno": 0,
+        "paciente": "Ana Gomez",
+        "dni": "1",
+        "cobertura": None,
+        "nro_certificado": None,
+        "profesional": "Dr. Perez",
+        "ahora_db": datetime(2026, 11, 16, 10, 5),
+    }
+    fake_cursor = FakeCursor(fetchall_results=[[
+        {**base, "id": 1, "fecha_inicio": datetime(2026, 11, 16, 10, 0), "fecha_fin": datetime(2026, 11, 16, 10, 30),
+         "estado_asistencia": "presente", "atencion_inicio": None, "atencion_fin": None},
+        {**base, "id": 2, "fecha_inicio": datetime(2026, 11, 16, 10, 30), "fecha_fin": datetime(2026, 11, 16, 11, 0),
+         "estado_asistencia": "presente", "atencion_inicio": datetime(2026, 11, 16, 10, 1), "atencion_fin": None},
+        {**base, "id": 3, "fecha_inicio": datetime(2026, 11, 16, 11, 0), "fecha_fin": datetime(2026, 11, 16, 11, 30),
+         "estado_asistencia": "programado", "atencion_inicio": None, "atencion_fin": None},
+    ]])
+    monkeypatch.setattr(turnos_routes, "get_connection", lambda: FakeConnection(fake_cursor))
+
+    response = client.get("/api/turnos")
+
+    assert response.status_code == 200
+    eventos = response.get_json()
+    assert {e["id"]: e["estado_atencion"] for e in eventos} == {1: "esperando", 2: "en_atencion", 3: None}
+    assert all("ahora_db" not in e for e in eventos)
+    consulta = fake_cursor.executed[0][0]
+    assert "t.atencion_inicio" in consulta and "t.atencion_fin" in consulta
+    assert "NOW() AS ahora_db" in consulta
+
+
+def test_agenda_turnos_profesional_incluye_columnas_de_atencion(client, monkeypatch):
+    login_as(client, MockUser(user_id=7, rol="profesional"))
+    fake_cursor = FakeCursor(fetchall_results=[[]])
+    monkeypatch.setattr(turnos_routes, "get_connection", lambda: FakeConnection(fake_cursor))
+
+    response = client.get("/api/turnos")
+
+    assert response.status_code == 200
+    consulta = fake_cursor.executed[0][0]
+    assert "t.atencion_inicio" in consulta and "t.atencion_fin" in consulta
+    assert "NOW() AS ahora_db" in consulta
+
+
 def test_generar_fechas_tanda_quincenal():
     from app.routes.turnos_routes import _generar_fechas_tanda
 
@@ -713,6 +808,81 @@ def test_actualizar_asistencia_presente_y_presentes_hoy(client, monkeypatch):
     assert presentes[0]["id"] == 15
     assert presentes[0]["estado_asistencia"] == "presente"
     assert presentes[0]["paciente"] == "Carlos Gomez"
+
+
+def _fila_presente(id_, inicio, fin, atencion_inicio, es_grupal=0, paciente="Ana Gomez", ahora=None):
+    return {
+        "id": id_, "paciente_id": id_, "fecha_inicio": inicio, "fecha_fin": fin,
+        "motivo": "Control", "observaciones": None, "estado_asistencia": "presente", "ausencia": None,
+        "es_sobreturno": 0, "usuario_id": 7, "paciente": paciente, "dni": "1", "cobertura": None,
+        "nro_certificado": None, "profesional": "Dr. Perez", "es_grupal": es_grupal,
+        "grupo_id": 4 if es_grupal else None, "grupo_nombre": "Rehab" if es_grupal else None,
+        "atencion_inicio": atencion_inicio, "atencion_fin": None,
+        "ahora_db": ahora or datetime(2026, 11, 16, 10, 5),
+    }
+
+
+def test_presentes_hoy_marca_estado_atencion(client, monkeypatch):
+    login_as(client, MockUser(user_id=7, rol="profesional"))
+    filas = [
+        _fila_presente(1, datetime(2026, 11, 16, 10, 0), datetime(2026, 11, 16, 10, 30), None, paciente="Ana Gomez"),
+        _fila_presente(2, datetime(2026, 11, 16, 10, 30), datetime(2026, 11, 16, 11, 0),
+                       datetime(2026, 11, 16, 10, 1), paciente="Luis Perez"),
+    ]
+    cursor = FakeCursor(fetchall_results=[filas])
+    monkeypatch.setattr(turnos_routes, "get_connection", lambda: FakeConnection(cursor))
+
+    r = client.get("/api/turnos/presentes-hoy")
+
+    assert r.status_code == 200
+    estados = {t["turnoId"]: t["estado_atencion"] for t in r.get_json()}
+    assert estados == {1: "esperando", 2: "en_atencion"}
+    for t in r.get_json():
+        for interna in ("ahora_db", "atencion_inicio", "atencion_fin"):
+            assert interna not in t
+
+
+def test_presentes_hoy_estado_atencion_en_turnos_grupales(client, monkeypatch):
+    login_as(client, MockUser(user_id=2, rol="administrativo"))
+    ahora = datetime(2026, 11, 16, 10, 40)
+    filas = [
+        # grupal llamado a las 10:05, el grupo termina 10:30 y ya son las 10:40: se cerro solo
+        _fila_presente(5, datetime(2026, 11, 16, 10, 0), datetime(2026, 11, 16, 10, 30),
+                       datetime(2026, 11, 16, 10, 5), es_grupal=1, ahora=ahora),
+        # grupal llamado a las 10:35, todavia dentro de su ventana
+        _fila_presente(6, datetime(2026, 11, 16, 10, 30), datetime(2026, 11, 16, 11, 0),
+                       datetime(2026, 11, 16, 10, 35), es_grupal=1, ahora=ahora),
+        # grupal sin llamar
+        _fila_presente(7, datetime(2026, 11, 16, 11, 0), datetime(2026, 11, 16, 11, 30),
+                       None, es_grupal=1, ahora=ahora),
+        # individual en atencion
+        _fila_presente(5, datetime(2026, 11, 16, 10, 0), datetime(2026, 11, 16, 10, 30),
+                       datetime(2026, 11, 16, 10, 5), es_grupal=0, ahora=ahora),
+    ]
+    cursor = FakeCursor(fetchall_results=[filas])
+    monkeypatch.setattr(turnos_routes, "get_connection", lambda: FakeConnection(cursor))
+
+    r = client.get("/api/turnos/presentes-hoy")
+
+    assert r.status_code == 200
+    estados = {t["id"]: t["estado_atencion"] for t in r.get_json()}
+    assert estados == {"grupal-5": "atendido", "grupal-6": "en_atencion", "grupal-7": "esperando", 5: "en_atencion"}
+
+
+def test_presentes_hoy_selecciona_columnas_de_atencion_en_las_cuatro_mitades(client, monkeypatch):
+    for rol in ("profesional", "administrativo"):
+        login_as(client, MockUser(user_id=7, rol=rol))
+        cursor = FakeCursor(fetchall_results=[[]])
+        monkeypatch.setattr(turnos_routes, "get_connection", lambda c=cursor: FakeConnection(c))
+
+        assert client.get("/api/turnos/presentes-hoy").status_code == 200
+
+        consulta = cursor.executed[0][0]
+        columnas = [linea.strip() for linea in consulta.splitlines()]
+        assert columnas.count("NOW() AS ahora_db") == 2
+        for prefijo in ("t", "tg"):
+            i = columnas.index(f"{prefijo}.atencion_inicio,")
+            assert columnas[i:i + 3] == [f"{prefijo}.atencion_inicio,", f"{prefijo}.atencion_fin,", "NOW() AS ahora_db"]
 
 
 def test_profesional_no_puede_crear_sobreturno(client, monkeypatch):

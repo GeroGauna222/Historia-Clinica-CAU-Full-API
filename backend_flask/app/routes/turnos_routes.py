@@ -7,6 +7,7 @@ from flask_mail import Message
 
 from app import mail
 from app.database import get_connection
+from app.utils.pantalla import anotar_estado_atencion
 from app.utils.permisos import requiere_rol
 
 bp_turnos = Blueprint("turnos", __name__)
@@ -383,6 +384,7 @@ def api_turnos():
             cursor.execute(
                 """
                 SELECT t.id, t.paciente_id, t.fecha_inicio, t.fecha_fin, t.motivo, t.observaciones, t.ausencia, t.estado_asistencia, t.es_sobreturno,
+                       t.atencion_inicio, t.atencion_fin, NOW() AS ahora_db,
                        TRIM(CONCAT(COALESCE(p.nombre, ''), ' ', COALESCE(p.apellido, ''))) AS paciente, p.dni, p.cobertura, p.nro_certificado, u.nombre AS profesional
                 FROM turnos t
                 JOIN pacientes p ON t.paciente_id = p.id
@@ -396,6 +398,7 @@ def api_turnos():
             cursor.execute(
                 """
                 SELECT t.id, t.paciente_id, t.fecha_inicio, t.fecha_fin, t.motivo, t.observaciones, t.ausencia, t.estado_asistencia, t.es_sobreturno,
+                       t.atencion_inicio, t.atencion_fin, NOW() AS ahora_db,
                        TRIM(CONCAT(COALESCE(p.nombre, ''), ' ', COALESCE(p.apellido, ''))) AS paciente, p.dni, p.cobertura, p.nro_certificado, u.nombre AS profesional
                 FROM turnos t
                 JOIN pacientes p ON t.paciente_id = p.id
@@ -405,6 +408,7 @@ def api_turnos():
             )
 
         turnos = cursor.fetchall()
+        anotar_estado_atencion(turnos)
         cursor.close()
         conn.close()
 
@@ -423,6 +427,7 @@ def api_turnos():
                 "ausencia": t["ausencia"],
                 "estado_asistencia": t.get("estado_asistencia") or "programado",
                 "es_sobreturno": bool(t.get("es_sobreturno", 0)),
+                "estado_atencion": t.get("estado_atencion"),
                 "paciente_id": t["paciente_id"],
                 "profesional": t["profesional"],
             }
@@ -1174,6 +1179,10 @@ def listar_turnos_grupales():
             tg.observaciones,
             tg.ausencia,
             tg.estado_asistencia,
+            tg.atencion_inicio,
+            tg.atencion_fin,
+            NOW() AS ahora_db,
+            1 AS es_grupal,
             ucg.nombre AS creado_por_nombre,
             tg.creado_en
         FROM turnos_grupales tg
@@ -1189,6 +1198,7 @@ def listar_turnos_grupales():
     rows = cursor.fetchall()
     cursor.close()
     conn.close()
+    anotar_estado_atencion(rows)
 
     puede_editar = current_user.rol in ROLES_TURNOS_GRUPALES
     payload = []
@@ -1212,6 +1222,7 @@ def listar_turnos_grupales():
                 "observaciones": row["observaciones"],
                 "ausencia": row["ausencia"],
                 "estado_asistencia": row.get("estado_asistencia") or "programado",
+                "estado_atencion": row.get("estado_atencion"),
                 "creado_por_nombre": row["creado_por_nombre"],
                 "creado_en": _to_iso_arg(row["creado_en"]),
                 "tipo": "grupal",
@@ -1711,7 +1722,10 @@ def api_turnos_presentes_hoy():
                     u.nombre AS profesional,
                     0 AS es_grupal,
                     NULL AS grupo_id,
-                    NULL AS grupo_nombre
+                    NULL AS grupo_nombre,
+                    t.atencion_inicio,
+                    t.atencion_fin,
+                    NOW() AS ahora_db
                 FROM turnos t
                 JOIN pacientes p ON t.paciente_id = p.id
                 JOIN usuarios u ON t.usuario_id = u.id
@@ -1737,7 +1751,10 @@ def api_turnos_presentes_hoy():
                     CONCAT('Grupo: ', gp.nombre) AS profesional,
                     1 AS es_grupal,
                     gp.id AS grupo_id,
-                    gp.nombre AS grupo_nombre
+                    gp.nombre AS grupo_nombre,
+                    tg.atencion_inicio,
+                    tg.atencion_fin,
+                    NOW() AS ahora_db
                 FROM turnos_grupales tg
                 JOIN grupos_profesionales gp ON gp.id = tg.grupo_id
                 JOIN grupo_miembros gm ON gm.grupo_id = tg.grupo_id
@@ -1770,7 +1787,10 @@ def api_turnos_presentes_hoy():
                     u.nombre AS profesional,
                     0 AS es_grupal,
                     NULL AS grupo_id,
-                    NULL AS grupo_nombre
+                    NULL AS grupo_nombre,
+                    t.atencion_inicio,
+                    t.atencion_fin,
+                    NOW() AS ahora_db
                 FROM turnos t
                 JOIN pacientes p ON t.paciente_id = p.id
                 JOIN usuarios u ON t.usuario_id = u.id
@@ -1795,7 +1815,10 @@ def api_turnos_presentes_hoy():
                     CONCAT('Grupo: ', gp.nombre) AS profesional,
                     1 AS es_grupal,
                     gp.id AS grupo_id,
-                    gp.nombre AS grupo_nombre
+                    gp.nombre AS grupo_nombre,
+                    tg.atencion_inicio,
+                    tg.atencion_fin,
+                    NOW() AS ahora_db
                 FROM turnos_grupales tg
                 JOIN grupos_profesionales gp ON gp.id = tg.grupo_id
                 JOIN pacientes p ON tg.paciente_id = p.id
@@ -1805,6 +1828,7 @@ def api_turnos_presentes_hoy():
                 """
             )
         turnos = cursor.fetchall()
+        anotar_estado_atencion(turnos, quitar_tiempos=True)
         for t in turnos:
             t["start"] = _to_iso_arg(t["fecha_inicio"])
             t["end"] = _to_iso_arg(t["fecha_fin"])
