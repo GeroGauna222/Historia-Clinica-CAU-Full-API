@@ -26,10 +26,11 @@ class MockUser(UserMixin):
 
 
 class FakeCursor:
-    def __init__(self, fetchone_results=None, fetchall_results=None, lastrowid=1, execute_side_effects=None):
+    def __init__(self, fetchone_results=None, fetchall_results=None, lastrowid=1, execute_side_effects=None, rowcount=1):
         self._fetchone_results = list(fetchone_results or [])
         self._fetchall_results = list(fetchall_results or [])
         self.lastrowid = lastrowid
+        self.rowcount = rowcount
         self.executed = []
         self.closed = False
         # Lista opcional de excepciones a levantar en llamadas sucesivas a execute()
