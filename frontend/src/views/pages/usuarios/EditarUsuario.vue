@@ -46,6 +46,7 @@ const SEXOS = [
 ];
 const TIPOS_MATRICULA = ['MN', 'MP', 'OP'];
 const rolPuedePrescribir = () => ['profesional', 'director'].includes(form.rol);
+const rolUsaConsultorio = (rol) => ['profesional', 'area'].includes(rol);
 
 const loading = ref(false);
 
@@ -70,6 +71,7 @@ async function onSubmit() {
     try {
         const payload = { ...form };
         if (!payload.password) delete payload.password;
+        if (!rolUsaConsultorio(payload.rol)) payload.consultorio = '';
 
         await usuarioService.updateUsuario(userId, payload);
         toast.add({ severity: 'success', summary: 'Actualizado', detail: 'Usuario actualizado correctamente', life: 3000 });
@@ -119,9 +121,9 @@ async function onSubmit() {
                         <InputText v-model.trim="form.especialidad" class="w-full" :disabled="loading" required />
                     </div>
 
-                    <div v-if="['profesional', 'area'].includes(form.rol)">
+                    <div v-if="rolUsaConsultorio(form.rol)">
                         <label for="consultorio" class="block mb-2 font-semibold text-color">Consultorio</label>
-                        <InputText id="consultorio" v-model="form.consultorio" maxlength="50" placeholder="Ej: 3" class="w-full" :disabled="loading" />
+                        <InputText id="consultorio" v-model.trim="form.consultorio" maxlength="50" placeholder="Ej: 3" class="w-full" :disabled="loading" />
                     </div>
                 </div>
 

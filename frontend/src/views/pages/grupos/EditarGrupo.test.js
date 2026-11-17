@@ -83,10 +83,34 @@ describe('EditarGrupo - campo Consultorio', () => {
     });
 
     it('el PUT envía cadena vacía al quitar el consultorio (el backend la guarda como NULL)', async () => {
+        const w = await montar({ consultorio: 'Gimnasio' });
+        await campo(w).setValue('');
+        await w.find('form').trigger('submit');
+        await flushPromises();
+        expect(vi.mocked(api.put).mock.calls[0][1].consultorio).toBe('');
+    });
+
+    it('un grupo sin consultorio (null) se guarda enviando cadena vacía', async () => {
         const w = await montar({ consultorio: null });
         await w.find('form').trigger('submit');
         await flushPromises();
         expect(vi.mocked(api.put).mock.calls[0][1].consultorio).toBe('');
+    });
+
+    it('el input referencia el aviso con aria-describedby solo si el grupo está visible', async () => {
+        const oculto = await montar({ mostrar_en_pantalla: 0 });
+        expect(campo(oculto).attributes('aria-describedby')).toBeUndefined();
+        const visible = await montar({ mostrar_en_pantalla: 1 });
+        expect(campo(visible).attributes('aria-describedby')).toBe('consultorio-ayuda');
+        expect(visible.find('#consultorio-ayuda').text()).toContain('visible en la pantalla de llamados');
+    });
+
+    it('el recuadro de error tiene role alert', async () => {
+        const w = await montar();
+        vi.mocked(api.put).mockRejectedValueOnce({ response: { data: { error: 'Falla' } } });
+        await w.find('form').trigger('submit');
+        await flushPromises();
+        expect(w.find('[role="alert"]').text()).toContain('Falla');
     });
 
     it('muestra el 400 del backend con error', async () => {

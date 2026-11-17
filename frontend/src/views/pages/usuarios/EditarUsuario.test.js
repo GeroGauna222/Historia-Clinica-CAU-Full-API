@@ -93,6 +93,37 @@ describe('EditarUsuario - campo Consultorio', () => {
         expect(payload.consultorio).toBe('');
     });
 
+    it('al cambiar a un rol que no usa consultorio el PUT envía consultorio vacío', async () => {
+        const w = await montar({ rol: 'profesional', consultorio: '3' });
+        w.findComponent({ name: 'Select' }).vm.$emit('update:modelValue', 'director');
+        await flushPromises();
+        expect(campo(w).exists()).toBe(false);
+        await w.find('form').trigger('submit');
+        await flushPromises();
+        expect(vi.mocked(usuarioService.updateUsuario).mock.calls[0][1].consultorio).toBe('');
+    });
+
+    it('volver a profesional antes de guardar conserva el consultorio', async () => {
+        const w = await montar({ rol: 'profesional', consultorio: '3' });
+        const select = w.findComponent({ name: 'Select' });
+        select.vm.$emit('update:modelValue', 'director');
+        await flushPromises();
+        select.vm.$emit('update:modelValue', 'profesional');
+        await flushPromises();
+        expect(campo(w).element.value).toBe('3');
+        await w.find('form').trigger('submit');
+        await flushPromises();
+        expect(vi.mocked(usuarioService.updateUsuario).mock.calls[0][1].consultorio).toBe('3');
+    });
+
+    it('el consultorio tipeado con espacios se envía recortado', async () => {
+        const w = await montar({ consultorio: null });
+        await campo(w).setValue('  4B  ');
+        await w.find('form').trigger('submit');
+        await flushPromises();
+        expect(vi.mocked(usuarioService.updateUsuario).mock.calls[0][1].consultorio).toBe('4B');
+    });
+
     it('muestra el 400 del backend leyendo error o message', async () => {
         const w = await montar({});
         vi.mocked(usuarioService.updateUsuario).mockRejectedValueOnce({ response: { data: { error: 'El consultorio no puede superar los 50 caracteres' } } });

@@ -110,8 +110,8 @@ async function guardarCambios() {
 
                 <div class="flex flex-col gap-2">
                     <label for="consultorio" class="font-semibold text-color">Consultorio</label>
-                    <InputText id="consultorio" v-model="grupo.consultorio" maxlength="50" placeholder="Ej: Gimnasio" class="w-full" />
-                    <small v-if="grupo.mostrar_en_pantalla" class="text-muted-color">Este grupo está visible en la pantalla de llamados: para quitarle el consultorio ocultalo primero.</small>
+                    <InputText id="consultorio" v-model="grupo.consultorio" maxlength="50" placeholder="Ej: Gimnasio" class="w-full" :aria-describedby="grupo.mostrar_en_pantalla ? 'consultorio-ayuda' : undefined" />
+                    <small v-if="grupo.mostrar_en_pantalla" id="consultorio-ayuda" class="text-muted-color">Este grupo está visible en la pantalla de llamados: para quitarle el consultorio ocultalo primero.</small>
                 </div>
 
                 <label class="flex items-center gap-2">
@@ -136,8 +136,8 @@ async function guardarCambios() {
                 </div>
             </form>
 
-            <div v-if="mensaje" class="mt-6 p-3 rounded-lg bg-status-presente-bg text-status-presente-fg text-center font-medium border border-status-presente-border">{{ mensaje }}</div>
-            <div v-if="error" class="mt-6 p-3 rounded-lg bg-status-sin-aviso-bg text-status-sin-aviso-fg text-center font-medium border border-status-sin-aviso-border">{{ error }}</div>
+            <div v-if="mensaje" role="status" class="mt-6 p-3 rounded-lg bg-status-presente-bg text-status-presente-fg text-center font-medium border border-status-presente-border">{{ mensaje }}</div>
+            <div v-if="error" role="alert" class="mt-6 p-3 rounded-lg bg-status-sin-aviso-bg text-status-sin-aviso-fg text-center font-medium border border-status-sin-aviso-border">{{ error }}</div>
         </div>
     </div>
 </template>
