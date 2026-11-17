@@ -14,6 +14,11 @@ let usuarioEstadoId = null;
 let timer = null;
 let initialized = false;
 
+// Un paciente ya llamado o atendido no es una llegada nueva. Lista de exclusión (no se exige
+// 'esperando'): un estado ausente, null o desconocido se trata como esperando, igual que en el menú de presentes.
+const ESTADOS_NO_ESPERANDO = ['en_atencion', 'atendido'];
+const estaEsperando = (t) => !ESTADOS_NO_ESPERANDO.includes(t.estado_atencion);
+
 function fechaLocalHoy() {
     const d = new Date();
     const y = d.getFullYear();
@@ -82,14 +87,16 @@ export function usePacientesPresentes() {
             presentes.value = data;
 
             const idsPresentes = new Set(data.map((t) => t.id));
+            const idsEsperando = new Set(data.filter(estaEsperando).map((t) => t.id));
             for (const id of informados) {
                 if (!idsPresentes.has(id)) informados.delete(id);
             }
-            pendientes.value = pendientes.value.filter((t) => idsPresentes.has(t.id));
+            // Un pendiente que dejó de estar esperando (lo llamaron, p. ej. desde la lista del Dashboard) sale del aviso.
+            pendientes.value = pendientes.value.filter((t) => idsEsperando.has(t.id));
 
             if (rol === 'profesional' && !silencioso) {
                 const idsPendientes = new Set(pendientes.value.map((t) => t.id));
-                const nuevos = data.filter((t) => !informados.has(t.id) && !idsPendientes.has(t.id));
+                const nuevos = data.filter((t) => estaEsperando(t) && !informados.has(t.id) && !idsPendientes.has(t.id));
                 if (nuevos.length > 0) {
                     pendientes.value = [...pendientes.value, ...nuevos];
                     reproducirAvisoSonoro();

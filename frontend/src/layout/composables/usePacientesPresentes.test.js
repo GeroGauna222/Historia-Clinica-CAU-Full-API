@@ -278,4 +278,43 @@ describe('usePacientesPresentes', () => {
             expect(mockAviso).not.toHaveBeenCalled();
         });
     });
+
+    describe('aviso de llegada según estado_atencion', () => {
+        it.each(['en_atencion', 'atendido'])('un presente %s no entra a pendientes ni suena el aviso', async (estado) => {
+            mockGet.mockResolvedValue({ data: [turno(1, { estado_atencion: estado })] });
+            const { composable } = await setupProfesional();
+
+            await composable.cargarPresentes();
+
+            expect(composable.pendientes.value).toEqual([]);
+            expect(mockAviso).not.toHaveBeenCalled();
+            expect(composable.presentes.value.map((t) => t.id)).toEqual([1]);
+        });
+
+        it('esperando, null y sin estado_atencion sí entran a pendientes y suena el aviso', async () => {
+            mockGet.mockResolvedValue({
+                data: [turno(1, { estado_atencion: 'esperando' }), turno(2, { estado_atencion: null }), turno(3), turno(4, { estado_atencion: 'raro' })]
+            });
+            const { composable } = await setupProfesional();
+
+            await composable.cargarPresentes();
+
+            expect(composable.pendientes.value.map((t) => t.id)).toEqual([1, 2, 3, 4]);
+            expect(mockAviso).toHaveBeenCalledTimes(1);
+        });
+
+        it('un pendiente que pasa a en_atencion en un poll posterior sale de pendientes', async () => {
+            mockGet.mockResolvedValueOnce({ data: [turno(1, { estado_atencion: 'esperando' }), turno(2, { estado_atencion: 'esperando' })] });
+            const { composable } = await setupProfesional();
+            await composable.cargarPresentes();
+            expect(composable.pendientes.value.map((t) => t.id)).toEqual([1, 2]);
+            mockAviso.mockClear();
+
+            mockGet.mockResolvedValueOnce({ data: [turno(1, { estado_atencion: 'en_atencion' }), turno(2, { estado_atencion: 'esperando' })] });
+            await composable.cargarPresentes();
+
+            expect(composable.pendientes.value.map((t) => t.id)).toEqual([2]);
+            expect(mockAviso).not.toHaveBeenCalled();
+        });
+    });
 });
