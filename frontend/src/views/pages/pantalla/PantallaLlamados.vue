@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import Tabs from 'primevue/tabs';
 import TabList from 'primevue/tablist';
 import Tab from 'primevue/tab';
@@ -26,6 +26,11 @@ const televisores = ref([]);
 const codigo = ref('');
 const nombreTv = ref('');
 const vinculando = ref(false);
+const inputCodigo = ref(null);
+// Los espacios solos no cuentan: el servidor los recorta y respondería "obligatorios".
+const puedeVincular = computed(() => !!codigo.value.trim() && !!nombreTv.value.trim());
+// Hasta la primera respuesta (o error) no se sabe si hay turnos: se evita mostrar "No hay turnos" mientras carga.
+const previaLista = ref(false);
 
 // Error de una acción del usuario (guardar, vincular, desvincular) y errores de carga/refresco, por separado:
 // un refresco silencioso (cada 5 s) nunca limpia ni reemplaza el mensaje de una acción.
@@ -49,16 +54,21 @@ async function cargarPrevia() {
     } catch (e) {
         erroresCarga.previa = mensajeDe(e, 'No se pudo cargar la vista previa');
     } finally {
+        previaLista.value = true;
         cargandoPrevia = false;
     }
 }
 
-// Cuántas ediciones están en vuelo: mientras haya alguna, una lista que llega tarde no pisa lo que el usuario acaba de cambiar.
+// Una lista que llega tarde no debe pisar lo que el usuario acaba de cambiar. Se descarta si hay ediciones en vuelo
+// (`guardando`) o si empezó alguna después de pedirla (`versionEdicion`, que sube al iniciar cada edición):
+// el contador solo no alcanza, porque una edición puede empezar y terminar mientras la lista sigue viajando.
 let guardando = 0;
+let versionEdicion = 0;
 async function cargarVisibles() {
+    const desde = versionEdicion;
     try {
         const { data } = await pantallaService.listarVisibles();
-        if (guardando > 0) return;
+        if (desde !== versionEdicion || guardando > 0) return;
         // `clave` identifica la fila en la tabla: tipo e id solos no son únicos entre grupos y profesionales.
         visibles.value = data.map((v) => ({ ...v, clave: `${v.tipo}-${v.id}` }));
         erroresCarga.visibles = '';
@@ -90,6 +100,7 @@ function reiniciarCampos(fila) {
 async function guardar(fila, cambios) {
     errorAccion.value = '';
     guardando++;
+    versionEdicion++;
     let fallo = false;
     try {
         const { data } = await pantallaService.actualizarVisible(fila.tipo, fila.id, cambios);
@@ -117,7 +128,7 @@ const ocultosConTurnos = computed(() => visibles.value.filter((v) => !v.mostrar_
 const nombresOcultos = computed(() => ocultosConTurnos.value.map((v) => v.nombre).join(', '));
 
 async function vincular() {
-    if (vinculando.value || !codigo.value || !nombreTv.value) return;
+    if (vinculando.value || !puedeVincular.value) return;
     errorAccion.value = '';
     vinculando.value = true;
     try {
@@ -125,6 +136,8 @@ async function vincular() {
         codigo.value = '';
         nombreTv.value = '';
         await cargarTelevisores();
+        await nextTick();
+        inputCodigo.value?.$el?.focus(); // el botón queda deshabilitado: el foco vuelve al primer campo para vincular otro
     } catch (e) {
         errorAccion.value = mensajeDe(e, 'No se pudo vincular el televisor');
     } finally {
@@ -174,8 +187,9 @@ onBeforeUnmount(() => clearInterval(timerPrevia));
                     <TabPanel value="previa">
                         <!-- Así se ve en el televisor, a escala: el marco mide el ancho y la letra se fija como fracción de ese ancho -->
                         <div class="previa-marco">
-                            <div class="previa pantalla-paleta">
-                                <PantallaTarjetas :tarjetas="tarjetas" :porPagina="12" />
+                            <div class="previa pantalla-paleta" role="region" aria-label="Vista previa de la pantalla del televisor">
+                                <p v-if="!previaLista" class="cargando">Cargando…</p>
+                                <PantallaTarjetas v-else :tarjetas="tarjetas" :porPagina="12" />
                             </div>
                         </div>
                     </TabPanel>
@@ -212,13 +226,13 @@ onBeforeUnmount(() => clearInterval(timerPrevia));
                         <form class="flex flex-col md:flex-row gap-4 md:items-end mb-6" @submit.prevent="vincular">
                             <div class="flex flex-col gap-2">
                                 <label for="codigo-tv" class="font-semibold text-color">Código del televisor</label>
-                                <InputText id="codigo-tv" v-model="codigo" maxlength="6" class="uppercase" autocomplete="off" />
+                                <InputText id="codigo-tv" ref="inputCodigo" v-model="codigo" maxlength="6" class="uppercase" autocomplete="off" />
                             </div>
                             <div class="flex flex-col gap-2">
                                 <label for="nombre-tv" class="font-semibold text-color">Nombre</label>
                                 <InputText id="nombre-tv" v-model="nombreTv" maxlength="100" placeholder="Sala de espera" autocomplete="off" />
                             </div>
-                            <Button type="submit" label="Vincular" icon="pi pi-link" :disabled="!codigo || !nombreTv" :loading="vinculando" />
+                            <Button type="submit" label="Vincular" icon="pi pi-link" :disabled="!puedeVincular" :loading="vinculando" />
                         </form>
 
                         <div class="overflow-x-auto">
@@ -233,7 +247,8 @@ onBeforeUnmount(() => clearInterval(timerPrevia));
                                 <Column header="Último acceso">
                                     <template #body="{ data }">{{ formatearFecha(data.ultimo_acceso) }}</template>
                                 </Column>
-                                <Column header="">
+                                <Column>
+                                    <template #header><span class="sr-only">Acciones</span></template>
                                     <template #body="{ data }">
                                         <Button label="Desvincular" severity="danger" text size="small" :aria-label="`Desvincular ${data.nombre}`" @click="desvincular(data)" />
                                     </template>
@@ -253,6 +268,8 @@ onBeforeUnmount(() => clearInterval(timerPrevia));
  * con --pantalla-escala; por omisión sale del viewport (1vw / 1.7vh) y acá no sirve, así que se fija como fracción
  * del ancho del marco (container query: `cqw` se mide contra el ancestro con container-type, por eso el marco y la
  * vista previa son dos elementos distintos). 0,95cqw equivale a lo que da min(1vw, 1.7vh) en una pantalla 16:9.
+ * Es una aproximación: el televisor real tiene además una barra superior (título y reloj) que le quita alto útil,
+ * así que acá entran algo más de tarjetas antes de recortar.
  */
 .previa-marco {
     container-type: inline-size;
@@ -269,6 +286,11 @@ onBeforeUnmount(() => clearInterval(timerPrevia));
     background: var(--pantalla-fondo);
     color: var(--pantalla-texto);
     font-family: system-ui, sans-serif;
+}
+.cargando {
+    margin: 0;
+    font-size: calc(var(--pantalla-escala) * 3);
+    color: var(--pantalla-texto-suave);
 }
 /* Navegadores sin container queries: tamaño fijo en vez de perder la escala. */
 @supports not (width: 1cqw) {

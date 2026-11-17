@@ -222,6 +222,210 @@ describe('PantallaLlamados', () => {
         expect(pantallaService.listarTelevisores).toHaveBeenCalledTimes(2);
     });
 
+    describe('vista previa', () => {
+        const TARJETA = { tipo: 'profesional', id: 1, nombre: 'Dra. Pérez', consultorio: '3', en_atencion: [{ nombre: 'Juan Gómez' }], siguientes: [{ nombre: 'Ana Ruiz' }] };
+
+        it('renderiza dentro de .previa las tarjetas que devuelve vistaPrevia', async () => {
+            vi.mocked(pantallaService.vistaPrevia).mockResolvedValue({ data: { tarjetas: [TARJETA] } });
+            const w = montar();
+            await flushPromises();
+            const previa = w.find('.previa');
+            expect(previa.text()).toContain('Juan Gómez');
+            expect(previa.text()).toContain('Ana Ruiz');
+        });
+
+        it('es una región con nombre accesible', async () => {
+            const w = montar();
+            await flushPromises();
+            const previa = w.find('.previa');
+            expect(previa.attributes('role')).toBe('region');
+            expect(previa.attributes('aria-label')).toBe('Vista previa de la pantalla del televisor');
+        });
+
+        it('muestra "Cargando…" hasta la primera respuesta y no el aviso de que no hay turnos', async () => {
+            let resolver;
+            vi.mocked(pantallaService.vistaPrevia).mockReturnValue(new Promise((r) => (resolver = r)));
+            const w = montar();
+            await flushPromises();
+            expect(w.find('.previa').text()).toContain('Cargando');
+            expect(w.find('.previa').text()).not.toContain('No hay turnos para mostrar');
+
+            resolver({ data: { tarjetas: [] } });
+            await flushPromises();
+            expect(w.find('.previa').text()).not.toContain('Cargando');
+            expect(w.find('.previa').text()).toContain('No hay turnos para mostrar');
+        });
+
+        it('si la primera respuesta es un error deja de decir "Cargando…"', async () => {
+            vi.mocked(pantallaService.vistaPrevia).mockRejectedValue({});
+            const w = montar();
+            await flushPromises();
+            expect(w.find('.previa').text()).not.toContain('Cargando');
+        });
+    });
+
+    describe('errores de carga al montar', () => {
+        it('listarVisibles con mensaje del servidor', async () => {
+            vi.mocked(pantallaService.listarVisibles).mockRejectedValue({ response: { data: { error: 'Sin permisos' } } });
+            const w = montar();
+            await flushPromises();
+            expect(w.text()).toContain('Sin permisos');
+        });
+
+        it('listarVisibles sin cuerpo de error usa el texto por defecto', async () => {
+            vi.mocked(pantallaService.listarVisibles).mockRejectedValue(new Error('red'));
+            const w = montar();
+            await flushPromises();
+            expect(w.text()).toContain('No se pudo cargar la lista');
+        });
+
+        it('listarTelevisores', async () => {
+            vi.mocked(pantallaService.listarTelevisores).mockRejectedValue(new Error('red'));
+            const w = montar();
+            await flushPromises();
+            expect(w.text()).toContain('No se pudo cargar la lista de televisores');
+        });
+
+        it('vistaPrevia', async () => {
+            vi.mocked(pantallaService.vistaPrevia).mockRejectedValue(new Error('red'));
+            const w = montar();
+            await flushPromises();
+            expect(w.text()).toContain('No se pudo cargar la vista previa');
+        });
+    });
+
+    describe('carreras al guardar', () => {
+        it('descarta una lista tardía aunque la edición que la hizo recargar haya terminado antes de que llegue', async () => {
+            let resolverLista;
+            vi.mocked(pantallaService.actualizarVisible)
+                .mockRejectedValueOnce({ response: { data: { error: 'Falló' } } })
+                .mockResolvedValueOnce({ data: { consultorio: null, mostrar_en_pantalla: true } });
+            const w = montar();
+            await flushPromises();
+            // a partir de acá, la recarga que dispara el error queda pendiente
+            vi.mocked(pantallaService.listarVisibles).mockReturnValueOnce(new Promise((r) => (resolverLista = r)));
+
+            await interruptor(w, 'Rehabilitación').trigger('click'); // falla y pide recargar
+            await flushPromises();
+            await interruptor(w, 'Dr. Gómez').trigger('click'); // empieza y termina mientras la lista sigue en vuelo
+            await flushPromises();
+            expect(interruptor(w, 'Dr. Gómez').element.checked).toBe(true);
+
+            resolverLista({ data: FILAS.map((f) => ({ ...f })) }); // la lista vieja todavía dice que Dr. Gómez está oculto
+            await flushPromises();
+            expect(interruptor(w, 'Dr. Gómez').element.checked).toBe(true);
+        });
+    });
+
+    describe('consultorio', () => {
+        it('vaciar el campo envía { consultorio: "" }', async () => {
+            vi.mocked(pantallaService.actualizarVisible).mockResolvedValue({ data: { consultorio: null, mostrar_en_pantalla: true } });
+            const w = montar();
+            await flushPromises();
+            const campo = campoConsultorio(w, 'Dra. Pérez');
+            await campo.setValue('');
+            await campo.trigger('change');
+            await flushPromises();
+            expect(pantallaService.actualizarVisible).toHaveBeenCalledWith('profesional', 1, { consultorio: '' });
+        });
+
+        it('si el servidor normaliza lo escrito, el campo muestra el valor real', async () => {
+            vi.mocked(pantallaService.actualizarVisible).mockResolvedValue({ data: { consultorio: null, mostrar_en_pantalla: false } });
+            const w = montar();
+            await flushPromises();
+            const campo = campoConsultorio(w, 'Dr. Gómez'); // sin consultorio: el modelo no cambia al volver null
+            await campo.setValue('   ');
+            await campo.trigger('change');
+            await flushPromises();
+            expect(pantallaService.actualizarVisible).toHaveBeenCalledWith('profesional', 2, { consultorio: '   ' });
+            expect(campoConsultorio(w, 'Dr. Gómez').element.value).toBe('');
+        });
+    });
+
+    describe('televisores', () => {
+        const boton = (w) => w.find('form button[type="submit"]');
+
+        it('vincular envía código y nombre sin espacios sobrantes', async () => {
+            const w = montar();
+            await flushPromises();
+            await w.find('#codigo-tv').setValue('  AB12CD ');
+            await w.find('#nombre-tv').setValue('  Recepción  ');
+            await w.find('form').trigger('submit');
+            await flushPromises();
+            expect(pantallaService.vincularTelevisor).toHaveBeenCalledWith({ codigo: 'AB12CD', nombre: 'Recepción' });
+        });
+
+        it('campos con solo espacios no habilitan Vincular ni envían', async () => {
+            const w = montar();
+            await flushPromises();
+            await w.find('#codigo-tv').setValue('   ');
+            await w.find('#nombre-tv').setValue('   ');
+            expect(boton(w).attributes('disabled')).toBeDefined();
+            await w.find('form').trigger('submit');
+            await flushPromises();
+            expect(pantallaService.vincularTelevisor).not.toHaveBeenCalled();
+        });
+
+        it('un segundo envío mientras el primero sigue en curso se ignora', async () => {
+            let resolver;
+            vi.mocked(pantallaService.vincularTelevisor).mockReturnValue(new Promise((r) => (resolver = r)));
+            const w = montar();
+            await flushPromises();
+            await w.find('#codigo-tv').setValue('AB12CD');
+            await w.find('#nombre-tv').setValue('Recepción');
+            await w.find('form').trigger('submit');
+            await w.find('form').trigger('submit');
+            expect(pantallaService.vincularTelevisor).toHaveBeenCalledTimes(1);
+            resolver({ data: {} });
+            await flushPromises();
+            await w.find('#codigo-tv').setValue('ZZ99ZZ');
+            await w.find('#nombre-tv').setValue('Otra');
+            await w.find('form').trigger('submit');
+            await flushPromises();
+            expect(pantallaService.vincularTelevisor).toHaveBeenCalledTimes(2);
+        });
+
+        it('tras vincular con éxito el foco vuelve al campo de código', async () => {
+            const w = montar();
+            await flushPromises();
+            await w.find('#codigo-tv').setValue('AB12CD');
+            await w.find('#nombre-tv').setValue('Recepción');
+            w.find('#nombre-tv').element.focus();
+            await w.find('form').trigger('submit');
+            await flushPromises();
+            expect(document.activeElement).toBe(w.find('#codigo-tv').element);
+        });
+
+        it('tras un error al vincular el foco no se mueve', async () => {
+            vi.mocked(pantallaService.vincularTelevisor).mockRejectedValue({ response: { data: { error: 'Código inválido o vencido' } } });
+            const w = montar();
+            await flushPromises();
+            await w.find('#codigo-tv').setValue('AB12CD');
+            await w.find('#nombre-tv').setValue('Recepción');
+            w.find('#nombre-tv').element.focus();
+            await w.find('form').trigger('submit');
+            await flushPromises();
+            expect(document.activeElement).toBe(w.find('#nombre-tv').element);
+        });
+
+        it('desvincular con error lo muestra y no recarga la lista', async () => {
+            vi.mocked(pantallaService.desvincularTelevisor).mockRejectedValue({ response: { data: { error: 'Televisor no encontrado' } } });
+            const w = montar();
+            await flushPromises();
+            await w.find('button[aria-label="Desvincular Sala de espera"]').trigger('click');
+            await flushPromises();
+            expect(w.text()).toContain('Televisor no encontrado');
+            expect(pantallaService.listarTelevisores).toHaveBeenCalledTimes(1);
+        });
+
+        it('la columna de acciones tiene encabezado accesible', async () => {
+            const w = montar();
+            await flushPromises();
+            const encabezados = w.findAll('th').map((th) => th.text());
+            expect(encabezados).toContain('Acciones');
+        });
+    });
+
     describe('refresco de la vista previa', () => {
         it('se repite cada 5 segundos y el temporizador se limpia al desmontar', async () => {
             vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
