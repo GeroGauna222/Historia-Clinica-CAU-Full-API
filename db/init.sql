@@ -59,6 +59,8 @@ CREATE TABLE usuarios (
     lugar_atencion_contacto VARCHAR(150) DEFAULT NULL,
     lugar_atencion_email VARCHAR(100) DEFAULT NULL,
     duracion_turno INT NOT NULL DEFAULT 20,
+    consultorio VARCHAR(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL,
+    mostrar_en_pantalla TINYINT(1) NOT NULL DEFAULT 0,
     foto VARCHAR(255) DEFAULT NULL,
     activo TINYINT(1) NOT NULL DEFAULT 1 
 ) ENGINE=InnoDB
@@ -302,6 +304,8 @@ CREATE TABLE turnos (
     ausencia ENUM('con_aviso', 'sin_aviso') DEFAULT NULL,
     estado_asistencia ENUM('programado', 'presente', 'con_aviso', 'sin_aviso') NOT NULL DEFAULT 'programado',
     es_sobreturno TINYINT(1) NOT NULL DEFAULT 0,
+    atencion_inicio DATETIME NULL,
+    atencion_fin DATETIME NULL,
     creado_por INT NULL,
     creado_en TIMESTAMP NULL DEFAULT NULL,
     FOREIGN KEY (paciente_id) REFERENCES pacientes(id),
@@ -351,6 +355,8 @@ CREATE TABLE grupos_profesionales (
     descripcion TEXT,
     color VARCHAR(20) DEFAULT '#00936B',
     es_rehabilitacion TINYINT(1) NOT NULL DEFAULT 0,
+    consultorio VARCHAR(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL,
+    mostrar_en_pantalla TINYINT(1) NOT NULL DEFAULT 0,
     creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB
   DEFAULT CHARSET=utf8mb4
@@ -368,6 +374,8 @@ CREATE TABLE turnos_grupales (
     observaciones TEXT DEFAULT NULL,
     ausencia ENUM('con_aviso', 'sin_aviso') DEFAULT NULL,
     estado_asistencia ENUM('programado', 'presente', 'con_aviso', 'sin_aviso') NOT NULL DEFAULT 'programado',
+    atencion_inicio DATETIME NULL,
+    atencion_fin DATETIME NULL,
     FOREIGN KEY (grupo_id) REFERENCES grupos_profesionales(id) ON DELETE CASCADE,
     FOREIGN KEY (paciente_id) REFERENCES pacientes(id),
     FOREIGN KEY (creado_por) REFERENCES usuarios(id),
@@ -387,6 +395,25 @@ CREATE TABLE grupo_miembros (
 ) ENGINE=InnoDB
   DEFAULT CHARSET=utf8mb4
   COLLATE=utf8mb4_unicode_ci;
+
+-- ==============================================
+-- PANTALLAS DE LLAMADOS (televisores vinculados)
+-- ==============================================
+CREATE TABLE pantallas (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    nombre VARCHAR(100) NULL,
+    codigo VARCHAR(6) NULL,
+    codigo_expira DATETIME NULL,
+    clave_hash CHAR(64) NOT NULL,
+    vinculada_en DATETIME NULL,
+    vinculada_por INT NULL,
+    revocada_en DATETIME NULL,
+    ultimo_acceso DATETIME NULL,
+    creado_en DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_pantallas_codigo (codigo),
+    UNIQUE KEY uq_pantallas_clave_hash (clave_hash),
+    FOREIGN KEY (vinculada_por) REFERENCES usuarios(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE comunicados (
     id INT AUTO_INCREMENT PRIMARY KEY,
