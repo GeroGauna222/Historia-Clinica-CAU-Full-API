@@ -14,7 +14,8 @@ api.interceptors.response.use(
         if (error.response?.status === 401) {
             const currentPath = router.currentRoute?.value?.path || '';
             const publicPaths = ['/auth/login', '/recuperar', '/logout'];
-            const isPublic = publicPaths.some((p) => currentPath.startsWith(p)) || currentPath.startsWith('/reset/');
+            // '/pantalla' va exacta: un prefijo cubriría también '/pantalla-de-llamados' (administración, privada).
+            const isPublic = publicPaths.some((p) => currentPath.startsWith(p)) || currentPath.startsWith('/reset/') || currentPath === '/pantalla';
 
             if (!isPublic) {
                 router.push('/auth/login');

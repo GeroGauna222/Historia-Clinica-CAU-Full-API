@@ -26,6 +26,13 @@ const router = createRouter({
             name: 'ResetContraseña',
             component: () => import('@/views/pages/auth/ResetPassword.vue')
         },
+        // 📺 Pantalla de llamados (pública, sin sesión: el televisor se vincula por código)
+        {
+            path: '/pantalla',
+            name: 'pantalla',
+            component: () => import('@/views/pages/pantalla/PantallaTV.vue'),
+            meta: { publica: true }
+        },
         // 🌐 App principal (protegida)
         {
             path: '/',
@@ -221,7 +228,7 @@ const router = createRouter({
 
 // 🛡️ Guard global para proteger rutas
 router.beforeEach(async (to) => {
-    const publicPages = ['/auth/login', '/recuperar', '/logout'];
+    const publicPages = ['/auth/login', '/recuperar', '/logout', '/pantalla'];
     const isResetRoute = to.path.startsWith('/reset/');
     const authRequired = !publicPages.includes(to.path) && !isResetRoute;
     const userStore = useUserStore();
