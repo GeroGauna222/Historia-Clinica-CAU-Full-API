@@ -1,6 +1,7 @@
 import AppLayout from '@/layout/AppLayout.vue';
 import { createRouter, createWebHistory } from 'vue-router';
 import { useUserStore } from '@/stores/user';
+import { requiereSesion } from './accesoRutas';
 
 const router = createRouter({
     history: createWebHistory(),
@@ -228,9 +229,7 @@ const router = createRouter({
 
 // 🛡️ Guard global para proteger rutas
 router.beforeEach(async (to) => {
-    const publicPages = ['/auth/login', '/recuperar', '/logout', '/pantalla'];
-    const isResetRoute = to.path.startsWith('/reset/');
-    const authRequired = !publicPages.includes(to.path) && !isResetRoute;
+    const authRequired = requiereSesion(to);
     const userStore = useUserStore();
     const needsUser = authRequired || Boolean(to.meta.roles);
 

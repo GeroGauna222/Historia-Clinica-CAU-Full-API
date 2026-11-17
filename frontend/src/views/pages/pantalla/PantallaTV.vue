@@ -1,19 +1,32 @@
 <script setup>
-import { onBeforeUnmount, onMounted, ref } from 'vue';
+import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import PantallaTarjetas from '@/components/pantalla/PantallaTarjetas.vue';
 import { usePantallaTV } from '@/composables/usePantallaTV';
+import '@/assets/pantalla.css';
 
 const { estado, codigo, tarjetas, reconectando, sonidoActivo, activarSonido, iniciar, detener } = usePantallaTV();
 
 const hora = ref('');
+const btnSonido = ref(null);
 let relojTimer = null;
 function actualizarHora() {
     hora.value = new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
 }
 
+// `autofocus` no actúa en un botón que aparece después del montaje: se enfoca a mano para poder activarlo con el control remoto.
+watch(
+    () => estado.value === 'vinculada' && !sonidoActivo.value,
+    async (visible) => {
+        if (visible) {
+            await nextTick();
+            btnSonido.value?.focus();
+        }
+    }
+);
+
 onMounted(() => {
     actualizarHora();
-    relojTimer = setInterval(actualizarHora, 10000);
+    relojTimer = setInterval(actualizarHora, 1000);
     iniciar();
 });
 onBeforeUnmount(() => {
@@ -23,11 +36,11 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-    <main class="pantalla-tv">
+    <main class="pantalla-tv pantalla-paleta">
         <header class="barra">
             <span class="titulo">Turnos</span>
             <span class="reloj">{{ hora }}</span>
-            <button v-if="estado === 'vinculada' && !sonidoActivo" class="sonido" autofocus @click="activarSonido">Activar sonido</button>
+            <button v-if="estado === 'vinculada' && !sonidoActivo" ref="btnSonido" class="sonido" @click="activarSonido">Activar sonido</button>
         </header>
 
         <section v-if="estado === 'vinculada' && !reconectando" class="contenido">
@@ -50,16 +63,8 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-/* Paleta propia del televisor: siempre oscura, independiente del tema de la app. Único lugar donde se definen
-   las variables --pantalla-* (en rgb para no usar colores hexadecimales, que check:tokens rechaza). */
+/* Los colores vienen de .pantalla-paleta (assets/pantalla.css): el televisor es siempre oscuro, sin depender del tema de la app. */
 .pantalla-tv {
-    --pantalla-fondo: rgb(11 18 32);
-    --pantalla-tarjeta: rgb(17 28 51);
-    --pantalla-borde: rgb(36 54 94);
-    --pantalla-acento: rgb(251 191 36);
-    --pantalla-ok: rgb(74 222 128);
-    --pantalla-texto: rgb(229 231 235);
-    --pantalla-texto-suave: rgb(159 176 208);
     position: fixed;
     inset: 0;
     display: flex;
@@ -70,6 +75,7 @@ onBeforeUnmount(() => {
     padding: 1.25rem 1.75rem;
     gap: 1rem;
     overflow: hidden;
+    cursor: none;
 }
 .barra {
     display: flex;
@@ -94,6 +100,10 @@ onBeforeUnmount(() => {
     background: transparent;
     color: var(--pantalla-acento);
 }
+.sonido:focus-visible {
+    outline: 4px solid var(--pantalla-texto);
+    outline-offset: 4px;
+}
 .contenido {
     flex: 1;
     min-height: 0;
@@ -117,6 +127,8 @@ onBeforeUnmount(() => {
     font-size: clamp(5rem, 14vw, 14rem);
     font-weight: 800;
     letter-spacing: 0.15em;
+    /* el espaciado se suma también tras la última letra: se compensa a la izquierda para que quede centrado */
+    padding-left: 0.15em;
     color: var(--pantalla-acento);
     margin: 0;
 }
