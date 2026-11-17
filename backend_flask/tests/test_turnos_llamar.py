@@ -24,9 +24,12 @@ def test_llamar_abre_atencion_y_cierra_la_anterior(client, monkeypatch):
 
     assert r.status_code == 200
     sqls = [q for q, _ in cursor.executed]
-    assert any("SET atencion_fin = NOW()" in q and "id <> %s" in q for q in sqls)
-    abrir = [q for q in sqls if "atencion_inicio = NOW()" in q][0]
-    assert "atencion_fin = NULL" in abrir and "estado_asistencia = 'presente'" in abrir
+    cierre = [(q, p) for q, p in cursor.executed if "SET atencion_fin = NOW()" in q][0]
+    assert "id <> %s" in cierre[0] and "usuario_id = %s" in cierre[0]
+    assert cierre[1] == (7, 10)
+    abrir_q, abrir_p = [(q, p) for q, p in cursor.executed if "atencion_inicio = NOW()" in q][0]
+    assert "atencion_fin = NULL" in abrir_q and "estado_asistencia = 'presente'" in abrir_q
+    assert abrir_p == (10,)
     assert conn.committed and cursor.closed and conn.closed
 
 
@@ -108,16 +111,19 @@ def grupal(**kw):
 
 def test_llamar_grupal_miembro_abre_atencion_sin_cerrar_otras(client, monkeypatch):
     login_as(client, MockUser(user_id=7, rol="area"))
-    cursor, conn = preparar(monkeypatch, [grupal(), {"1": 1}])
+    cursor, conn = preparar(monkeypatch, [grupal(grupo_id=3), {"1": 1}])
 
     r = client.post("/api/turnos/grupales/5/llamar")
 
     assert r.status_code == 200
-    sqls = [q for q, _ in cursor.executed]
-    assert any("FROM grupo_miembros" in q for q in sqls)
-    assert not any("SET atencion_fin" in q for q in sqls)
-    abrir = [q for q in sqls if "UPDATE turnos_grupales" in q][0]
-    assert "atencion_inicio = NOW()" in abrir and "atencion_fin = NULL" in abrir
+    q_miembro = [(q, p) for q, p in cursor.executed if "FROM grupo_miembros" in q]
+    assert q_miembro and q_miembro[0][1] == (3, 7)  # (turno["grupo_id"], current_user.id)
+    # Un unico UPDATE: llamar a un paciente no cierra las demas atenciones del grupo.
+    assert len([q for q, _ in cursor.executed if q.lstrip().startswith("UPDATE")]) == 1
+    abrir_q, abrir_p = [(q, p) for q, p in cursor.executed if "UPDATE turnos_grupales" in q][0]
+    assert "atencion_inicio = NOW()" in abrir_q and "atencion_fin = NULL" in abrir_q
+    assert "estado_asistencia = 'presente'" in abrir_q
+    assert abrir_p == (5,)
     assert conn.committed
 
 
@@ -137,5 +143,12 @@ def test_llamar_grupal_inexistente_devuelve_404(client, monkeypatch):
 def test_llamar_grupal_ausente_devuelve_409(client, monkeypatch):
     login_as(client, MockUser(user_id=7, rol="area"))
     cursor, conn = preparar(monkeypatch, [grupal(estado_asistencia="con_aviso"), {"1": 1}])
+    assert client.post("/api/turnos/grupales/5/llamar").status_code == 409
+    assert not conn.committed
+
+
+def test_llamar_grupal_de_otro_dia_devuelve_409(client, monkeypatch):
+    login_as(client, MockUser(user_id=7, rol="area"))
+    cursor, conn = preparar(monkeypatch, [grupal(es_hoy=0), {"1": 1}])
     assert client.post("/api/turnos/grupales/5/llamar").status_code == 409
     assert not conn.committed
