@@ -179,7 +179,8 @@ def editar_grupo(grupo_id):
                     (grupo_id,),
                 )
                 actual = cursor.fetchone()
-                if actual and _to_bool(actual["mostrar_en_pantalla"] if isinstance(actual, dict) else actual[0]):
+                # cursor sin dictionary=True: la fila es una tupla
+                if actual and _to_bool(actual[0]):
                     return jsonify({
                         "error": "El grupo está visible en la pantalla de llamados: ocultalo antes de quitarle el consultorio"
                     }), 400
@@ -201,7 +202,7 @@ def editar_grupo(grupo_id):
         if miembros_raw is not None:
             cursor.execute("DELETE FROM grupo_miembros WHERE grupo_id=%s", (grupo_id,))
             ids_limpios = extraer_ids_limpios(miembros_raw)
-
+            
             if ids_limpios:
                 # 🔓 SIN RESTRICCIONES DE ROL
                 ids_str = ','.join(str(x) for x in ids_limpios)

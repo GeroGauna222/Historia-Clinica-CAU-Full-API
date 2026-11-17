@@ -80,7 +80,6 @@ def test_actualizar_perfil_con_foto_invalida(client, monkeypatch, tmp_path):
     os.remove(saved_path)
 
 
-
 # ---- consultorio (pantalla de llamados) ----
 def _usuario_actual():
     return {"id": 5, "username": "dra", "email": "dra@example.com", "rol": "profesional"}
@@ -125,6 +124,21 @@ def test_actualizar_usuario_consultorio_demasiado_largo_es_400_sin_update(client
     assert updates == []
     assert connection.committed is False
     assert cursor.closed is True and connection.closed is True
+
+
+def test_actualizar_usuario_consultorio_numerico_se_guarda_como_texto(client, monkeypatch):
+    response, _, _, updates = _put_usuario(client, monkeypatch, {"consultorio": 3})
+
+    assert response.status_code == 200
+    assert updates[0][1] == ("3", 5)
+
+
+def test_actualizar_usuario_consultorio_null_guarda_none(client, monkeypatch):
+    response, _, _, updates = _put_usuario(client, monkeypatch, {"consultorio": None})
+
+    assert response.status_code == 200
+    assert "consultorio = %s" in updates[0][0]
+    assert updates[0][1] == (None, 5)
 
 
 def test_actualizar_usuario_consultorio_junto_a_otros_campos(client, monkeypatch):

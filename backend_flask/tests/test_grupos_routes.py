@@ -59,7 +59,7 @@ def test_actualizar_grupo_guarda_consultorio(client, monkeypatch):
 
 def test_no_se_puede_quitar_consultorio_a_grupo_visible(client, monkeypatch):
     response, cursor, connection, updates = _put_grupo(
-        client, monkeypatch, {"consultorio": ""}, fetchone=[{"mostrar_en_pantalla": 1}]
+        client, monkeypatch, {"consultorio": ""}, fetchone=[(1,)]
     )
 
     assert response.status_code == 400
@@ -72,17 +72,49 @@ def test_no_se_puede_quitar_consultorio_a_grupo_visible(client, monkeypatch):
 
 
 def test_grupo_visible_no_aplica_otros_cambios_a_medias(client, monkeypatch):
-    response, _, _, updates = _put_grupo(
-        client, monkeypatch, {"nombre": "Otro", "consultorio": None}, fetchone=[{"mostrar_en_pantalla": 1}]
+    response, cursor, connection, updates = _put_grupo(
+        client,
+        monkeypatch,
+        {"nombre": "Otro", "consultorio": None, "miembros": [1, 2]},
+        fetchone=[(1,)],
     )
 
     assert response.status_code == 400
+    # Solo el SELECT de visibilidad: ningun UPDATE/DELETE/INSERT ni commit.
+    assert len(cursor.executed) == 1
+    assert cursor.executed[0][0].strip().upper().startswith("SELECT")
     assert updates == []
+    assert connection.committed is False
+
+
+def test_consultorio_none_en_grupo_consulta_visibilidad_y_guarda_none(client, monkeypatch):
+    response, cursor, _, updates = _put_grupo(client, monkeypatch, {"consultorio": None}, fetchone=[(0,)])
+
+    assert response.status_code == 200
+    assert "mostrar_en_pantalla" in cursor.executed[0][0]
+    assert updates[0][1] == (None, 3)
+
+
+def test_consultorio_numerico_en_grupo_se_guarda_como_texto(client, monkeypatch):
+    response, cursor, _, updates = _put_grupo(client, monkeypatch, {"consultorio": 3})
+
+    assert response.status_code == 200
+    assert updates[0][1] == ("3", 3)
+    # Con consultorio no vacio no se consulta la visibilidad.
+    assert len(cursor.executed) == 1
+
+
+def test_quitar_consultorio_a_grupo_inexistente_no_da_404(client, monkeypatch):
+    # Comportamiento actual (sin 404 explicito): el SELECT no encuentra fila y el UPDATE no afecta nada.
+    response, _, _, updates = _put_grupo(client, monkeypatch, {"consultorio": ""}, fetchone=[])
+
+    assert response.status_code == 200
+    assert updates[0][1] == (None, 3)
 
 
 def test_quitar_consultorio_a_grupo_no_visible(client, monkeypatch):
     response, _, connection, updates = _put_grupo(
-        client, monkeypatch, {"consultorio": "   "}, fetchone=[{"mostrar_en_pantalla": 0}]
+        client, monkeypatch, {"consultorio": "   "}, fetchone=[(0,)]
     )
 
     assert response.status_code == 200
