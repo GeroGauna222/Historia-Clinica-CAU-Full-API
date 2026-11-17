@@ -58,7 +58,11 @@ const comunicados = computed(() => dashboard.value?.comunicados || []);
 const alertas = computed(() => dashboard.value?.alertas || {});
 const ausenciasBloqueos = computed(() => dashboard.value?.ausencias_bloqueos || []);
 
-const fetchDashboard = async (silencioso = false) => {
+const AVISO_LISTA_DESACTUALIZADA = 'Se completó la acción, pero no se pudo actualizar la lista.';
+
+// Recarga silenciosa: si ya hay datos, un fallo no reemplaza el dashboard por el banner de error;
+// se conservan los datos viejos y se avisa con una advertencia.
+const fetchDashboard = async (silencioso = false, avisoSiFalla = AVISO_LISTA_DESACTUALIZADA) => {
     try {
         if (!silencioso) loading.value = true;
         error.value = null;
@@ -66,7 +70,11 @@ const fetchDashboard = async (silencioso = false) => {
         dashboard.value = res.data;
     } catch (err) {
         console.error('Error dashboard:', err);
-        error.value = 'No se pudo cargar el inicio.';
+        if (silencioso && dashboard.value) {
+            toast.add({ severity: 'warn', summary: 'Lista sin actualizar', detail: avisoSiFalla, life: 4000 });
+        } else {
+            error.value = 'No se pudo cargar el inicio.';
+        }
     } finally {
         if (!silencioso) loading.value = false;
     }
@@ -125,13 +133,15 @@ const ejecutarAtencion = async (t, accion) => {
         else await turnosService.llamar(id);
         await fetchDashboard(true);
     } catch (err) {
-        console.error('Error al actualizar la atención:', err);
         toast.add({
             severity: 'error',
             summary: 'No se pudo completar la acción',
             detail: err?.response?.data?.error || err?.response?.data?.message || 'Reintentá en unos segundos.',
             life: 4000
         });
+        // Error HTTP (409/404/403): el estado cambió en otra pestaña o por el cierre automático, y la fila quedó con
+        // botones obsoletos. Con error de red (sin respuesta) no hay nada nuevo que traer.
+        if (err?.response) await fetchDashboard(true, 'No se pudo actualizar la lista.');
     } finally {
         llamando.value = null;
     }
@@ -140,11 +150,11 @@ const ejecutarAtencion = async (t, accion) => {
 const actualizarAsistencia = async ({ turnoId, estado, esGrupal = false }) => {
     try {
         const idStr = String(turnoId);
-        const idReal = idStr.startsWith('grupal-') ? idStr.replace('grupal-', '') : turnoId;
-        const url = esGrupal || idStr.startsWith('grupal-') ? `/turnos/grupales/${idReal}/asistencia` : `/turnos/${idReal}/asistencia`;
+        const idSinPrefijo = idStr.startsWith('grupal-') ? idStr.replace('grupal-', '') : turnoId;
+        const url = esGrupal || idStr.startsWith('grupal-') ? `/turnos/grupales/${idSinPrefijo}/asistencia` : `/turnos/${idSinPrefijo}/asistencia`;
         await api.patch(url, { estado_asistencia: estado }, { withCredentials: true });
 
-        const target = turnosHoy.value.find((item) => item.id === turnoId || item.turnoId === idReal);
+        const target = turnosHoy.value.find((item) => item.id === turnoId || item.turnoId === idSinPrefijo);
         if (target) {
             target.estado_asistencia = estado;
             target.ausencia = ['con_aviso', 'sin_aviso'].includes(estado) ? estado : null;
@@ -281,7 +291,7 @@ const cerrarAlertaHoy = () => {
                             </h2>
                             <div class="flex items-center gap-2">
                                 <Tag :value="turnosHoy.length + ' turnos'" severity="info" rounded />
-                                <Tag v-if="atencionesEnCurso.length > 0" :value="atencionesEnCurso.length + (atencionesEnCurso.length === 1 ? ' en atención' : ' en atención')" severity="success" rounded class="font-semibold" />
+                                <Tag v-if="atencionesEnCurso.length > 0" :value="atencionesEnCurso.length + ' en atención'" severity="success" rounded class="font-semibold" />
                             </div>
                         </div>
 
