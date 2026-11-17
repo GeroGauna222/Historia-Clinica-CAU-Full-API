@@ -1,3 +1,4 @@
+// src/service/pantallaService.js
 import api from '@/api/axios';
 
 export const CABECERA_CLAVE = 'X-Pantalla-Clave';
@@ -10,7 +11,8 @@ export default {
     obtenerLlamados(clave) {
         return api.get('/pantalla/llamados', { headers: { [CABECERA_CLAVE]: clave }, withCredentials: false });
     },
-    // Configuración (con sesión)
+    // Configuración (con sesión): sin withCredentials porque api/axios.js ya lo tiene en true por defecto;
+    // los dos métodos del televisor lo ponen en false a propósito (ADR 0001).
     vistaPrevia() {
         return api.get('/pantalla/vista-previa');
     },

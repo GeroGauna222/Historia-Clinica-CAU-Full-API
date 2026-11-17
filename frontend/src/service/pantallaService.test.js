@@ -38,22 +38,39 @@ describe('pantallaService', () => {
         expect(mockPost).toHaveBeenCalledWith('/pantalla/vinculacion', {}, { withCredentials: false });
     });
 
-    it('los metodos con sesion usan las rutas correctas', () => {
+    it('vistaPrevia hace GET a /pantalla/vista-previa', () => {
         pantallaService.vistaPrevia();
         expect(mockGet).toHaveBeenCalledWith('/pantalla/vista-previa');
+    });
 
+    it('listarVisibles hace GET a /pantalla/visibles', () => {
         pantallaService.listarVisibles();
         expect(mockGet).toHaveBeenCalledWith('/pantalla/visibles');
+    });
 
-        pantallaService.actualizarVisible('consultorio', 5, { visible: false });
-        expect(mockPatch).toHaveBeenCalledWith('/pantalla/visibles/consultorio/5', { visible: false });
+    it('actualizarVisible hace PATCH para un usuario', () => {
+        const cambios = { mostrar_en_pantalla: false, consultorio: 'Consultorio 1' };
+        pantallaService.actualizarVisible('usuario', 5, cambios);
+        expect(mockPatch).toHaveBeenCalledWith('/pantalla/visibles/usuario/5', cambios);
+    });
 
+    it('actualizarVisible hace PATCH para un grupo', () => {
+        const cambios = { mostrar_en_pantalla: true, consultorio: 'Consultorio 2' };
+        pantallaService.actualizarVisible('grupo', 7, cambios);
+        expect(mockPatch).toHaveBeenCalledWith('/pantalla/visibles/grupo/7', cambios);
+    });
+
+    it('listarTelevisores hace GET a /pantalla/televisores', () => {
         pantallaService.listarTelevisores();
         expect(mockGet).toHaveBeenCalledWith('/pantalla/televisores');
+    });
 
-        pantallaService.vincularTelevisor({ codigo: 'ABC123', nombre: 'Sala 1' });
-        expect(mockPost).toHaveBeenCalledWith('/pantalla/televisores', { codigo: 'ABC123', nombre: 'Sala 1' });
+    it('vincularTelevisor hace POST con codigo y nombre', () => {
+        pantallaService.vincularTelevisor({ codigo: 'K7M2PQ', nombre: 'Sala 1' });
+        expect(mockPost).toHaveBeenCalledWith('/pantalla/televisores', { codigo: 'K7M2PQ', nombre: 'Sala 1' });
+    });
 
+    it('desvincularTelevisor hace DELETE a /pantalla/televisores/:id', () => {
         pantallaService.desvincularTelevisor(9);
         expect(mockDelete).toHaveBeenCalledWith('/pantalla/televisores/9');
     });
