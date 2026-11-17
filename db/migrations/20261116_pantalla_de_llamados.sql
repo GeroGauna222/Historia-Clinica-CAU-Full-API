@@ -12,7 +12,8 @@ ALTER TABLE grupos_profesionales
 
 ALTER TABLE turnos
     ADD COLUMN atencion_inicio DATETIME NULL,
-    ADD COLUMN atencion_fin DATETIME NULL;
+    ADD COLUMN atencion_fin DATETIME NULL,
+    ADD INDEX idx_turnos_fecha_inicio (fecha_inicio);
 
 ALTER TABLE turnos_grupales
     ADD COLUMN atencion_inicio DATETIME NULL,

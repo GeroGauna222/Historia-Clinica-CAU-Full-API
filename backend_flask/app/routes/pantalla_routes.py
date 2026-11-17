@@ -32,7 +32,7 @@ SQL_TURNOS_HOY = """
            NOW() AS ahora_db
     FROM turnos t
     JOIN pacientes p ON p.id = t.paciente_id
-    WHERE DATE(t.fecha_inicio) = CURDATE()
+    WHERE t.fecha_inicio >= CURDATE() AND t.fecha_inicio < CURDATE() + INTERVAL 1 DAY
     UNION ALL
     SELECT 'grupo' AS tipo, tg.grupo_id AS entidad_id, tg.id, tg.fecha_inicio, tg.fecha_fin,
            tg.estado_asistencia, tg.atencion_inicio, tg.atencion_fin, 1 AS es_grupal,
@@ -40,17 +40,17 @@ SQL_TURNOS_HOY = """
            NOW() AS ahora_db
     FROM turnos_grupales tg
     JOIN pacientes p ON p.id = tg.paciente_id
-    WHERE DATE(tg.fecha_inicio) = CURDATE()
+    WHERE tg.fecha_inicio >= CURDATE() AND tg.fecha_inicio < CURDATE() + INTERVAL 1 DAY
 """
 
 SQL_VISIBLES = """
     SELECT 'usuario' AS tipo, u.id, u.nombre, u.consultorio, u.mostrar_en_pantalla,
-           EXISTS(SELECT 1 FROM turnos t WHERE t.usuario_id = u.id AND DATE(t.fecha_inicio) = CURDATE()) AS tiene_turnos_hoy
+           EXISTS(SELECT 1 FROM turnos t WHERE t.usuario_id = u.id AND t.fecha_inicio >= CURDATE() AND t.fecha_inicio < CURDATE() + INTERVAL 1 DAY) AS tiene_turnos_hoy
     FROM usuarios u
     WHERE u.activo = 1 AND u.rol IN ('profesional', 'area')
     UNION ALL
     SELECT 'grupo' AS tipo, g.id, g.nombre, g.consultorio, g.mostrar_en_pantalla,
-           EXISTS(SELECT 1 FROM turnos_grupales tg WHERE tg.grupo_id = g.id AND DATE(tg.fecha_inicio) = CURDATE()) AS tiene_turnos_hoy
+           EXISTS(SELECT 1 FROM turnos_grupales tg WHERE tg.grupo_id = g.id AND tg.fecha_inicio >= CURDATE() AND tg.fecha_inicio < CURDATE() + INTERVAL 1 DAY) AS tiene_turnos_hoy
     FROM grupos_profesionales g
     ORDER BY tipo, nombre
 """
@@ -80,15 +80,15 @@ def construir_tarjetas(cursor):
 
     crudas = []
     mostrados = []
-    for e in entidades:
+    for e in sorted(entidades, key=lambda e: (e["tipo"], e["id"])):
         del_dia = por_entidad.get((e["tipo"], e["id"]))
         if not del_dia:
             continue  # de los visibles, solo aparecen los que tienen turnos hoy
         en_atencion = sorted(
-            (t for t in del_dia if t["estado_atencion"] == "en_atencion"), key=_inicio_atencion
+            (t for t in del_dia if t["estado_atencion"] == "en_atencion"), key=lambda t: (_inicio_atencion(t), t["id"])
         )
         siguientes = sorted(
-            (t for t in del_dia if t["estado_atencion"] == "esperando"), key=lambda t: t["fecha_inicio"]
+            (t for t in del_dia if t["estado_atencion"] == "esperando"), key=lambda t: (t["fecha_inicio"], t["id"])
         )[:MAX_SIGUIENTES]
         crudas.append((e, en_atencion, siguientes))
         mostrados.extend(en_atencion + siguientes)
@@ -157,7 +157,9 @@ def actualizar_visible(tipo, entidad_id):
     tabla = TABLAS_VISIBLES.get(tipo)
     if not tabla:
         return jsonify({"error": "Tipo inválido"}), 404
-    data = request.get_json(silent=True) or {}
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"message": "El cuerpo de la solicitud debe ser un objeto JSON"}), 400
     if "mostrar_en_pantalla" in data and not isinstance(data["mostrar_en_pantalla"], bool):
         return jsonify({"error": "mostrar_en_pantalla debe ser verdadero o falso"}), 400
 

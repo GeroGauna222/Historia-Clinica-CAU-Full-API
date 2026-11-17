@@ -310,7 +310,8 @@ CREATE TABLE turnos (
     creado_en TIMESTAMP NULL DEFAULT NULL,
     FOREIGN KEY (paciente_id) REFERENCES pacientes(id),
     FOREIGN KEY (usuario_id) REFERENCES usuarios(id),
-    FOREIGN KEY (creado_por) REFERENCES usuarios(id)
+    FOREIGN KEY (creado_por) REFERENCES usuarios(id),
+    INDEX idx_turnos_fecha_inicio (fecha_inicio)
 ) ENGINE=InnoDB
   DEFAULT CHARSET=utf8mb4
   COLLATE=utf8mb4_unicode_ci;

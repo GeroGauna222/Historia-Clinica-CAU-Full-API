@@ -1,4 +1,5 @@
 import json
+import re
 from datetime import datetime, timedelta
 
 import pytest
@@ -40,6 +41,8 @@ def turno_fila(tipo, entidad_id, tid, paciente_id, nombre, apellido, estado="pre
         "estado_asistencia": estado, "atencion_inicio": atencion_inicio, "atencion_fin": atencion_fin,
         "es_grupal": grupal, "paciente_id": paciente_id,
         "paciente_nombre": nombre, "paciente_apellido": apellido, "ahora_db": AHORA,
+        # Datos que el SQL real no trae, pero que jamás deben llegar a la pantalla aunque algún día lo hicieran.
+        "dni": "30111222", "motivo": "dolor lumbar cronico", "observaciones": "alergia a la penicilina",
     }
 
 
@@ -48,6 +51,10 @@ ENTIDADES = [
     {"tipo": "grupo", "id": 2, "nombre": "Rehabilitación", "consultorio": "Gimnasio"},
     {"tipo": "usuario", "id": 8, "nombre": "Dr. Sin Turnos", "consultorio": "4"},
 ]
+
+
+def norm(consulta):
+    return " ".join(consulta.split())
 
 
 def executed_que_empiezan(cursor, prefijo):
@@ -67,17 +74,18 @@ def test_construir_tarjetas_separa_en_atencion_y_siguientes_con_nombre_abreviado
 
     tarjetas = pantalla_routes.construir_tarjetas(cursor)
 
-    assert [t["nombre"] for t in tarjetas] == ["Dra. Pérez", "Rehabilitación"]  # sin turnos hoy -> no aparece
+    # Sin turnos hoy -> no aparece. Orden determinista por (tipo, id): grupo antes que usuario.
+    assert [t["nombre"] for t in tarjetas] == ["Rehabilitación", "Dra. Pérez"]
     assert tarjetas == [
-        {
-            "tipo": "usuario", "id": 7, "consultorio": "3", "nombre": "Dra. Pérez",
-            "en_atencion": [{"nombre": "María G.", "atencion_inicio": "2026-11-16T10:35:00"}],
-            "siguientes": [{"nombre": "Juan P."}],  # el programado (no presente) no aparece
-        },
         {
             "tipo": "grupo", "id": 2, "consultorio": "Gimnasio", "nombre": "Rehabilitación",
             "en_atencion": [{"nombre": "Luis D.", "atencion_inicio": "2026-11-16T10:20:00"}],
             "siguientes": [],
+        },
+        {
+            "tipo": "usuario", "id": 7, "consultorio": "3", "nombre": "Dra. Pérez",
+            "en_atencion": [{"nombre": "María G.", "atencion_inicio": "2026-11-16T10:35:00"}],
+            "siguientes": [{"nombre": "Juan P."}],  # el programado (no presente) no aparece
         },
     ]
 
@@ -85,10 +93,65 @@ def test_construir_tarjetas_separa_en_atencion_y_siguientes_con_nombre_abreviado
 def test_construir_tarjetas_ejecuta_primero_entidades_y_luego_turnos_de_hoy():
     cursor = FakeCursor(fetchall_results=[ENTIDADES, []])
     pantalla_routes.construir_tarjetas(cursor)
-    assert [q for q, _ in cursor.executed] == [
-        pantalla_routes.SQL_ENTIDADES_VISIBLES,
-        pantalla_routes.SQL_TURNOS_HOY,
-    ]
+    consultas = [norm(q) for q, _ in cursor.executed]
+    assert len(consultas) == 2
+    entidades, turnos = consultas
+    assert "FROM usuarios u" in entidades and "FROM grupos_profesionales g" in entidades
+    assert "FROM turnos t" in turnos and "FROM turnos_grupales tg" in turnos
+    assert all(p is None for _, p in cursor.executed)
+
+
+# ---------------------------------------------------------------- contrato SQL <-> Python
+
+def test_sql_turnos_hoy_trae_todos_los_alias_que_lee_el_codigo():
+    sql = norm(pantalla_routes.SQL_TURNOS_HOY)
+    for alias in ("entidad_id", "ahora_db", "es_grupal", "paciente_id", "paciente_nombre", "paciente_apellido", "tipo"):
+        assert f"AS {alias}" in sql, alias
+    for columna in ("t.id", "tg.id", "t.fecha_inicio", "t.fecha_fin", "t.estado_asistencia", "t.atencion_inicio",
+                    "t.atencion_fin", "tg.fecha_inicio", "tg.fecha_fin", "tg.estado_asistencia",
+                    "tg.atencion_inicio", "tg.atencion_fin"):
+        assert columna in sql, columna
+    assert "t.usuario_id AS entidad_id" in sql and "tg.grupo_id AS entidad_id" in sql
+    assert "'usuario' AS tipo" in sql and "'grupo' AS tipo" in sql
+    assert "0 AS es_grupal" in sql and "1 AS es_grupal" in sql
+    assert sql.count("NOW() AS ahora_db") == 2
+
+
+def test_sql_turnos_hoy_filtra_por_hoy_con_condicion_sargable():
+    sql = norm(pantalla_routes.SQL_TURNOS_HOY)
+    assert not re.search(r"\bDATE\(", sql)  # \b: CURDATE( no cuenta
+    assert sql.count("t.fecha_inicio >= CURDATE() AND t.fecha_inicio < CURDATE() + INTERVAL 1 DAY") == 1
+    assert sql.count("tg.fecha_inicio >= CURDATE() AND tg.fecha_inicio < CURDATE() + INTERVAL 1 DAY") == 1
+
+
+def test_sql_turnos_hoy_no_trae_datos_sensibles_del_paciente():
+    sql = norm(pantalla_routes.SQL_TURNOS_HOY).lower()
+    for prohibido in ("dni", "motivo", "observaciones", "especialidad", "p.*", "select *"):
+        assert prohibido not in sql, prohibido
+
+
+def test_sql_entidades_visibles_trae_alias_y_filtros_esperados():
+    sql = norm(pantalla_routes.SQL_ENTIDADES_VISIBLES)
+    for fragmento in ("'usuario' AS tipo", "'grupo' AS tipo", "u.id", "u.nombre", "u.consultorio",
+                      "g.id", "g.nombre", "g.consultorio"):
+        assert fragmento in sql, fragmento
+    assert "u.mostrar_en_pantalla = 1" in sql
+    assert "u.activo = 1" in sql
+    assert "u.rol IN ('profesional', 'area')" in sql
+    assert "g.mostrar_en_pantalla = 1" in sql
+    assert "g.consultorio IS NOT NULL AND g.consultorio <> ''" in sql
+
+
+def test_sql_visibles_trae_alias_y_filtra_por_hoy_con_condicion_sargable():
+    sql = norm(pantalla_routes.SQL_VISIBLES)
+    for fragmento in ("'usuario' AS tipo", "'grupo' AS tipo", "u.mostrar_en_pantalla", "g.mostrar_en_pantalla",
+                      "AS tiene_turnos_hoy", "u.activo = 1", "u.rol IN ('profesional', 'area')",
+                      "ORDER BY tipo, nombre"):
+        assert fragmento in sql, fragmento
+    assert not re.search(r"\bDATE\(", sql)
+    assert "t.fecha_inicio >= CURDATE() AND t.fecha_inicio < CURDATE() + INTERVAL 1 DAY" in sql
+    assert "tg.fecha_inicio >= CURDATE() AND tg.fecha_inicio < CURDATE() + INTERVAL 1 DAY" in sql
+    assert "t.usuario_id = u.id" in sql and "tg.grupo_id = g.id" in sql
 
 
 def test_siguientes_son_maximo_tres_ordenados_por_horario():
@@ -96,6 +159,64 @@ def test_siguientes_son_maximo_tres_ordenados_por_horario():
     cursor = FakeCursor(fetchall_results=[ENTIDADES, turnos])
     tarjetas = pantalla_routes.construir_tarjetas(cursor)
     assert [s["nombre"] for s in tarjetas[0]["siguientes"]] == ["Paciente1 Z.", "Paciente2 Z.", "Paciente3 Z."]
+
+
+def test_siguientes_con_mismo_horario_se_recortan_de_forma_estable_por_id():
+    # 5 presentes con el mismo fecha_inicio: el recorte a 3 no depende del orden de las filas del cursor.
+    def armar():
+        return [turno_fila("usuario", 7, i, 100 + i, f"P{i}", "Zeta", hora=(10, 0)) for i in (4, 1, 5, 2, 3)]
+
+    esperado = [{"nombre": "P1 Z."}, {"nombre": "P2 Z."}, {"nombre": "P3 Z."}]
+    for orden in (armar(), list(reversed(armar())), sorted(armar(), key=lambda t: t["id"] % 3)):
+        cursor = FakeCursor(fetchall_results=[ENTIDADES, orden])
+        assert pantalla_routes.construir_tarjetas(cursor)[0]["siguientes"] == esperado
+
+
+def test_en_atencion_con_mismo_atencion_inicio_se_ordena_por_id():
+    inicio = datetime(2026, 11, 16, 10, 30)
+    filas = [
+        turno_fila("usuario", 7, 5, 15, "Cinco", "Uno", atencion_inicio=inicio),
+        turno_fila("usuario", 7, 3, 13, "Tres", "Dos", atencion_inicio=inicio),
+        turno_fila("usuario", 7, 4, 14, "Cuatro", "Tres", atencion_inicio=inicio),
+    ]
+    for orden in (filas, list(reversed(filas))):
+        cursor = FakeCursor(fetchall_results=[ENTIDADES, [dict(f) for f in orden]])
+        nombres = [e["nombre"] for e in pantalla_routes.construir_tarjetas(cursor)[0]["en_atencion"]]
+        assert nombres == ["Tres D.", "Cuatro T.", "Cinco U."]
+
+
+def test_tarjetas_se_ordenan_por_tipo_e_id_sin_depender_del_orden_de_entidades():
+    entidades = [
+        {"tipo": "usuario", "id": 8, "nombre": "Dr. Ocho", "consultorio": "8"},
+        {"tipo": "grupo", "id": 5, "nombre": "Grupo Cinco", "consultorio": "G5"},
+        {"tipo": "usuario", "id": 7, "nombre": "Dra. Siete", "consultorio": "7"},
+        {"tipo": "grupo", "id": 2, "nombre": "Grupo Dos", "consultorio": "G2"},
+    ]
+    turnos = [
+        turno_fila("usuario", 8, 1, 11, "Ana", "Ríos"),
+        turno_fila("grupo", 5, 2, 12, "Beto", "Sosa", grupal=1),
+        turno_fila("usuario", 7, 3, 13, "Carla", "Vega"),
+        turno_fila("grupo", 2, 4, 14, "Dante", "Paz", grupal=1),
+    ]
+    cursor = FakeCursor(fetchall_results=[entidades, turnos])
+    tarjetas = pantalla_routes.construir_tarjetas(cursor)
+    assert [(t["tipo"], t["id"]) for t in tarjetas] == [("grupo", 2), ("grupo", 5), ("usuario", 7), ("usuario", 8)]
+
+
+@pytest.mark.parametrize(
+    "nombre, apellido",
+    [(None, None), ("", ""), ("   ", "  "), (None, "Gómez"), ("María", None), ("María", "")],
+)
+def test_paciente_sin_nombre_o_apellido_no_rompe_las_tarjetas(nombre, apellido):
+    turnos = [
+        turno_fila("usuario", 7, 1, 11, nombre, apellido, atencion_inicio=datetime(2026, 11, 16, 10, 35)),
+        turno_fila("usuario", 7, 2, 12, nombre, apellido, hora=(10, 30)),
+    ]
+    cursor = FakeCursor(fetchall_results=[ENTIDADES, turnos])
+    tarjeta = pantalla_routes.construir_tarjetas(cursor)[0]
+    assert len(tarjeta["en_atencion"]) == 1 and len(tarjeta["siguientes"]) == 1
+    assert isinstance(tarjeta["en_atencion"][0]["nombre"], str) and tarjeta["en_atencion"][0]["nombre"]
+    assert isinstance(tarjeta["siguientes"][0]["nombre"], str) and tarjeta["siguientes"][0]["nombre"]
 
 
 def test_en_atencion_se_ordena_por_inicio_de_atencion():
@@ -132,6 +253,9 @@ def test_tarjetas_no_exponen_datos_del_paciente():
     assert "Gómez" not in texto and "paciente_id" not in texto and "dni" not in texto.lower()
     assert "motivo" not in texto and "especialidad" not in texto
     assert "ahora_db" not in texto and "estado_atencion" not in texto and "estado_asistencia" not in texto
+    # Valores inyectados por turno_fila: si el código copiara la fila entera, estos asserts fallarían.
+    assert "30111222" not in texto and "lumbar" not in texto and "penicilina" not in texto
+    assert "observaciones" not in texto
     assert "María" in texto and "Juan P." in texto  # solo nombre + inicial
 
 
@@ -283,7 +407,11 @@ def test_visibles_lista_con_flag_de_turnos_hoy(client, monkeypatch):
         {"tipo": "grupo", "id": 2, "nombre": "Rehab", "consultorio": None,
          "mostrar_en_pantalla": False, "tiene_turnos_hoy": False},
     ]
-    assert [q for q, _ in cursor.executed] == [pantalla_routes.SQL_VISIBLES]
+    assert len(cursor.executed) == 1
+    sql = norm(cursor.executed[0][0])
+    assert "AS tiene_turnos_hoy" in sql and "FROM usuarios u" in sql and "FROM grupos_profesionales g" in sql
+    assert "CURDATE()" in sql and "ORDER BY tipo, nombre" in sql
+    assert cursor.executed[0][1] is None
     assert cursor.closed and conn.closed
 
 
@@ -388,6 +516,31 @@ def test_patch_consultorio_demasiado_largo_se_rechaza(client, monkeypatch):
     r = client.patch("/api/pantalla/visibles/usuario/7", json={"consultorio": "x" * 51})
     assert r.status_code == 400 and not conn.committed
     assert executed_que_empiezan(cursor, "UPDATE") == []
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"json": "texto"},
+        {"json": 5},
+        {"json": [{"mostrar_en_pantalla": True}]},
+        {"json": []},
+        {},  # sin body
+        {"data": "no es json", "content_type": "application/json"},
+    ],
+    ids=["string", "numero", "lista", "lista-vacia", "ausente", "json-invalido"],
+)
+def test_patch_body_que_no_es_objeto_devuelve_400_sin_abrir_transaccion(client, monkeypatch, kwargs):
+    llamadas = []
+    cursor = FakeCursor(fetchone_results=[{"id": 7, "consultorio": None, "mostrar_en_pantalla": 0}])
+    conn = FakeConnection(cursor)
+    monkeypatch.setattr(pantalla_routes, "get_connection", lambda: llamadas.append(1) or conn)
+    login_as(client, MockUser(user_id=3, rol="director"))
+    r = client.patch("/api/pantalla/visibles/usuario/7", **kwargs)
+    assert r.status_code == 400
+    assert isinstance(r.get_json()["message"], str) and r.get_json()["message"]
+    assert llamadas == []  # ni siquiera se pidió conexión
+    assert cursor.executed == [] and not conn.committed
 
 
 @pytest.mark.parametrize("valor", ["false", "true", 1, 0, None, "no"])
