@@ -98,3 +98,44 @@ def test_finalizar_turno_que_no_esta_en_atencion_devuelve_409(client, monkeypatc
     login_as(client, MockUser(user_id=7, rol="profesional"))
     preparar(monkeypatch, [{"id": 10, "usuario_id": 7, "atencion_inicio": None, "atencion_fin": None}])
     assert client.post("/api/turnos/10/finalizar").status_code == 409
+
+
+def grupal(**kw):
+    base = {"id": 5, "grupo_id": 3, "estado_asistencia": "programado", "es_hoy": 1}
+    base.update(kw)
+    return base
+
+
+def test_llamar_grupal_miembro_abre_atencion_sin_cerrar_otras(client, monkeypatch):
+    login_as(client, MockUser(user_id=7, rol="area"))
+    cursor, conn = preparar(monkeypatch, [grupal(), {"1": 1}])
+
+    r = client.post("/api/turnos/grupales/5/llamar")
+
+    assert r.status_code == 200
+    sqls = [q for q, _ in cursor.executed]
+    assert any("FROM grupo_miembros" in q for q in sqls)
+    assert not any("SET atencion_fin" in q for q in sqls)
+    abrir = [q for q in sqls if "UPDATE turnos_grupales" in q][0]
+    assert "atencion_inicio = NOW()" in abrir and "atencion_fin = NULL" in abrir
+    assert conn.committed
+
+
+def test_llamar_grupal_no_miembro_devuelve_403(client, monkeypatch):
+    login_as(client, MockUser(user_id=7, rol="administrativo"))
+    cursor, conn = preparar(monkeypatch, [grupal(), None])
+    assert client.post("/api/turnos/grupales/5/llamar").status_code == 403
+    assert not conn.committed
+
+
+def test_llamar_grupal_inexistente_devuelve_404(client, monkeypatch):
+    login_as(client, MockUser(user_id=7, rol="area"))
+    preparar(monkeypatch, [None])
+    assert client.post("/api/turnos/grupales/5/llamar").status_code == 404
+
+
+def test_llamar_grupal_ausente_devuelve_409(client, monkeypatch):
+    login_as(client, MockUser(user_id=7, rol="area"))
+    cursor, conn = preparar(monkeypatch, [grupal(estado_asistencia="con_aviso"), {"1": 1}])
+    assert client.post("/api/turnos/grupales/5/llamar").status_code == 409
+    assert not conn.committed

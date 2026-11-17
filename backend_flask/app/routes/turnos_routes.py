@@ -1607,6 +1607,55 @@ def finalizar_turno(id):
         conn.close()
 
 
+@bp_turnos.route("/api/turnos/grupales/<int:turno_grupal_id>/llamar", methods=["POST"])
+@login_required
+def llamar_turno_grupal(turno_grupal_id):
+    # Permiso propio: cualquier miembro del grupo, sin depender de ROLES_TURNOS_GRUPALES.
+    # No cierra otras atenciones: en un grupo puede haber varios turnos grupales en atencion a la vez.
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(
+            """
+            SELECT id, grupo_id, estado_asistencia, DATE(fecha_inicio) = CURDATE() AS es_hoy
+            FROM turnos_grupales WHERE id = %s
+            """,
+            (turno_grupal_id,),
+        )
+        turno = cursor.fetchone()
+        if not turno:
+            return jsonify({"error": "Turno grupal no encontrado"}), 404
+
+        cursor.execute(
+            "SELECT 1 FROM grupo_miembros WHERE grupo_id = %s AND usuario_id = %s LIMIT 1",
+            (turno["grupo_id"], current_user.id),
+        )
+        if not cursor.fetchone():
+            return jsonify({"error": "Solo los miembros del grupo pueden llamar al paciente"}), 403
+
+        motivo = _motivo_no_llamable(turno["estado_asistencia"], turno["es_hoy"])
+        if motivo:
+            return jsonify({"error": motivo}), 409
+
+        cursor.execute(
+            """
+            UPDATE turnos_grupales
+            SET atencion_inicio = NOW(), atencion_fin = NULL,
+                estado_asistencia = 'presente', ausencia = NULL
+            WHERE id = %s
+            """,
+            (turno_grupal_id,),
+        )
+        conn.commit()
+        return jsonify({"message": "Paciente llamado", "estado_atencion": "en_atencion"})
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        cursor.close()
+        conn.close()
+
+
 @bp_turnos.route("/api/turnos/presentes-hoy", methods=["GET"])
 @login_required
 @requiere_rol(*ROLES_TURNOS)
