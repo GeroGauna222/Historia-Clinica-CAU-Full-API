@@ -1,12 +1,34 @@
 <script setup>
-import { computed } from 'vue';
+import { computed, ref, watch } from 'vue';
 import Button from 'primevue/button';
 import Dialog from 'primevue/dialog';
 import { usePacientesPresentes } from '@/layout/composables/usePacientesPresentes';
 
-const { pendientes, marcarInformado } = usePacientesPresentes();
+const { pendientes, marcarInformado, llamarYMarcar } = usePacientesPresentes();
+
+const llamandoId = ref(null);
+const errorLlamado = ref('');
+
+// Llamar a un paciente lo da por informado solo a él; si falla, sigue pendiente.
+async function llamar(t) {
+    errorLlamado.value = '';
+    llamandoId.value = t.id;
+    try {
+        await llamarYMarcar(t);
+    } catch (e) {
+        const detalle = e?.response?.data?.error || e?.response?.data?.message || 'No se pudo llamar al paciente. Reintentá.';
+        errorLlamado.value = `${t.paciente}: ${detalle}`;
+    } finally {
+        llamandoId.value = null;
+    }
+}
 
 const visible = computed(() => pendientes.value.length > 0);
+
+// El error no debe sobrevivir al cierre del diálogo: al reabrirse no refiere a nadie.
+watch(visible, (v) => {
+    if (!v) errorLlamado.value = '';
+});
 
 const titulo = computed(() => {
     const n = pendientes.value.length;
@@ -35,13 +57,18 @@ function formatoHora(isoString) {
 
             <div class="w-full divide-y divide-line text-left">
                 <div v-for="t in pendientes" :key="t.id" class="py-3">
-                    <p class="text-lg font-bold text-color">{{ t.paciente }}</p>
+                    <div class="flex items-center justify-between gap-3">
+                        <p class="text-lg font-bold text-color">{{ t.paciente }}</p>
+                        <Button label="Llamar" icon="pi pi-megaphone" size="small" :aria-label="`Llamar a ${t.paciente}`" :loading="llamandoId === t.id" :disabled="llamandoId !== null && llamandoId !== t.id" @click="llamar(t)" />
+                    </div>
                     <div class="mt-1 flex items-center gap-3 text-sm text-muted-color">
                         <span class="font-mono">{{ formatoHora(t.start) }}</span>
                         <span v-if="t.dni">DNI: {{ t.dni }}</span>
                     </div>
                 </div>
             </div>
+
+            <p v-if="errorLlamado" class="w-full text-sm text-status-sin-aviso-fg" role="alert">{{ errorLlamado }}</p>
 
             <Button label="Informado" class="w-full" @click="marcarInformado" />
         </div>

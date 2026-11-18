@@ -4,6 +4,7 @@ from flask import Blueprint, jsonify
 from flask_login import current_user, login_required
 
 from app.database import get_connection
+from app.utils.pantalla import anotar_estado_atencion
 
 bp_dashboard = Blueprint("dashboard", __name__)
 
@@ -57,6 +58,12 @@ def _formatear_turnos(rows):
             r["es_sobreturno"] = False
         formateados.append(r)
     return formateados
+
+
+def _atenciones_en_curso(turnos):
+    # Recibe turnos ya formateados (atencion_inicio en ISO): por eso se ordena por string.
+    en_atencion = [t for t in turnos if t.get("estado_atencion") == "en_atencion"]
+    return sorted(en_atencion, key=lambda t: str(t.get("atencion_inicio") or ""))
 
 
 def _tipo_evento_ausencia(motivo):
@@ -215,7 +222,8 @@ def get_dashboard():
                        u.nombre AS profesional,
                        0 AS es_grupal,
                        NULL AS grupo_id,
-                       NULL AS grupo_nombre
+                       NULL AS grupo_nombre,
+                       t.atencion_inicio, t.atencion_fin, NOW() AS ahora_db
                 FROM turnos t
                 JOIN pacientes p ON p.id = t.paciente_id
                 JOIN usuarios u ON u.id = t.usuario_id
@@ -232,7 +240,8 @@ def get_dashboard():
                        CONCAT('Grupo: ', gp.nombre) AS profesional,
                        1 AS es_grupal,
                        gp.id AS grupo_id,
-                       gp.nombre AS grupo_nombre
+                       gp.nombre AS grupo_nombre,
+                       tg.atencion_inicio, tg.atencion_fin, NOW() AS ahora_db
                 FROM turnos_grupales tg
                 JOIN grupos_profesionales gp ON gp.id = tg.grupo_id
                 JOIN grupo_miembros gm ON gm.grupo_id = tg.grupo_id
@@ -241,12 +250,13 @@ def get_dashboard():
                   AND gm.usuario_id = %s
                 ORDER BY fecha_inicio ASC
             """, (hoy, user_id, hoy, user_id))
-            data["turnos"] = _formatear_turnos(cursor.fetchall())
+            filas = cursor.fetchall()
+            anotar_estado_atencion(filas)  # antes de _formatear_turnos: necesita los datetime crudos
+            data["turnos"] = _formatear_turnos(filas)
             data["turnos_hoy"] = len(data["turnos"])
 
-            turnos_presentes = [t for t in data["turnos"] if t.get("estado_asistencia") == "presente"]
-            data["turno_en_curso"] = turnos_presentes[-1] if turnos_presentes else None
-            data["atenciones_en_curso"] = [turnos_presentes[-1]] if turnos_presentes else []
+            data["atenciones_en_curso"] = _atenciones_en_curso(data["turnos"])
+            data["turno_en_curso"] = data["atenciones_en_curso"][-1] if data["atenciones_en_curso"] else None
 
             cursor.execute("""
                 SELECT * FROM (
@@ -372,7 +382,8 @@ def get_dashboard():
                        u.nombre AS profesional,
                        0 AS es_grupal,
                        NULL AS grupo_id,
-                       NULL AS grupo_nombre
+                       NULL AS grupo_nombre,
+                       t.atencion_inicio, t.atencion_fin, NOW() AS ahora_db
                 FROM turnos t
                 JOIN pacientes p ON p.id = t.paciente_id
                 JOIN usuarios u ON u.id = t.usuario_id
@@ -388,27 +399,21 @@ def get_dashboard():
                        CONCAT('Grupo: ', gp.nombre) AS profesional,
                        1 AS es_grupal,
                        gp.id AS grupo_id,
-                       gp.nombre AS grupo_nombre
+                       gp.nombre AS grupo_nombre,
+                       tg.atencion_inicio, tg.atencion_fin, NOW() AS ahora_db
                 FROM turnos_grupales tg
                 JOIN grupos_profesionales gp ON gp.id = tg.grupo_id
                 JOIN pacientes p ON p.id = tg.paciente_id
                 WHERE DATE(tg.fecha_inicio) = %s
                 ORDER BY fecha_inicio ASC
             """, (hoy, hoy))
-            data["turnos"] = _formatear_turnos(cursor.fetchall())
+            filas = cursor.fetchall()
+            anotar_estado_atencion(filas)  # antes de _formatear_turnos: necesita los datetime crudos
+            data["turnos"] = _formatear_turnos(filas)
             data["turnos_hoy"] = len(data["turnos"])
 
-            turnos_presentes = [t for t in data["turnos"] if t.get("estado_asistencia") == "presente"]
-            data["turno_en_curso"] = turnos_presentes[-1] if turnos_presentes else None
-
-            ultimos_por_profesional = {}
-            for t in turnos_presentes:
-                if t.get("es_grupal"):
-                    prof_key = f"grupo-{t.get('grupo_id')}"
-                else:
-                    prof_key = f"usuario-{t.get('usuario_id')}" if t.get("usuario_id") else (t.get("profesional") or t.get("id"))
-                ultimos_por_profesional[prof_key] = t
-            data["atenciones_en_curso"] = list(ultimos_por_profesional.values())
+            data["atenciones_en_curso"] = _atenciones_en_curso(data["turnos"])
+            data["turno_en_curso"] = data["atenciones_en_curso"][-1] if data["atenciones_en_curso"] else None
 
             cursor.execute("""
                 SELECT * FROM (

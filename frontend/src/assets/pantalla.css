@@ -1,0 +1,14 @@
+/*
+ * Paleta de la Pantalla de llamados: siempre oscura e independiente del tema de la app (el televisor no cambia con
+ * el modo claro/oscuro). Se aplica con la clase .pantalla-paleta en la raíz del televisor y en el contenedor de la
+ * vista previa de administración; PantallaTarjetas usa estas variables sin valores de respaldo.
+ */
+.pantalla-paleta {
+    --pantalla-fondo: #0b1220;
+    --pantalla-tarjeta: #111c33;
+    --pantalla-borde: #24365e;
+    --pantalla-acento: #fbbf24;
+    --pantalla-ok: #4ade80;
+    --pantalla-texto: #e5e7eb;
+    --pantalla-texto-suave: #9fb0d0;
+}

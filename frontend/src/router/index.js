@@ -1,6 +1,7 @@
 import AppLayout from '@/layout/AppLayout.vue';
 import { createRouter, createWebHistory } from 'vue-router';
 import { useUserStore } from '@/stores/user';
+import { requiereSesion } from './accesoRutas';
 
 const router = createRouter({
     history: createWebHistory(),
@@ -25,6 +26,13 @@ const router = createRouter({
             path: '/reset/:token',
             name: 'ResetContraseña',
             component: () => import('@/views/pages/auth/ResetPassword.vue')
+        },
+        // 📺 Pantalla de llamados (pública, sin sesión: el televisor se vincula por código)
+        {
+            path: '/pantalla',
+            name: 'pantalla',
+            component: () => import('@/views/pages/pantalla/PantallaTV.vue'),
+            meta: { publica: true }
         },
         // 🌐 App principal (protegida)
         {
@@ -74,6 +82,13 @@ const router = createRouter({
                     path: 'presupuestos',
                     name: 'presupuestos',
                     component: () => import('@/views/pages/presupuestos/PresupuestoGenerator.vue'),
+                    meta: { roles: ['director', 'administrativo'] }
+                },
+                // 📌 Pantalla de llamados (🔒 DIRECTOR Y ADMINISTRATIVO; los televisores los vincula solo el director)
+                {
+                    path: 'pantalla-de-llamados',
+                    name: 'pantalla-llamados',
+                    component: () => import('@/views/pages/pantalla/PantallaLlamados.vue'),
                     meta: { roles: ['director', 'administrativo'] }
                 },
                 // 📌 Facturación (🔒 DIRECTOR Y ADMINISTRATIVO)
@@ -221,9 +236,7 @@ const router = createRouter({
 
 // 🛡️ Guard global para proteger rutas
 router.beforeEach(async (to) => {
-    const publicPages = ['/auth/login', '/recuperar', '/logout'];
-    const isResetRoute = to.path.startsWith('/reset/');
-    const authRequired = !publicPages.includes(to.path) && !isResetRoute;
+    const authRequired = requiereSesion(to);
     const userStore = useUserStore();
     const needsUser = authRequired || Boolean(to.meta.roles);
 

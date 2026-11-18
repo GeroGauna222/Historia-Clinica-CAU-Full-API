@@ -1,6 +1,8 @@
 import { ref, computed } from 'vue';
 import api from '@/api/axios';
+import { reproducirAvisoSonoro } from '@/utils/avisoSonoro';
 import { useUserStore } from '@/stores/user';
+import turnosService from '@/service/turnosService';
 
 const STORAGE_KEY = 'cau-arrival-acks';
 
@@ -11,6 +13,11 @@ const informados = new Set();
 let usuarioEstadoId = null;
 let timer = null;
 let initialized = false;
+
+// Un paciente ya llamado o atendido no es una llegada nueva. Lista de exclusión (no se exige
+// 'esperando'): un estado ausente, null o desconocido se trata como esperando, igual que en el menú de presentes.
+const ESTADOS_NO_ESPERANDO = ['en_atencion', 'atendido'];
+const estaEsperando = (t) => !ESTADOS_NO_ESPERANDO.includes(t.estado_atencion);
 
 function fechaLocalHoy() {
     const d = new Date();
@@ -50,39 +57,6 @@ function guardarInformados(usuarioId) {
     }
 }
 
-function reproducirAvisoSonoro() {
-    try {
-        const AudioCtx = window.AudioContext || window.webkitAudioContext;
-        if (!AudioCtx) return;
-        const ctx = new AudioCtx();
-        const now = ctx.currentTime;
-
-        const osc1 = ctx.createOscillator();
-        const gain1 = ctx.createGain();
-        osc1.type = 'sine';
-        osc1.frequency.setValueAtTime(659.25, now);
-        gain1.gain.setValueAtTime(0.12, now);
-        gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
-        osc1.connect(gain1);
-        gain1.connect(ctx.destination);
-        osc1.start(now);
-        osc1.stop(now + 0.35);
-
-        const osc2 = ctx.createOscillator();
-        const gain2 = ctx.createGain();
-        osc2.type = 'sine';
-        osc2.frequency.setValueAtTime(880, now + 0.18);
-        gain2.gain.setValueAtTime(0.15, now + 0.18);
-        gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.65);
-        osc2.connect(gain2);
-        gain2.connect(ctx.destination);
-        osc2.start(now + 0.18);
-        osc2.stop(now + 0.65);
-    } catch {
-        // Ignorar restricciones de audio del navegador sin interacción de usuario
-    }
-}
-
 export function usePacientesPresentes() {
     const userStore = useUserStore();
 
@@ -113,14 +87,16 @@ export function usePacientesPresentes() {
             presentes.value = data;
 
             const idsPresentes = new Set(data.map((t) => t.id));
+            const idsEsperando = new Set(data.filter(estaEsperando).map((t) => t.id));
             for (const id of informados) {
                 if (!idsPresentes.has(id)) informados.delete(id);
             }
-            pendientes.value = pendientes.value.filter((t) => idsPresentes.has(t.id));
+            // Un pendiente que dejó de estar esperando (lo llamaron, p. ej. desde la lista del Dashboard) sale del aviso.
+            pendientes.value = pendientes.value.filter((t) => idsEsperando.has(t.id));
 
             if (rol === 'profesional' && !silencioso) {
                 const idsPendientes = new Set(pendientes.value.map((t) => t.id));
-                const nuevos = data.filter((t) => !informados.has(t.id) && !idsPendientes.has(t.id));
+                const nuevos = data.filter((t) => estaEsperando(t) && !informados.has(t.id) && !idsPendientes.has(t.id));
                 if (nuevos.length > 0) {
                     pendientes.value = [...pendientes.value, ...nuevos];
                     reproducirAvisoSonoro();
@@ -140,6 +116,28 @@ export function usePacientesPresentes() {
         pendientes.value = [];
         if (usuarioEstadoId != null) {
             guardarInformados(usuarioEstadoId);
+        }
+    }
+
+    // Llama a un paciente y, solo a ese paciente, lo da por informado.
+    // Si el backend rechaza el llamado la promesa se rechaza y el estado queda intacto.
+    async function llamarYMarcar(turno) {
+        const usuarioAlLlamar = usuarioEstadoId;
+        if (turno.es_grupal) await turnosService.llamarGrupal(turno.turnoId);
+        else await turnosService.llamar(turno.turnoId);
+
+        // Desde acá el llamado está confirmado: lo que falle después (recarga) no lo deshace.
+        // Si mientras tanto cambió el usuario (cierre de sesión), no se toca el estado de otro.
+        if (usuarioEstadoId === usuarioAlLlamar) {
+            informados.add(turno.id);
+            pendientes.value = pendientes.value.filter((t) => t.id !== turno.id);
+            if (usuarioEstadoId != null) guardarInformados(usuarioEstadoId);
+        }
+
+        try {
+            await cargarPresentes(true);
+        } catch {
+            // La recarga es solo para refrescar la lista; el llamado ya se hizo.
         }
     }
 
@@ -173,6 +171,7 @@ export function usePacientesPresentes() {
         cargando,
         cargarPresentes,
         marcarInformado,
+        llamarYMarcar,
         iniciarPolling,
         detenerPolling
     };

@@ -14,7 +14,8 @@ api.interceptors.response.use(
         if (error.response?.status === 401) {
             const currentPath = router.currentRoute?.value?.path || '';
             const publicPaths = ['/auth/login', '/recuperar', '/logout'];
-            const isPublic = publicPaths.some((p) => currentPath.startsWith(p)) || currentPath.startsWith('/reset/');
+            // Las rutas públicas (p. ej. /pantalla) lo declaran con meta.publica; no se compara por prefijo de texto.
+            const isPublic = router.currentRoute?.value?.meta?.publica === true || publicPaths.some((p) => currentPath.startsWith(p)) || currentPath.startsWith('/reset/');
 
             if (!isPublic) {
                 router.push('/auth/login');

@@ -19,6 +19,7 @@ const form = reactive({
     email: '',
     rol: '',
     especialidad: '',
+    consultorio: '',
     password: '',
     dni: '',
     sexo: 'X',
@@ -45,6 +46,7 @@ const SEXOS = [
 ];
 const TIPOS_MATRICULA = ['MN', 'MP', 'OP'];
 const rolPuedePrescribir = () => ['profesional', 'director'].includes(form.rol);
+const rolUsaConsultorio = (rol) => ['profesional', 'area'].includes(rol);
 
 const loading = ref(false);
 
@@ -53,6 +55,7 @@ onMounted(async () => {
         loading.value = true;
         const res = await usuarioService.getUsuario(userId);
         Object.assign(form, res.data);
+        form.consultorio = res.data?.consultorio ?? '';
         form.sexo ||= 'X';
         form.matricula_tipo ||= 'MN';
         form.lugar_atencion_nombre ||= 'CAU - UNSAM';
@@ -68,12 +71,13 @@ async function onSubmit() {
     try {
         const payload = { ...form };
         if (!payload.password) delete payload.password;
+        if (!rolUsaConsultorio(payload.rol)) payload.consultorio = '';
 
         await usuarioService.updateUsuario(userId, payload);
         toast.add({ severity: 'success', summary: 'Actualizado', detail: 'Usuario actualizado correctamente', life: 3000 });
         form.password = '';
     } catch (e) {
-        toast.add({ severity: 'error', summary: 'Error', detail: e.response?.data?.error || 'Error al actualizar usuario', life: 5000 });
+        toast.add({ severity: 'error', summary: 'Error', detail: e.response?.data?.error || e.response?.data?.message || 'Error al actualizar usuario', life: 5000 });
     } finally {
         loading.value = false;
     }
@@ -115,6 +119,11 @@ async function onSubmit() {
                     <div v-if="form.rol === 'profesional'">
                         <label class="block mb-2 font-semibold text-color">Especialidad</label>
                         <InputText v-model.trim="form.especialidad" class="w-full" :disabled="loading" required />
+                    </div>
+
+                    <div v-if="rolUsaConsultorio(form.rol)">
+                        <label for="consultorio" class="block mb-2 font-semibold text-color">Consultorio</label>
+                        <InputText id="consultorio" v-model.trim="form.consultorio" maxlength="50" placeholder="Ej: 3" class="w-full" :disabled="loading" />
                     </div>
                 </div>
 

@@ -12,7 +12,7 @@ const route = useRoute();
 const router = useRouter();
 const grupoId = route.params.id;
 
-const grupo = ref({ nombre: '', descripcion: '', color: '#00936B', es_rehabilitacion: false });
+const grupo = ref({ nombre: '', descripcion: '', color: '#00936B', es_rehabilitacion: false, consultorio: '', mostrar_en_pantalla: false });
 const usuariosDisponibles = ref([]);
 const miembrosOriginalesIds = ref([]);
 const miembrosSeleccionadosIds = ref([]);
@@ -31,7 +31,9 @@ onMounted(async () => {
             nombre: resGrupo.data?.nombre || '',
             descripcion: resGrupo.data?.descripcion || '',
             color: resGrupo.data?.color || '#00936B',
-            es_rehabilitacion: Boolean(resGrupo.data?.es_rehabilitacion)
+            es_rehabilitacion: Boolean(resGrupo.data?.es_rehabilitacion),
+            consultorio: resGrupo.data?.consultorio ?? '',
+            mostrar_en_pantalla: Boolean(resGrupo.data?.mostrar_en_pantalla)
         };
 
         const ids = (resMiembros.data || []).map((m) => m.id);
@@ -67,7 +69,7 @@ async function guardarCambios() {
         mensaje.value = 'Cambios guardados correctamente';
     } catch (err) {
         console.error('Error guardando cambios:', err);
-        error.value = err.response?.data?.error || 'Error al guardar cambios.';
+        error.value = err.response?.data?.error || err.response?.data?.message || 'Error al guardar cambios.';
     } finally {
         guardando.value = false;
     }
@@ -106,6 +108,12 @@ async function guardarCambios() {
                     <Textarea v-model="grupo.descripcion" rows="3" class="w-full" autoResize />
                 </div>
 
+                <div class="flex flex-col gap-2">
+                    <label for="consultorio" class="font-semibold text-color">Consultorio</label>
+                    <InputText id="consultorio" v-model="grupo.consultorio" maxlength="50" placeholder="Ej: Gimnasio" class="w-full" :aria-describedby="grupo.mostrar_en_pantalla ? 'consultorio-ayuda' : undefined" />
+                    <small v-if="grupo.mostrar_en_pantalla" id="consultorio-ayuda" class="text-muted-color">Este grupo está visible en la pantalla de llamados: para quitarle el consultorio ocultalo primero.</small>
+                </div>
+
                 <label class="flex items-center gap-2">
                     <input v-model="grupo.es_rehabilitacion" type="checkbox" />
                     <span class="font-semibold text-color">Grupo de Rehabilitacion</span>
@@ -128,8 +136,8 @@ async function guardarCambios() {
                 </div>
             </form>
 
-            <div v-if="mensaje" class="mt-6 p-3 rounded-lg bg-status-presente-bg text-status-presente-fg text-center font-medium border border-status-presente-border">{{ mensaje }}</div>
-            <div v-if="error" class="mt-6 p-3 rounded-lg bg-status-sin-aviso-bg text-status-sin-aviso-fg text-center font-medium border border-status-sin-aviso-border">{{ error }}</div>
+            <div v-if="mensaje" role="status" class="mt-6 p-3 rounded-lg bg-status-presente-bg text-status-presente-fg text-center font-medium border border-status-presente-border">{{ mensaje }}</div>
+            <div v-if="error" role="alert" class="mt-6 p-3 rounded-lg bg-status-sin-aviso-bg text-status-sin-aviso-fg text-center font-medium border border-status-sin-aviso-border">{{ error }}</div>
         </div>
     </div>
 </template>

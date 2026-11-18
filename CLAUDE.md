@@ -77,11 +77,12 @@ Nginx (:80)
 | `database.py` | `get_connection()` — mysql-connector with retry logic |
 | `config.py` | `Config` class — all settings via env vars |
 | `main.py` | Entry point (imports `app` from `__init__`; Gunicorn targets this in production) |
-| `routes/` | One Blueprint per domain (11 total): `auth`, `usuarios`, `pacientes`, `historias`, `turnos`, `grupos`, `disponibilidades`, `ausencias`, `dashboard`, `blockchain`, `health` |
+| `routes/` | One Blueprint per domain (16 total): `auth`, `usuarios`, `pacientes`, `historias`, `turnos`, `ausencias`, `dashboard`, `disponibilidades`, `grupos`, `comunicados`, `grupo_posteos`, `blockchain`, `health`, `recetas`, `facturacion`, `pantalla` |
 | `utils/permisos.py` | `@requiere_rol('director', ...)` decorator |
 | `utils/hashing.py` | SHA-256 helpers for clinical record integrity |
 | `utils/validacion.py` | `password_valida()`, `validar_email()` |
 | `utils/bfa_client.py` | Web3 client for BFA interaction |
+| `utils/pantalla.py` | Pure logic for the calls screen: derived attention state (`estado_atencion`), abbreviated patient names, pairing code/key generation and hashing, consultorio normalization |
 
 All API routes are prefixed `/api/...` internally in each blueprint — no `url_prefix` is set at registration.
 
@@ -93,12 +94,16 @@ All API routes are prefixed `/api/...` internally in each blueprint — no `url_
 | `stores/user.js` | Pinia store — user state, `fetchUser()` validates session against backend |
 | `router/index.js` | Vue Router with `meta.roles` guards; `beforeEach` calls `fetchUser()` for auth check |
 | `service/` | One service file per domain (e.g. `turnosService.js`, `historiaService.js`) |
-| `views/pages/` | Feature views organized by domain (`auth/`, `historias/`, `turnos/`, `usuarios/`, `grupos/`, `disponibilidades/`, `evolucion/`) |
+| `views/pages/` | Feature views organized by domain (`auth/`, `historias/`, `turnos/`, `usuarios/`, `grupos/`, `disponibilidades/`, `evolucion/`, `pantalla/`) |
+| `views/pages/pantalla/` | `PantallaTV.vue` (public `/pantalla` route, shown on the waiting-room TV, no session) and `PantallaLlamados.vue` (admin view: preview, visible professionals/groups, linked TVs) |
+| `router/accesoRutas.js` | Guard access rule: a route is public when it declares `meta.publica` (e.g. `/pantalla`) or is a login/recovery page |
 | `utils/eventBus.js` | Event bus for `user:updated` / `user:loggedOut` events |
 
 ### Database (`db/init.sql`)
 
-10 tables: `usuarios`, `pacientes`, `historias` (1-per-patient), `evoluciones`, `evolucion_archivos`, `turnos`, `ausencias`, `disponibilidades`, `grupos_profesionales`, `grupo_miembros`, `auditorias_blockchain`. Schema changes must update `init.sql` and all affected backend/frontend callers in the same change.
+23 tables: `usuarios`, `pacientes`, `historias` (1-per-patient), `evoluciones`, `evolucion_archivos`, `historia_archivos`, `autenticacion_eventos`, `firmas_electronicas`, `auditorias_clinicas`, `recetas_electronicas`, `turnos`, `ausencias`, `disponibilidades`, `grupos_profesionales`, `turnos_grupales`, `grupo_miembros`, `pantallas`, `comunicados`, `grupo_posteos`, `auditorias_blockchain`, `facturacion_practicas`, `facturacion_prestadores`, `facturacion_registros`. Schema changes must update `init.sql` and all affected backend/frontend callers in the same change.
+
+Calls screen columns: `usuarios` and `grupos_profesionales` have `consultorio` and `mostrar_en_pantalla`; `turnos` and `turnos_grupales` have `atencion_inicio` and `atencion_fin`. The `pantallas` table holds one row per TV (pairing code, `clave_hash`, never the key itself). Incremental migration: `db/migrations/20261116_pantalla_de_llamados.sql` (must stay equivalent to `db/init.sql`).
 
 ### Test infrastructure (`backend_flask/tests/`)
 
@@ -125,6 +130,7 @@ Roles are stored in `usuarios.rol` (DB enum) and enforced in two places:
 - **Blockchain integrity**: `utils/hashing.py` generates SHA-256 hashes stored in DB; `blockchain_routes.py` / `bfa_client.py` optionally publish hashes to BFA. The BFA node runs in `--dev` mode by default.
 - **Password hashing**: `werkzeug.security.generate_password_hash` with `method="scrypt"`.
 - **Cookie security**: `SESSION_COOKIE_SECURE` and `REMEMBER_COOKIE_SECURE` are configurable per environment (HTTP dev / HTTPS prod).
+- **Calls screen (pantalla de llamados)**: the waiting-room TV runs without a session and authenticates with a revocable key stored only as a hash (see `docs/adr/0001-pantalla-de-llamados-sin-sesion.md`); the attention state is derived at read time in `app/utils/pantalla.py`. Within `/api/pantalla/*`, only `POST /api/pantalla/vinculacion` and `GET /api/pantalla/llamados` (key in the `X-Pantalla-Clave` header) skip Flask-Login, deliberately; the rest requires session and role. Domain glossary in `CONTEXT.md`.
 - **Frontend services pattern**: Backend calls must go through `src/service/*` modules; components consume services/stores, not axios directly.
 
 ## Universal Rules

@@ -2,6 +2,7 @@ from flask import Blueprint, jsonify, request
 from flask_login import login_required, current_user
 from app.database import get_connection
 from app.utils.permisos import requiere_rol
+from app.utils.pantalla import normalizar_consultorio
 import traceback
 from datetime import datetime, timedelta, timezone
 
@@ -50,10 +51,11 @@ def obtener_grupos():
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
     try:
-        cursor.execute("SELECT id, nombre, descripcion, color, es_rehabilitacion FROM grupos_profesionales ORDER BY nombre ASC")
+        cursor.execute("SELECT id, nombre, descripcion, color, es_rehabilitacion, consultorio, mostrar_en_pantalla FROM grupos_profesionales ORDER BY nombre ASC")
         grupos = cursor.fetchall()
 
         for g in grupos:
+            g["mostrar_en_pantalla"] = bool(g.get("mostrar_en_pantalla"))
             cursor.execute("""
                 SELECT u.id, u.nombre, u.rol
                 FROM grupo_miembros gm
@@ -77,11 +79,12 @@ def obtener_grupo(grupo_id):
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
     try:
-        cursor.execute("SELECT id, nombre, descripcion, color, es_rehabilitacion FROM grupos_profesionales WHERE id = %s", (grupo_id,))
+        cursor.execute("SELECT id, nombre, descripcion, color, es_rehabilitacion, consultorio, mostrar_en_pantalla FROM grupos_profesionales WHERE id = %s", (grupo_id,))
         grupo = cursor.fetchone()
 
         if not grupo:
             return jsonify({"error": "Grupo no encontrado"}), 404
+        grupo["mostrar_en_pantalla"] = bool(grupo.get("mostrar_en_pantalla"))
 
         cursor.execute("""
             SELECT u.id, u.nombre, u.rol
@@ -163,6 +166,25 @@ def editar_grupo(grupo_id):
     cursor = conn.cursor()
 
     try:
+        # Validaciones del consultorio ANTES de cualquier UPDATE: un 400 no deja cambios a medias.
+        cambiar_consultorio = "consultorio" in data
+        consultorio = None
+        if cambiar_consultorio:
+            consultorio, err = normalizar_consultorio(data["consultorio"])
+            if err:
+                return jsonify({"error": err}), 400
+            if consultorio is None:
+                cursor.execute(
+                    "SELECT mostrar_en_pantalla FROM grupos_profesionales WHERE id = %s",
+                    (grupo_id,),
+                )
+                actual = cursor.fetchone()
+                # cursor sin dictionary=True: la fila es una tupla
+                if actual and _to_bool(actual[0]):
+                    return jsonify({
+                        "error": "El grupo está visible en la pantalla de llamados: ocultalo antes de quitarle el consultorio"
+                    }), 400
+
         if nombre: cursor.execute("UPDATE grupos_profesionales SET nombre=%s WHERE id=%s", (nombre, grupo_id))
         if descripcion is not None: cursor.execute("UPDATE grupos_profesionales SET descripcion=%s WHERE id=%s", (descripcion, grupo_id))
         if color: cursor.execute("UPDATE grupos_profesionales SET color=%s WHERE id=%s", (color, grupo_id))
@@ -170,6 +192,11 @@ def editar_grupo(grupo_id):
             cursor.execute(
                 "UPDATE grupos_profesionales SET es_rehabilitacion=%s WHERE id=%s",
                 (_to_bool(es_rehabilitacion), grupo_id),
+            )
+        if cambiar_consultorio:
+            cursor.execute(
+                "UPDATE grupos_profesionales SET consultorio = %s WHERE id=%s",
+                (consultorio, grupo_id),
             )
 
         if miembros_raw is not None:

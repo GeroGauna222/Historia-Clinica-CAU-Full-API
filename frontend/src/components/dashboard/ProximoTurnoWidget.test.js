@@ -21,6 +21,9 @@ const directives = {
     tooltip: () => {}
 };
 
+// Vocabulario del dominio: se verifica en el título y las etiquetas del widget, no en el texto libre de los datos.
+const textoDeEstado = (wrapper) => [wrapper.find('h2').text(), ...wrapper.findAll('.p-tag').map((t) => t.text())].join(' | ');
+
 describe('ProximoTurnoWidget', () => {
     it('muestra el paciente en atención destacado cuando turnoEnCurso está presente', () => {
         const turnoEnCurso = {
@@ -44,8 +47,11 @@ describe('ProximoTurnoWidget', () => {
             global: { stubs: globalStubs, directives }
         });
 
-        expect(wrapper.text()).toContain('Atención en Curso');
+        expect(wrapper.find('h2').text()).toBe('Paciente en atención');
         expect(wrapper.text()).toContain('En atención ahora');
+        // Presente (llegó a la sala) y En atención (lo llamó el profesional) son estados distintos: el widget muestra solo el segundo.
+        expect(wrapper.findAll('.p-tag').map((t) => t.text())).toContain('En atención');
+        expect(textoDeEstado(wrapper)).not.toMatch(/presente|en curso/i);
         expect(wrapper.text()).toContain('Carlos Gardel');
         expect(wrapper.text()).toContain('HC: HC-99');
         expect(wrapper.text()).toContain('DNI: 12345678');
@@ -212,7 +218,7 @@ describe('ProximoTurnoWidget', () => {
         expect(wrapper.text()).toContain('Sobreturno');
     });
 
-    it('muestra Atenciones en Curso para perfil director con consultas activas y profesional asignado', async () => {
+    it('muestra Pacientes en atención para perfil director con consultas activas y profesional asignado', async () => {
         const atencionesEnCurso = [
             {
                 id: 101,
@@ -254,8 +260,8 @@ describe('ProximoTurnoWidget', () => {
             global: { stubs: globalStubs, directives }
         });
 
-        expect(wrapper.text()).toContain('Atenciones en Curso');
-        expect(wrapper.text()).not.toContain('Atención en Curso');
+        expect(wrapper.find('h2').text()).toBe('Pacientes en atención');
+        expect(textoDeEstado(wrapper)).not.toMatch(/presente|en curso/i);
         expect(wrapper.text()).toContain('Dr. Geronimo Gauna');
         expect(wrapper.text()).toContain('Lic. Diaz');
         expect(wrapper.text()).toContain('Carlos Gardel');
@@ -270,7 +276,7 @@ describe('ProximoTurnoWidget', () => {
         expect(wrapper.emitted('verHistoria')[0][0]).toEqual(atencionesEnCurso[0]);
     });
 
-    it('muestra Atenciones en Curso con estado sin atenciones para director cuando no hay pacientes en curso', () => {
+    it('muestra Pacientes en atención con estado sin atenciones para director cuando nadie fue llamado', () => {
         const proximoEvento = {
             id: 105,
             tipo: 'Turno',
@@ -292,10 +298,10 @@ describe('ProximoTurnoWidget', () => {
             global: { stubs: globalStubs, directives }
         });
 
-        expect(wrapper.text()).toContain('Atenciones en Curso');
-        expect(wrapper.text()).not.toContain('Atención en Curso');
-        expect(wrapper.text()).toContain('Sin atenciones activas');
-        expect(wrapper.text()).toContain('Sin atenciones simultáneas en curso');
+        expect(wrapper.find('h2').text()).toBe('Pacientes en atención');
+        expect(wrapper.findAll('.p-tag').map((t) => t.text())).toContain('Sin pacientes en atención');
+        expect(wrapper.find('h4').text()).toBe('Sin pacientes en atención');
+        expect(`${textoDeEstado(wrapper)} ${wrapper.find('h4').text()}`).not.toMatch(/presente|en curso|atenciones activas/i);
         expect(wrapper.text()).toContain('Próximo turno en institución');
         expect(wrapper.text()).toContain('Roberto Perez');
         expect(wrapper.text()).toContain('Dr. Gauna');

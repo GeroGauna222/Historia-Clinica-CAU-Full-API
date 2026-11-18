@@ -2,9 +2,23 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
 
 const mockGet = vi.fn();
+const mockLlamar = vi.fn();
+const mockLlamarGrupal = vi.fn();
+const mockAviso = vi.fn();
 
 vi.mock('@/api/axios', () => ({
     default: { get: (...args) => mockGet(...args) }
+}));
+
+vi.mock('@/utils/avisoSonoro', () => ({
+    reproducirAvisoSonoro: (...args) => mockAviso(...args)
+}));
+
+vi.mock('@/service/turnosService', () => ({
+    default: {
+        llamar: (...args) => mockLlamar(...args),
+        llamarGrupal: (...args) => mockLlamarGrupal(...args)
+    }
 }));
 
 const STORAGE_KEY = 'cau-arrival-acks';
@@ -46,6 +60,9 @@ describe('usePacientesPresentes', () => {
     beforeEach(() => {
         setActivePinia(createPinia());
         mockGet.mockReset();
+        mockLlamar.mockReset();
+        mockLlamarGrupal.mockReset();
+        mockAviso.mockReset();
         try {
             window.localStorage.clear();
         } catch {
@@ -165,5 +182,139 @@ describe('usePacientesPresentes', () => {
         composable.detenerPolling();
 
         expect(composable.pendientes.value).toEqual([]);
+    });
+
+    describe('llamarYMarcar', () => {
+        it('llama al turno individual, saca solo a ese paciente de pendientes y lo persiste como informado', async () => {
+            mockGet.mockResolvedValue({ data: [turno(1, { turnoId: 1 }), turno(2, { turnoId: 2 })] });
+            mockLlamar.mockResolvedValue({});
+            const { composable } = await setupProfesional(8);
+            await composable.cargarPresentes();
+
+            await composable.llamarYMarcar(composable.pendientes.value[0]);
+
+            expect(mockLlamar).toHaveBeenCalledWith(1);
+            expect(mockLlamarGrupal).not.toHaveBeenCalled();
+            expect(composable.pendientes.value.map((t) => t.id)).toEqual([2]);
+            const stored = JSON.parse(window.localStorage.getItem(STORAGE_KEY));
+            expect(stored.ids).toEqual([1]);
+        });
+
+        it('usa llamarGrupal para un turno grupal', async () => {
+            const grupal = turno('grupal-9', { turnoId: 9, es_grupal: 1 });
+            mockGet.mockResolvedValue({ data: [grupal, turno(2, { turnoId: 2 })] });
+            mockLlamarGrupal.mockResolvedValue({});
+            const { composable } = await setupProfesional(8);
+            await composable.cargarPresentes();
+
+            await composable.llamarYMarcar(grupal);
+
+            expect(mockLlamarGrupal).toHaveBeenCalledWith(9);
+            expect(mockLlamar).not.toHaveBeenCalled();
+            expect(composable.pendientes.value.map((t) => t.id)).toEqual([2]);
+        });
+
+        it('si el servicio rechaza, pendientes queda intacto, el paciente no se da por informado y se rechaza la promesa', async () => {
+            mockGet.mockResolvedValue({ data: [turno(1, { turnoId: 1 }), turno(2, { turnoId: 2 })] });
+            const error = { response: { data: { error: 'El paciente figura como ausente' } } };
+            mockLlamar.mockRejectedValue(error);
+            const { composable } = await setupProfesional(8);
+            await composable.cargarPresentes();
+
+            await expect(composable.llamarYMarcar(composable.pendientes.value[0])).rejects.toBe(error);
+
+            expect(composable.pendientes.value.map((t) => t.id)).toEqual([1, 2]);
+            expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull();
+            expect(mockGet).toHaveBeenCalledTimes(1);
+        });
+
+        it('si falla la recarga posterior al llamado confirmado, el paciente queda informado y la promesa no se rechaza', async () => {
+            vi.spyOn(console, 'error').mockImplementation(() => {});
+            mockGet.mockResolvedValueOnce({ data: [turno(1, { turnoId: 1 }), turno(2, { turnoId: 2 })] });
+            mockLlamar.mockResolvedValue({});
+            const { composable } = await setupProfesional(8);
+            await composable.cargarPresentes();
+            mockGet.mockRejectedValueOnce(new Error('Network Error'));
+
+            await expect(composable.llamarYMarcar(composable.pendientes.value[0])).resolves.toBeUndefined();
+
+            expect(composable.pendientes.value.map((t) => t.id)).toEqual([2]);
+            expect(JSON.parse(window.localStorage.getItem(STORAGE_KEY)).ids).toEqual([1]);
+        });
+
+        it('si el usuario cambia antes de que se confirme el llamado, no toca pendientes ni informados del otro usuario', async () => {
+            mockGet.mockResolvedValueOnce({ data: [turno(1, { turnoId: 1 })] });
+            let confirmar;
+            mockLlamar.mockReturnValue(new Promise((resolve) => (confirmar = resolve)));
+            const { composable, store } = await setupProfesional(8);
+            await composable.cargarPresentes();
+            const llamado = composable.llamarYMarcar(composable.pendientes.value[0]);
+
+            // Otro usuario inicia sesión mientras el llamado sigue pendiente; también tiene el turno id 1.
+            store.id = 99;
+            mockGet.mockResolvedValue({ data: [turno(1, { turnoId: 1 })] });
+            await composable.cargarPresentes();
+            expect(composable.pendientes.value.map((t) => t.id)).toEqual([1]);
+
+            confirmar({});
+            await llamado;
+
+            expect(composable.pendientes.value.map((t) => t.id)).toEqual([1]);
+            expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull();
+        });
+
+        it('tras llamar, una recarga no silenciosa con el mismo paciente no lo vuelve a mostrar ni suena el aviso', async () => {
+            const lista = [turno(1, { turnoId: 1 })];
+            mockGet.mockResolvedValue({ data: lista });
+            mockLlamar.mockResolvedValue({});
+            const { composable } = await setupProfesional(8);
+            await composable.cargarPresentes();
+            await composable.llamarYMarcar(composable.pendientes.value[0]);
+            mockAviso.mockClear();
+
+            await composable.cargarPresentes(false);
+
+            expect(composable.pendientes.value).toEqual([]);
+            expect(mockAviso).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('aviso de llegada según estado_atencion', () => {
+        it.each(['en_atencion', 'atendido'])('un presente %s no entra a pendientes ni suena el aviso', async (estado) => {
+            mockGet.mockResolvedValue({ data: [turno(1, { estado_atencion: estado })] });
+            const { composable } = await setupProfesional();
+
+            await composable.cargarPresentes();
+
+            expect(composable.pendientes.value).toEqual([]);
+            expect(mockAviso).not.toHaveBeenCalled();
+            expect(composable.presentes.value.map((t) => t.id)).toEqual([1]);
+        });
+
+        it('esperando, null y sin estado_atencion sí entran a pendientes y suena el aviso', async () => {
+            mockGet.mockResolvedValue({
+                data: [turno(1, { estado_atencion: 'esperando' }), turno(2, { estado_atencion: null }), turno(3), turno(4, { estado_atencion: 'raro' })]
+            });
+            const { composable } = await setupProfesional();
+
+            await composable.cargarPresentes();
+
+            expect(composable.pendientes.value.map((t) => t.id)).toEqual([1, 2, 3, 4]);
+            expect(mockAviso).toHaveBeenCalledTimes(1);
+        });
+
+        it('un pendiente que pasa a en_atencion en un poll posterior sale de pendientes', async () => {
+            mockGet.mockResolvedValueOnce({ data: [turno(1, { estado_atencion: 'esperando' }), turno(2, { estado_atencion: 'esperando' })] });
+            const { composable } = await setupProfesional();
+            await composable.cargarPresentes();
+            expect(composable.pendientes.value.map((t) => t.id)).toEqual([1, 2]);
+            mockAviso.mockClear();
+
+            mockGet.mockResolvedValueOnce({ data: [turno(1, { estado_atencion: 'en_atencion' }), turno(2, { estado_atencion: 'esperando' })] });
+            await composable.cargarPresentes();
+
+            expect(composable.pendientes.value.map((t) => t.id)).toEqual([2]);
+            expect(mockAviso).not.toHaveBeenCalled();
+        });
     });
 });

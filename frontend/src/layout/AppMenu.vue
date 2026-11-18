@@ -56,6 +56,11 @@ const model = computed(() => {
             items: [{ label: 'Planillas y Exportacion', icon: 'pi pi-fw pi-dollar', to: '/facturacion' }]
         },
         {
+            label: 'Pantalla de llamados',
+            visible: ['director', 'administrativo'].includes(userStore.rol?.toLowerCase().trim()),
+            items: [{ label: 'Pantalla de llamados', icon: 'pi pi-fw pi-desktop', to: '/pantalla-de-llamados' }]
+        },
+        {
             label: 'Turnos',
             items: [
                 { label: 'Agenda', icon: 'pi pi-fw pi-calendar', to: '/turnos' },

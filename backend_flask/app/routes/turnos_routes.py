@@ -7,6 +7,7 @@ from flask_mail import Message
 
 from app import mail
 from app.database import get_connection
+from app.utils.pantalla import anotar_estado_atencion
 from app.utils.permisos import requiere_rol
 
 bp_turnos = Blueprint("turnos", __name__)
@@ -383,6 +384,7 @@ def api_turnos():
             cursor.execute(
                 """
                 SELECT t.id, t.paciente_id, t.fecha_inicio, t.fecha_fin, t.motivo, t.observaciones, t.ausencia, t.estado_asistencia, t.es_sobreturno,
+                       t.atencion_inicio, t.atencion_fin, NOW() AS ahora_db,
                        TRIM(CONCAT(COALESCE(p.nombre, ''), ' ', COALESCE(p.apellido, ''))) AS paciente, p.dni, p.cobertura, p.nro_certificado, u.nombre AS profesional
                 FROM turnos t
                 JOIN pacientes p ON t.paciente_id = p.id
@@ -396,6 +398,7 @@ def api_turnos():
             cursor.execute(
                 """
                 SELECT t.id, t.paciente_id, t.fecha_inicio, t.fecha_fin, t.motivo, t.observaciones, t.ausencia, t.estado_asistencia, t.es_sobreturno,
+                       t.atencion_inicio, t.atencion_fin, NOW() AS ahora_db,
                        TRIM(CONCAT(COALESCE(p.nombre, ''), ' ', COALESCE(p.apellido, ''))) AS paciente, p.dni, p.cobertura, p.nro_certificado, u.nombre AS profesional
                 FROM turnos t
                 JOIN pacientes p ON t.paciente_id = p.id
@@ -405,6 +408,7 @@ def api_turnos():
             )
 
         turnos = cursor.fetchall()
+        anotar_estado_atencion(turnos)
         cursor.close()
         conn.close()
 
@@ -423,6 +427,7 @@ def api_turnos():
                 "ausencia": t["ausencia"],
                 "estado_asistencia": t.get("estado_asistencia") or "programado",
                 "es_sobreturno": bool(t.get("es_sobreturno", 0)),
+                "estado_atencion": t.get("estado_atencion"),
                 "paciente_id": t["paciente_id"],
                 "profesional": t["profesional"],
             }
@@ -662,6 +667,11 @@ def editar_turno(id):
         """,
             (fecha_inicio, fecha_fin, motivo, observaciones, es_sobreturno, id),
         )
+        # Solo se compara el inicio: fecha_fin se recalcula con la duracion actual del profesional,
+        # asi que editar otro campo no debe borrar una atencion en curso si esa duracion cambio.
+        if _to_db_iso(turno["fecha_inicio"]) != fecha_inicio:
+            cambio_dia = turno["fecha_inicio"].date() != inicio_dt.date()
+            _limpiar_atencion(cursor, "turnos", id, volver_a_programado=cambio_dia)
         conn.commit()
 
         payload = {"message": "Turno actualizado correctamente."}
@@ -1169,6 +1179,9 @@ def listar_turnos_grupales():
             tg.observaciones,
             tg.ausencia,
             tg.estado_asistencia,
+            tg.atencion_inicio,
+            tg.atencion_fin,
+            NOW() AS ahora_db,
             ucg.nombre AS creado_por_nombre,
             tg.creado_en
         FROM turnos_grupales tg
@@ -1182,6 +1195,7 @@ def listar_turnos_grupales():
     )
 
     rows = cursor.fetchall()
+    anotar_estado_atencion(rows, grupal=True)
     cursor.close()
     conn.close()
 
@@ -1207,6 +1221,7 @@ def listar_turnos_grupales():
                 "observaciones": row["observaciones"],
                 "ausencia": row["ausencia"],
                 "estado_asistencia": row.get("estado_asistencia") or "programado",
+                "estado_atencion": row.get("estado_atencion"),
                 "creado_por_nombre": row["creado_por_nombre"],
                 "creado_en": _to_iso_arg(row["creado_en"]),
                 "tipo": "grupal",
@@ -1371,6 +1386,9 @@ def editar_turno_grupal(turno_grupal_id):
         """,
             (grupo_id, paciente_id, _to_db_iso(inicio_dt), _to_db_iso(fin_dt), motivo, observaciones, turno_grupal_id),
         )
+        if _to_db_iso(actual["fecha_inicio"]) != _to_db_iso(inicio_dt) or _to_db_iso(actual["fecha_fin"]) != _to_db_iso(fin_dt):
+            cambio_dia = actual["fecha_inicio"].date() != inicio_dt.date()
+            _limpiar_atencion(cursor, "turnos_grupales", turno_grupal_id, volver_a_programado=cambio_dia)
         conn.commit()
         payload = {"message": "Turno grupal actualizado correctamente"}
         if ajuste:
@@ -1400,6 +1418,19 @@ def eliminar_turno_grupal(turno_grupal_id):
     finally:
         cursor.close()
         conn.close()
+
+
+_TABLAS_ATENCION = {"turnos", "turnos_grupales"}
+
+
+def _limpiar_atencion(cursor, tabla, turno_id, volver_a_programado=False):
+    if tabla not in _TABLAS_ATENCION:  # el nombre de tabla nunca viene del usuario; defensa en profundidad
+        raise ValueError("tabla invalida")
+    extra = ", estado_asistencia = 'programado', ausencia = NULL" if volver_a_programado else ""
+    cursor.execute(
+        f"UPDATE {tabla} SET atencion_inicio = NULL, atencion_fin = NULL{extra} WHERE id = %s",
+        (turno_id,),
+    )
 
 
 def _resolver_asistencia(data):
@@ -1451,6 +1482,8 @@ def api_actualizar_ausencia_turno(id):
                 "UPDATE turnos_grupales SET ausencia = %s, estado_asistencia = %s WHERE id = %s",
                 (ausencia, estado_asistencia, id)
             )
+            if estado_asistencia != "presente":
+                _limpiar_atencion(cursor, "turnos_grupales", id)
             conn.commit()
             return jsonify({
                 "mensaje": "Asistencia de turno grupal actualizada correctamente",
@@ -1465,6 +1498,8 @@ def api_actualizar_ausencia_turno(id):
             "UPDATE turnos SET ausencia = %s, estado_asistencia = %s WHERE id = %s",
             (ausencia, estado_asistencia, id)
         )
+        if estado_asistencia != "presente":
+            _limpiar_atencion(cursor, "turnos", id)
         conn.commit()
         return jsonify({
             "mensaje": "Asistencia de turno actualizada correctamente",
@@ -1500,6 +1535,8 @@ def api_actualizar_ausencia_turno_grupal(turno_grupal_id):
             "UPDATE turnos_grupales SET ausencia = %s, estado_asistencia = %s WHERE id = %s",
             (ausencia, estado_asistencia, turno_grupal_id)
         )
+        if estado_asistencia != "presente":
+            _limpiar_atencion(cursor, "turnos_grupales", turno_grupal_id)
         conn.commit()
         return jsonify({
             "mensaje": "Asistencia de turno grupal actualizada correctamente",
@@ -1509,6 +1546,148 @@ def api_actualizar_ausencia_turno_grupal(turno_grupal_id):
     except Exception as e:
         conn.rollback()
         return jsonify({"error": str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+
+ESTADOS_AUSENTE = ("con_aviso", "sin_aviso")
+
+
+def _motivo_no_llamable(estado_asistencia, es_hoy):
+    if estado_asistencia in ESTADOS_AUSENTE:
+        return "El paciente figura como ausente"
+    if not es_hoy:
+        return "Solo se pueden llamar turnos de hoy"
+    return None
+
+
+@bp_turnos.route("/api/turnos/<int:id>/llamar", methods=["POST"])
+@login_required
+def llamar_turno(id):
+    # Permiso propio: solo el profesional dueno del turno, sin depender de ROLES_TURNOS.
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(
+            """
+            SELECT id, usuario_id, estado_asistencia, DATE(fecha_inicio) = CURDATE() AS es_hoy
+            FROM turnos WHERE id = %s
+            """,
+            (id,),
+        )
+        turno = cursor.fetchone()
+        if not turno:
+            return jsonify({"error": "Turno no encontrado"}), 404
+        if turno["usuario_id"] != current_user.id:
+            return jsonify({"error": "Solo el profesional del turno puede llamar al paciente"}), 403
+
+        motivo = _motivo_no_llamable(turno["estado_asistencia"], turno["es_hoy"])
+        if motivo:
+            return jsonify({"error": motivo}), 409
+
+        # Un profesional tiene una sola atencion abierta: llamar al siguiente cierra la anterior.
+        cursor.execute(
+            """
+            UPDATE turnos SET atencion_fin = NOW()
+            WHERE usuario_id = %s AND id <> %s
+              AND atencion_inicio IS NOT NULL AND atencion_fin IS NULL
+            """,
+            (current_user.id, id),
+        )
+        # Siempre refresca atencion_inicio: asi "Volver a llamar" cambia el valor y el televisor suena.
+        cursor.execute(
+            """
+            UPDATE turnos
+            SET atencion_inicio = NOW(), atencion_fin = NULL,
+                estado_asistencia = 'presente', ausencia = NULL
+            WHERE id = %s
+            """,
+            (id,),
+        )
+        conn.commit()
+        return jsonify({"message": "Paciente llamado", "estado_atencion": "en_atencion"})
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        cursor.close()
+        conn.close()
+
+
+@bp_turnos.route("/api/turnos/<int:id>/finalizar", methods=["POST"])
+@login_required
+def finalizar_turno(id):
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(
+            "SELECT id, usuario_id, atencion_inicio, atencion_fin FROM turnos WHERE id = %s",
+            (id,),
+        )
+        turno = cursor.fetchone()
+        if not turno:
+            return jsonify({"error": "Turno no encontrado"}), 404
+        if turno["usuario_id"] != current_user.id:
+            return jsonify({"error": "Solo el profesional del turno puede finalizar la atención"}), 403
+        if turno["atencion_inicio"] is None or turno["atencion_fin"] is not None:
+            return jsonify({"error": "El turno no está en atención"}), 409
+
+        cursor.execute("UPDATE turnos SET atencion_fin = NOW() WHERE id = %s", (id,))
+        conn.commit()
+        return jsonify({"message": "Atención finalizada", "estado_atencion": "atendido"})
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        cursor.close()
+        conn.close()
+
+
+@bp_turnos.route("/api/turnos/grupales/<int:turno_grupal_id>/llamar", methods=["POST"])
+@login_required
+def llamar_turno_grupal(turno_grupal_id):
+    # Permiso propio: cualquier miembro del grupo, sin depender de ROLES_TURNOS_GRUPALES.
+    # No cierra otras atenciones: en un grupo puede haber varios turnos grupales en atencion a la vez.
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(
+            """
+            SELECT id, grupo_id, estado_asistencia, DATE(fecha_inicio) = CURDATE() AS es_hoy
+            FROM turnos_grupales WHERE id = %s
+            """,
+            (turno_grupal_id,),
+        )
+        turno = cursor.fetchone()
+        if not turno:
+            return jsonify({"error": "Turno grupal no encontrado"}), 404
+
+        cursor.execute(
+            "SELECT 1 FROM grupo_miembros WHERE grupo_id = %s AND usuario_id = %s LIMIT 1",
+            (turno["grupo_id"], current_user.id),
+        )
+        if not cursor.fetchone():
+            return jsonify({"error": "Solo los miembros del grupo pueden llamar al paciente"}), 403
+
+        motivo = _motivo_no_llamable(turno["estado_asistencia"], turno["es_hoy"])
+        if motivo:
+            return jsonify({"error": motivo}), 409
+
+        cursor.execute(
+            """
+            UPDATE turnos_grupales
+            SET atencion_inicio = NOW(), atencion_fin = NULL,
+                estado_asistencia = 'presente', ausencia = NULL
+            WHERE id = %s
+            """,
+            (turno_grupal_id,),
+        )
+        conn.commit()
+        return jsonify({"message": "Paciente llamado", "estado_atencion": "en_atencion"})
+    except Exception:
+        conn.rollback()
+        raise
     finally:
         cursor.close()
         conn.close()
@@ -1542,7 +1721,10 @@ def api_turnos_presentes_hoy():
                     u.nombre AS profesional,
                     0 AS es_grupal,
                     NULL AS grupo_id,
-                    NULL AS grupo_nombre
+                    NULL AS grupo_nombre,
+                    t.atencion_inicio,
+                    t.atencion_fin,
+                    NOW() AS ahora_db
                 FROM turnos t
                 JOIN pacientes p ON t.paciente_id = p.id
                 JOIN usuarios u ON t.usuario_id = u.id
@@ -1568,7 +1750,10 @@ def api_turnos_presentes_hoy():
                     CONCAT('Grupo: ', gp.nombre) AS profesional,
                     1 AS es_grupal,
                     gp.id AS grupo_id,
-                    gp.nombre AS grupo_nombre
+                    gp.nombre AS grupo_nombre,
+                    tg.atencion_inicio,
+                    tg.atencion_fin,
+                    NOW() AS ahora_db
                 FROM turnos_grupales tg
                 JOIN grupos_profesionales gp ON gp.id = tg.grupo_id
                 JOIN grupo_miembros gm ON gm.grupo_id = tg.grupo_id
@@ -1601,7 +1786,10 @@ def api_turnos_presentes_hoy():
                     u.nombre AS profesional,
                     0 AS es_grupal,
                     NULL AS grupo_id,
-                    NULL AS grupo_nombre
+                    NULL AS grupo_nombre,
+                    t.atencion_inicio,
+                    t.atencion_fin,
+                    NOW() AS ahora_db
                 FROM turnos t
                 JOIN pacientes p ON t.paciente_id = p.id
                 JOIN usuarios u ON t.usuario_id = u.id
@@ -1626,7 +1814,10 @@ def api_turnos_presentes_hoy():
                     CONCAT('Grupo: ', gp.nombre) AS profesional,
                     1 AS es_grupal,
                     gp.id AS grupo_id,
-                    gp.nombre AS grupo_nombre
+                    gp.nombre AS grupo_nombre,
+                    tg.atencion_inicio,
+                    tg.atencion_fin,
+                    NOW() AS ahora_db
                 FROM turnos_grupales tg
                 JOIN grupos_profesionales gp ON gp.id = tg.grupo_id
                 JOIN pacientes p ON tg.paciente_id = p.id
@@ -1636,6 +1827,7 @@ def api_turnos_presentes_hoy():
                 """
             )
         turnos = cursor.fetchall()
+        anotar_estado_atencion(turnos, quitar_tiempos=True)
         for t in turnos:
             t["start"] = _to_iso_arg(t["fecha_inicio"])
             t["end"] = _to_iso_arg(t["fecha_fin"])

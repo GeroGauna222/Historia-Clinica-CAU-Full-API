@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 from conftest import FakeConnection, FakeCursor, MockUser, login_as
 from app.routes import dashboard_routes
@@ -98,7 +98,7 @@ def test_dashboard_admin_incluye_alertas_operativas(client, monkeypatch):
     assert data["ausencias_bloqueos"][0]["tipo_evento"] == "Reunion"
 
 
-def test_dashboard_profesional_destaca_paciente_en_curso_presente(client, monkeypatch):
+def test_dashboard_profesional_destaca_paciente_en_atencion(client, monkeypatch):
     hoy = datetime.now()
     inicio1 = hoy.replace(hour=9, minute=0, second=0, microsecond=0)
     fin1 = inicio1 + timedelta(minutes=30)
@@ -136,6 +136,9 @@ def test_dashboard_profesional_destaca_paciente_en_curso_presente(client, monkey
                     "motivo": "Evaluacion",
                     "observaciones": "Primera consulta",
                     "estado_asistencia": "presente",
+                    "atencion_inicio": inicio1 + timedelta(minutes=5),
+                    "atencion_fin": None,
+                    "ahora_db": inicio1 + timedelta(minutes=10),
                     "ausencia": None,
                     "paciente_id": 20,
                     "paciente": "Maria",
@@ -209,6 +212,9 @@ def test_dashboard_director_retorna_multiples_atenciones_en_curso(client, monkey
             "motivo": "Cardiología",
             "observaciones": None,
             "estado_asistencia": "presente",
+            "atencion_inicio": inicio1 + timedelta(minutes=2),
+            "atencion_fin": None,
+            "ahora_db": inicio1 + timedelta(minutes=10),
             "ausencia": None,
             "es_sobreturno": 0,
             "paciente_id": 1,
@@ -226,6 +232,9 @@ def test_dashboard_director_retorna_multiples_atenciones_en_curso(client, monkey
             "motivo": "Traumatología",
             "observaciones": None,
             "estado_asistencia": "presente",
+            "atencion_inicio": inicio2 + timedelta(minutes=5),
+            "atencion_fin": None,
+            "ahora_db": inicio2 + timedelta(minutes=10),
             "ausencia": None,
             "es_sobreturno": 0,
             "paciente_id": 2,
@@ -329,7 +338,7 @@ def test_dashboard_profesional_calcula_turnos_superpuestos(client, monkeypatch):
     assert data["alertas"]["turnos_superpuestos"][0]["turno_solapado_id"] == 202
 
 
-def test_dashboard_director_una_atencion_por_profesional_si_hay_multiples_presentes(client, monkeypatch):
+def test_dashboard_director_atendido_no_cuenta_en_curso_aunque_siga_presente(client, monkeypatch):
     hoy = datetime.now()
     inicio1 = hoy.replace(hour=9, minute=0, second=0, microsecond=0)
     fin1 = inicio1 + timedelta(minutes=30)
@@ -345,6 +354,9 @@ def test_dashboard_director_una_atencion_por_profesional_si_hay_multiples_presen
             "motivo": "Control inicial",
             "observaciones": None,
             "estado_asistencia": "presente",
+            "atencion_inicio": inicio1 + timedelta(minutes=2),
+            "atencion_fin": inicio1 + timedelta(minutes=25),
+            "ahora_db": inicio2 + timedelta(minutes=10),
             "ausencia": None,
             "es_sobreturno": 0,
             "paciente_id": 1,
@@ -366,6 +378,9 @@ def test_dashboard_director_una_atencion_por_profesional_si_hay_multiples_presen
             "motivo": "Control siguiente",
             "observaciones": None,
             "estado_asistencia": "presente",
+            "atencion_inicio": inicio2 + timedelta(minutes=3),
+            "atencion_fin": None,
+            "ahora_db": inicio2 + timedelta(minutes=10),
             "ausencia": None,
             "es_sobreturno": 0,
             "paciente_id": 2,
@@ -400,7 +415,7 @@ def test_dashboard_director_una_atencion_por_profesional_si_hay_multiples_presen
     assert response.status_code == 200
     data = response.get_json()
 
-    # Even though Dr Gomez has 2 turnos marked presente, director only gets the latest active attention for Dr Gomez
+    # El turno 301 sigue 'presente' pero ya fue atendido (atencion_fin): solo el 302, en atencion, cuenta como en curso
     assert len(data["atenciones_en_curso"]) == 1
     assert data["atenciones_en_curso"][0]["id"] == 302
     assert data["atenciones_en_curso"][0]["profesional"] == "Dr Gomez"
@@ -421,6 +436,9 @@ def test_dashboard_director_incluye_turnos_grupales(client, monkeypatch):
             "motivo": "Taller postural",
             "observaciones": None,
             "estado_asistencia": "presente",
+            "atencion_inicio": inicio + timedelta(minutes=5),
+            "atencion_fin": None,
+            "ahora_db": inicio + timedelta(minutes=10),
             "ausencia": None,
             "es_sobreturno": 0,
             "paciente_id": 5,
@@ -494,6 +512,213 @@ def test_primer_evento_soporta_datetime_y_str():
     assert evento["fecha_inicio"] == "2026-11-06T12:00:00"
 
 
+def test_atenciones_en_curso_solo_incluye_turnos_en_atencion_ordenados():
+    turnos = [
+        {"id": 1, "estado_atencion": "esperando", "atencion_inicio": None},
+        {"id": 2, "estado_atencion": "en_atencion", "atencion_inicio": "2026-11-16T10:20:00"},
+        {"id": 3, "estado_atencion": "atendido", "atencion_inicio": "2026-11-16T09:00:00"},
+        {"id": 4, "estado_atencion": "en_atencion", "atencion_inicio": "2026-11-16T10:05:00"},
+    ]
+    en_curso = dashboard_routes._atenciones_en_curso(turnos)
+    assert [t["id"] for t in en_curso] == [4, 2]
 
 
+def test_atenciones_en_curso_vacio_si_nadie_fue_llamado():
+    assert dashboard_routes._atenciones_en_curso([{"id": 1, "estado_atencion": "esperando"}]) == []
+    assert dashboard_routes._atenciones_en_curso([]) == []
 
+
+def _turno_fila(id_, inicio, estado, **extra):
+    fila = {
+        "id": id_,
+        "fecha_inicio": inicio,
+        "fecha_fin": inicio + timedelta(minutes=30),
+        "motivo": "Control",
+        "observaciones": None,
+        "estado_asistencia": estado,
+        "ausencia": None,
+        "es_sobreturno": 0,
+        "paciente_id": id_,
+        "paciente": "Pac",
+        "apellido": f"N{id_}",
+        "dni": "1",
+        "nro_hc": "HC",
+        "cobertura": "OSDE",
+        "profesional": "Dr Gomez",
+        "es_grupal": 0,
+        "grupo_id": None,
+        "grupo_nombre": None,
+    }
+    fila.update(extra)
+    return fila
+
+
+def test_dashboard_profesional_presente_sin_llamar_no_tiene_turno_en_curso(client, monkeypatch):
+    inicio = datetime.now().replace(hour=9, minute=0, second=0, microsecond=0)
+    fila = _turno_fila(10, inicio, "presente", atencion_inicio=None, atencion_fin=None,
+                       ahora_db=inicio + timedelta(minutes=10))
+    fake_cursor = FakeCursor(
+        fetchone_results=[None, None],
+        fetchall_results=[[fila], [], [], [], []],
+    )
+    monkeypatch.setattr(dashboard_routes, "get_connection", lambda: FakeConnection(fake_cursor))
+    login_as(client, MockUser(5, "profesional", nombre="Lic Gomez"))
+
+    response = client.get("/api/dashboard")
+
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data["turno_en_curso"] is None
+    assert data["atenciones_en_curso"] == []
+    assert data["turnos"][0]["estado_atencion"] == "esperando"
+
+
+def test_dashboard_profesional_turnos_llevan_estado_atencion_y_no_filtran_ahora_db(client, monkeypatch):
+    base = datetime.now().replace(hour=9, minute=0, second=0, microsecond=0)
+    ahora = base + timedelta(hours=2)
+    filas = [
+        _turno_fila(1, base, "presente", atencion_inicio=base + timedelta(minutes=1),
+                    atencion_fin=base + timedelta(minutes=20), ahora_db=ahora),
+        _turno_fila(2, base + timedelta(minutes=30), "presente",
+                    atencion_inicio=ahora - timedelta(minutes=5), atencion_fin=None, ahora_db=ahora),
+        _turno_fila(3, base + timedelta(hours=1), "presente",
+                    atencion_inicio=None, atencion_fin=None, ahora_db=ahora),
+        _turno_fila(4, base + timedelta(hours=3), "programado",
+                    atencion_inicio=None, atencion_fin=None, ahora_db=ahora),
+    ]
+    fake_cursor = FakeCursor(
+        fetchone_results=[None, None],
+        fetchall_results=[filas, [], [], [], []],
+    )
+    monkeypatch.setattr(dashboard_routes, "get_connection", lambda: FakeConnection(fake_cursor))
+    login_as(client, MockUser(5, "profesional", nombre="Lic Gomez"))
+
+    response = client.get("/api/dashboard")
+
+    assert response.status_code == 200
+    data = response.get_json()
+    estados = {t["turnoId"]: t["estado_atencion"] for t in data["turnos"]}
+    assert estados == {1: "atendido", 2: "en_atencion", 3: "esperando", 4: None}
+    assert all("ahora_db" not in t for t in data["turnos"])
+    assert [t["id"] for t in data["atenciones_en_curso"]] == [2]
+    assert data["turno_en_curso"]["id"] == 2
+    assert data["turno_en_curso"]["estado_atencion"] == "en_atencion"
+
+    query, params = fake_cursor.executed[0]
+    assert query.count("atencion_inicio") == 2
+    assert query.count("atencion_fin") == 2
+    assert query.count("NOW() AS ahora_db") == 2
+    assert "t.atencion_inicio" in query and "tg.atencion_inicio" in query
+    assert params == (date.today(), 5, date.today(), 5)
+
+
+def test_dashboard_director_en_curso_sale_de_turnos_en_atencion(client, monkeypatch):
+    base = datetime.now().replace(hour=9, minute=0, second=0, microsecond=0)
+    ahora = base + timedelta(hours=2)
+    filas = [
+        _turno_fila(1, base, "presente", usuario_id=10, profesional="Dr Gomez",
+                    atencion_inicio=base + timedelta(minutes=1),
+                    atencion_fin=base + timedelta(minutes=20), ahora_db=ahora),
+        _turno_fila(2, base + timedelta(minutes=30), "presente", usuario_id=11, profesional="Dra Diaz",
+                    atencion_inicio=ahora - timedelta(minutes=5), atencion_fin=None, ahora_db=ahora),
+        _turno_fila(3, base + timedelta(hours=1), "presente", usuario_id=10, profesional="Dr Gomez",
+                    atencion_inicio=None, atencion_fin=None, ahora_db=ahora),
+    ]
+    fake_cursor = FakeCursor(
+        fetchone_results=[None, None],
+        fetchall_results=[filas, [], [], [], [], [], []],
+    )
+    monkeypatch.setattr(dashboard_routes, "get_connection", lambda: FakeConnection(fake_cursor))
+    login_as(client, MockUser(1, "director", nombre="Director General"))
+
+    response = client.get("/api/dashboard")
+
+    assert response.status_code == 200
+    data = response.get_json()
+    estados = {t["turnoId"]: t["estado_atencion"] for t in data["turnos"]}
+    assert estados == {1: "atendido", 2: "en_atencion", 3: "esperando"}
+    assert all("ahora_db" not in t for t in data["turnos"])
+    assert [t["id"] for t in data["atenciones_en_curso"]] == [2]
+    assert data["turno_en_curso"]["id"] == 2
+
+    query, params = fake_cursor.executed[0]
+    assert query.count("atencion_inicio") == 2
+    assert query.count("atencion_fin") == 2
+    assert query.count("NOW() AS ahora_db") == 2
+    assert "t.atencion_inicio" in query and "tg.atencion_inicio" in query
+    assert params == (date.today(), date.today())
+
+
+def test_dashboard_director_grupal_cerrado_no_figura_en_curso(client, monkeypatch):
+    inicio = datetime.now().replace(hour=11, minute=0, second=0, microsecond=0)
+    fila = _turno_fila(50, inicio, "presente", usuario_id=None, profesional="Grupo: Kine",
+                       es_grupal=1, grupo_id=3, grupo_nombre="Kine",
+                       atencion_inicio=inicio + timedelta(minutes=5), atencion_fin=None,
+                       ahora_db=inicio + timedelta(minutes=40))
+    fake_cursor = FakeCursor(
+        fetchone_results=[None, None],
+        fetchall_results=[[fila], [], [], [], [], [], []],
+    )
+    monkeypatch.setattr(dashboard_routes, "get_connection", lambda: FakeConnection(fake_cursor))
+    login_as(client, MockUser(1, "director", nombre="Director General"))
+
+    response = client.get("/api/dashboard")
+
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data["turnos"][0]["estado_atencion"] == "atendido"
+    assert data["atenciones_en_curso"] == []
+    assert data["turno_en_curso"] is None
+
+
+def test_dashboard_profesional_grupal_e_individual_en_atencion_ordenados(client, monkeypatch):
+    base = datetime.now().replace(hour=9, minute=0, second=0, microsecond=0)
+    ahora = base + timedelta(hours=2)
+    filas = [
+        _turno_fila(1, base, "presente", usuario_id=5,
+                    atencion_inicio=ahora - timedelta(minutes=20), atencion_fin=None, ahora_db=ahora),
+        _turno_fila(50, base + timedelta(hours=1), "presente", usuario_id=5, profesional="Grupo: Kine",
+                    es_grupal=1, grupo_id=3, grupo_nombre="Kine",
+                    fecha_fin=base + timedelta(hours=3),
+                    atencion_inicio=ahora - timedelta(minutes=5), atencion_fin=None, ahora_db=ahora),
+    ]
+    fake_cursor = FakeCursor(
+        fetchone_results=[None, None],
+        fetchall_results=[filas, [], [], [], []],
+    )
+    monkeypatch.setattr(dashboard_routes, "get_connection", lambda: FakeConnection(fake_cursor))
+    login_as(client, MockUser(5, "profesional", nombre="Lic Gomez"))
+
+    response = client.get("/api/dashboard")
+
+    assert response.status_code == 200
+    data = response.get_json()
+    assert [t["id"] for t in data["atenciones_en_curso"]] == [1, "grupal-50"]
+    assert data["turno_en_curso"]["id"] == "grupal-50"
+    assert data["turno_en_curso"]["estado_atencion"] == "en_atencion"
+
+
+def test_dashboard_profesional_dos_grupales_del_mismo_grupo_en_atencion_no_se_deduplican(client, monkeypatch):
+    base = datetime.now().replace(hour=9, minute=0, second=0, microsecond=0)
+    ahora = base + timedelta(hours=1, minutes=30)
+    comunes = dict(usuario_id=5, profesional="Grupo: Kine", es_grupal=1, grupo_id=3, grupo_nombre="Kine",
+                   fecha_fin=base + timedelta(hours=3), atencion_fin=None, ahora_db=ahora)
+    filas = [
+        _turno_fila(50, base + timedelta(hours=1), "presente",
+                    atencion_inicio=ahora - timedelta(minutes=10), **comunes),
+        _turno_fila(51, base + timedelta(hours=1), "presente",
+                    atencion_inicio=ahora - timedelta(minutes=2), **comunes),
+    ]
+    fake_cursor = FakeCursor(
+        fetchone_results=[None, None],
+        fetchall_results=[filas, [], [], [], []],
+    )
+    monkeypatch.setattr(dashboard_routes, "get_connection", lambda: FakeConnection(fake_cursor))
+    login_as(client, MockUser(5, "profesional", nombre="Lic Gomez"))
+
+    response = client.get("/api/dashboard")
+
+    assert response.status_code == 200
+    data = response.get_json()
+    assert [t["id"] for t in data["atenciones_en_curso"]] == ["grupal-50", "grupal-51"]
+    assert data["turno_en_curso"]["id"] == "grupal-51"

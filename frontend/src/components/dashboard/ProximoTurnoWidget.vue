@@ -94,8 +94,8 @@ const atencionesActivas = computed(() => {
 });
 
 const tituloWidget = computed(() => {
-    if (props.esDirector) return 'Atenciones en Curso';
-    if (props.turnoEnCurso) return 'Atención en Curso';
+    if (props.esDirector) return 'Pacientes en atención';
+    if (props.turnoEnCurso) return 'Paciente en atención';
     if (props.proximoEvento?.tipo === 'Turno') return 'Próximo Turno en Agenda';
     if (props.proximoEvento) return 'Próximo Evento de Agenda';
     return 'Agenda de Hoy';
@@ -120,14 +120,14 @@ const iconoWidget = computed(() => {
                     <span>{{ tituloWidget }}</span>
                 </h2>
                 <div class="flex items-center gap-2">
-                    <Tag v-if="esDirector && atencionesActivas.length > 0" :value="atencionesActivas.length + (atencionesActivas.length === 1 ? ' en atención' : ' en atención')" severity="success" rounded class="animate-pulse font-semibold" />
-                    <Tag v-else-if="esDirector" value="Sin atenciones activas" severity="secondary" rounded class="text-xs" />
-                    <Tag v-else-if="turnoEnCurso" value="Presente" severity="success" rounded class="animate-pulse font-semibold" />
+                    <Tag v-if="esDirector && atencionesActivas.length > 0" :value="atencionesActivas.length + ' en atención'" severity="success" rounded class="animate-pulse font-semibold" />
+                    <Tag v-else-if="esDirector" value="Sin pacientes en atención" severity="secondary" rounded class="text-xs" />
+                    <Tag v-else-if="turnoEnCurso" value="En atención" severity="success" rounded class="animate-pulse font-semibold" />
                     <Button label="Ver agenda" icon="pi pi-arrow-right" iconPos="right" text size="small" @click="emit('verAgenda')" />
                 </div>
             </div>
 
-            <!-- CASO DIRECTOR: Supervisión de Atenciones en Curso en toda la clínica -->
+            <!-- CASO DIRECTOR: supervisión de los pacientes en atención en toda la clínica -->
             <div v-if="esDirector">
                 <!-- D1: Si hay 1 o más atenciones activas simultáneas -->
                 <div v-if="atencionesActivas.length > 0" class="space-y-4 max-h-[520px] overflow-y-auto pr-1">
@@ -191,15 +191,15 @@ const iconoWidget = computed(() => {
                     </div>
                 </div>
 
-                <!-- D2: Sin pacientes presentes en la clínica -->
+                <!-- D2: Nadie fue llamado todavía en la clínica -->
                 <div v-else class="p-5 bg-subtle rounded-xl border border-surface space-y-4">
                     <div class="flex items-center gap-3">
                         <div class="w-10 h-10 rounded-full bg-card border border-surface flex items-center justify-center shrink-0">
                             <i class="pi pi-users text-lg text-primary"></i>
                         </div>
                         <div>
-                            <h4 class="text-sm font-bold text-color">Sin atenciones simultáneas en curso</h4>
-                            <p class="text-xs text-muted-color">Actualmente no se registran pacientes en consulta activa en la clínica.</p>
+                            <h4 class="text-sm font-bold text-color">Sin pacientes en atención</h4>
+                            <p class="text-xs text-muted-color">Actualmente ningún profesional tiene un paciente en atención.</p>
                         </div>
                     </div>
 
@@ -223,7 +223,7 @@ const iconoWidget = computed(() => {
 
             <!-- VISTA PROFESIONAL Y OTROS ROLES (individual) -->
             <div v-else>
-                <!-- CASO 1: Paciente actualmente en curso (último marcado como presente) -->
+                <!-- CASO 1: Paciente en atención (el profesional lo llamó) -->
                 <div v-if="turnoEnCurso" class="p-5 rounded-xl border border-status-presente-border bg-status-presente-bg/20 transition-all">
                     <!-- Barra superior con indicador en vivo y horario -->
                     <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
@@ -292,7 +292,7 @@ const iconoWidget = computed(() => {
                     </div>
                 </div>
 
-                <!-- CASO 2: Sin paciente presente, pero hay próximo evento en agenda -->
+                <!-- CASO 2: Ningún paciente en atención, pero hay próximo evento en agenda -->
                 <div v-else-if="proximoEvento" class="p-5 bg-subtle rounded-xl border border-surface">
                     <!-- Si el evento es un Turno médico -->
                     <template v-if="proximoEvento.tipo === 'Turno'">
@@ -395,7 +395,7 @@ const iconoWidget = computed(() => {
                     </template>
                 </div>
 
-                <!-- CASO 3: Sin turnos en curso ni próximos eventos -->
+                <!-- CASO 3: Sin pacientes en atención ni próximos eventos -->
                 <div v-else class="flex flex-col items-center justify-center py-12 text-center text-muted-color">
                     <div class="w-14 h-14 rounded-full bg-subtle flex items-center justify-center mb-3">
                         <i class="pi pi-calendar-check text-2xl text-status-presente-fg"></i>
